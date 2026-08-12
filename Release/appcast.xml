@@ -1,0 +1,61 @@
+<!-- LEGACY Sparkle feed — not used by current VibeCoder builds. Kept for historical installs only. -->
+<?xml version="1.0" standalone="yes"?>
+<!--
+  AgentOS Sparkle appcast.
+  Releases are listed newest-first. Each <item> represents a signed,
+  notarised build hosted on Cloudflare R2 behind the updates.agentos.tools
+  custom domain.
+
+  release.sh PREPENDS a new <item> to this file when cutting a build,
+  then uploads the updated file to R2 alongside the DMG. The file is
+  empty of items today — Sparkle will report "no updates available"
+  until the first release ships.
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
+     version="2.0">
+  <channel>
+    <title>AgentOS Updates</title>
+    <link>https://updates.agentos.tools/appcast.xml</link>
+    <description>Auto-updates for AgentOS — local-first coding agent for macOS.</description>
+    <language>en</language>
+
+    <item>
+      <title>Version 1.0.0</title>
+      <pubDate>Fri, 12 Jun 2026 13:57:51 +0000</pubDate>
+      <sparkle:version>3</sparkle:version>
+      <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<p>See release notes at <a href="https://agentos.tools/releases/v1.0.0">agentos.tools/releases/v1.0.0</a>.</p>]]></description>
+      <enclosure url="https://updates.agentos.tools/AgentOS-1.0.0.dmg"
+                 sparkle:edSignature="6KVvHBcbX4Tb2+rvMmOXByA4AT2kyGuI5Tj7ANPo1nHwlJCtyglwCcLPNqsWSil2GN3FurpFJJ8s3twMuk2DDA==" length="15269497"
+                 type="application/octet-stream" />
+    </item>
+
+    <item>
+      <title>Version 1.0.1</title>
+      <pubDate>Fri, 12 Jun 2026 17:00:35 +0000</pubDate>
+      <sparkle:version>4</sparkle:version>
+      <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<p>See release notes at <a href="https://agentos.tools/releases/v1.0.1">agentos.tools/releases/v1.0.1</a>.</p>]]></description>
+      <enclosure url="https://updates.agentos.tools/AgentOS-1.0.1.dmg"
+                 sparkle:edSignature="lQiu+BOU9PuXntJ+XaYRggYpmdjaujN6I6IDtheVOhWbFlQeEMXamYm2hbfwjt0SdyWNj4PDbfDt0MhCR8iEAQ==" length="15284929"
+                 type="application/octet-stream" />
+    </item>
+
+    <item>
+      <title>Version 1.0.2</title>
+      <pubDate>Sun, 14 Jun 2026 09:30:12 +0000</pubDate>
+      <sparkle:version>5</sparkle:version>
+      <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <description><![CDATA[<p>See release notes at <a href="https://agentos.tools/releases/v1.0.2">agentos.tools/releases/v1.0.2</a>.</p>]]></description>
+      <enclosure url="https://updates.agentos.tools/AgentOS-1.0.2.dmg"
+                 sparkle:edSignature="xa0YLYh75CP+mcXlhV6Ss1+xyzwBPUbYAT/ZAFKDq/Jg2VPkmhwbDM1axj9RgLtbHyPnkFc87EdenhAJQ7sTBg==" length="15288696"
+                 type="application/octet-stream" />
+    </item>
+
+    <!-- Releases go here, newest first. -->
+
+  </channel>
+</rss>

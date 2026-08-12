@@ -1,0 +1,5 @@
+Build a macOS SwiftUI color-picker app in the current working directory. Requirements:
+- Three sliders, one each for Red, Green, Blue (each from 0 to 1 or 0 to 255).
+- A large color swatch that updates in real time as the sliders move.
+- Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`.
+- The app must build cleanly and moving any slider must visibly change the swatch.

@@ -1,0 +1,16 @@
+VibeCoder / AgentCore
+Copyright (c) Max Kongerskov and contributors. All rights reserved.
+
+Portions of the agent runtime (memory layout/search/dream design, full-replace
+compaction flow, turn lifecycle, tool authorization pipeline, MCP config, and
+related harness concepts) are behavioral ports inspired by Grok Build
+(SpaceXAI grok-build crates), licensed under Apache License 2.0:
+
+  Copyright 2023-2026 SpaceXAI
+
+  Licensed under the Apache License, Version 2.0.
+  http://www.apache.org/licenses/LICENSE-2.0
+
+This product does not require Grok hosted models or xAI API keys; inference
+remains on user-configured backends (LM Studio, Ollama, llama.cpp, EXO, MLX,
+OpenAI-compatible endpoints).

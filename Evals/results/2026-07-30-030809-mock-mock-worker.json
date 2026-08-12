@@ -1,0 +1,10 @@
+[
+  {
+    "task": "000-harness-alive",
+    "status": "pass",
+    "duration_s": 0,
+    "tool_calls": 0,
+    "run_exit_code": 0,
+    "workdir": "/var/folders/d0/8rwktxv56vq3dtxj_m53mml40000gn/T/agentos-eval-000-harness-alive-XXXX.7JIkfq0evh"
+  }
+]

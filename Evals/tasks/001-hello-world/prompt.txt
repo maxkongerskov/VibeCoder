@@ -1,0 +1,1 @@
+Build a macOS SwiftUI app in the current working directory that opens a window showing the text "Hello, World!" centered on screen. Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`. The app must build cleanly and launch a window when run.

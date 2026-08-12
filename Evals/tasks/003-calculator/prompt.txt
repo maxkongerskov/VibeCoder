@@ -1,0 +1,6 @@
+Build a macOS SwiftUI calculator app in the current working directory. Requirements:
+- Standard 4-function calculator: addition, subtraction, multiplication, division.
+- Visible buttons for digits 0-9, the four operators, "=", "C" (clear), and "." (decimal).
+- The "=" button must compute and display the result.
+- Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`.
+- The app must build cleanly and a "=" press after typing a valid expression must show the correct result on screen.

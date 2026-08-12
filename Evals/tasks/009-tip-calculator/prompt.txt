@@ -1,0 +1,6 @@
+Build a macOS SwiftUI tip-calculator app in the current working directory. Requirements:
+- A text field for the bill amount.
+- A slider (or stepper) for the tip percentage, with the current percentage shown next to it.
+- A live-updating display of the tip amount AND the total (bill + tip).
+- Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`.
+- The app must build cleanly and changing the bill or tip percentage must update the displayed total.

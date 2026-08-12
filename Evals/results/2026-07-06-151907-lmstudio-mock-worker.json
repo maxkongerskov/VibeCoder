@@ -1,0 +1,11 @@
+[
+  {
+    "task": "001-hello-world",
+    "status": "fail",
+    "duration_s": 0,
+    "tool_calls": 0
+0,
+    "run_exit_code": 0,
+    "workdir": "/var/folders/d0/8rwktxv56vq3dtxj_m53mml40000gn/T/agentos-eval-001-hello-world-XXXX.jd7hov1c3v"
+  }
+]

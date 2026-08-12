@@ -1,0 +1,7 @@
+Build a macOS SwiftUI notes app in the current working directory. Requirements:
+- Two-pane layout (sidebar + main): the sidebar lists notes by title, the main pane is a TextEditor showing the selected note's body.
+- A "New Note" button creates a fresh note in the sidebar.
+- Selecting a note in the sidebar loads its body into the editor.
+- Editing the body updates the in-memory note (persistence to disk is NOT required).
+- Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`.
+- The app must build cleanly and selecting/editing must visibly work.

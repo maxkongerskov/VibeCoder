@@ -1,0 +1,81 @@
+# ── Swift Package Manager ──────────────────────────────────────────
+.build/
+.swiftpm/
+Package.resolved
+
+# ── Xcode ──────────────────────────────────────────────────────────
+# NOTE: do NOT ignore *.xcodeproj/ — that excludes project.pbxproj
+# which is the project file itself. We only ignore the per-user
+# state inside it.
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+*.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.hmap
+*.moved-aside
+*.dSYM.zip
+*.dSYM/
+
+# ── macOS ──────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ── Backups (from pbxproj surgery during development) ──────────────
+*.bak
+*.bak.*
+project.pbxproj.bak*
+
+# ── Logs / traces ──────────────────────────────────────────────────
+*.log
+traces/
+
+# ── Distribution outputs ───────────────────────────────────────────
+dist/
+*.dmg
+*.pkg
+*.ipa
+*.crash
+
+# ── Local-only config ──────────────────────────────────────────────
+.env
+.env.local
+scratch/
+_notes/
+TODO.local.md
+.claude/settings.local.json
+
+# ── Agent runtime state (conversation-scoped; keep instructions/agents trackable) ──
+.agentos/plans/
+
+# ── Editor noise ───────────────────────────────────────────────────
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# ── Intentionally COMMITTED (notes for future you) ─────────────────
+# App/Vendor/llama.cpp/  — bundled engine (~42 MB), required for build
+# App/AgentOS.xcodeproj/ — Xcode project file (was wrongly ignored before)
+
+# ── Cloudflare wrangler local state (license worker deploys) ──────
+.wrangler/
+
+# ── Python cache ───────────────────────────────────────────────────
+__pycache__/
+
+# ── VibeCoder session state (local only) ─────────────────────────
+.vibecoder/
+
+# ── Internal orchestration logs (not for public release) ─────────
+HANDOFF/
+
+# ── Build artifacts (regenerated locally; never commit) ─────────
+Release/build/

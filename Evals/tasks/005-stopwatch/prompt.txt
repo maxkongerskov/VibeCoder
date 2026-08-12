@@ -1,0 +1,5 @@
+Build a macOS SwiftUI stopwatch app in the current working directory. Requirements:
+- Large elapsed-time display in the center, updating at least every 0.1 seconds while running.
+- Three buttons: Start, Stop, Reset.
+- Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`.
+- The app must build cleanly and Start/Stop/Reset must actually drive the timer.

@@ -1,0 +1,7 @@
+You are connected to Xcode via MCP. Do exactly this sequence:
+
+1. Call `XcodeListWindows` to discover the active `tabIdentifier`.
+2. Call `XcodeRead` on `Package.swift` in the open Xcode project (use the tabIdentifier from step 1).
+3. Call `BuildProject` for that same tabIdentifier.
+
+Report whether the build succeeded. Do not use `xcode_build` or `run_shell xcodebuild`.

@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "backend": "mock",
+  "model": "mock-worker",
+  "captured_at": "2026-07-23",
+  "tasks": {
+    "000-harness-alive": "pass"
+  },
+  "pass_rate": 1.0,
+  "max_drop_pp": 5,
+  "require_all_pass": true
+}

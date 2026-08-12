@@ -1,0 +1,1 @@
+Build a macOS SwiftUI app in the current working directory: a window with a number displayed centered and a button below it labeled "Increment". Pressing the button increases the number by 1. Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`. The app must build cleanly and the counter must actually update on press.

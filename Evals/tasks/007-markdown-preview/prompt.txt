@@ -1,0 +1,5 @@
+Build a macOS SwiftUI markdown-preview app in the current working directory. Requirements:
+- Two side-by-side panes: a text editor on the left, a rendered preview on the right.
+- Typing in the editor updates the preview in real time. Use SwiftUI's AttributedString markdown rendering (or any built-in markdown rendering).
+- Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`.
+- The app must build cleanly and the right pane must visibly re-render as I type.

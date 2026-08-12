@@ -1,0 +1,5 @@
+Build a macOS SwiftUI file-browser app in the current working directory. Requirements:
+- On launch, list every file in the user's ~/Downloads directory.
+- Each row shows the filename and the file size (in bytes or formatted as KB/MB).
+- Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`.
+- The app must build cleanly and the window must show the actual contents of ~/Downloads on the user's machine.

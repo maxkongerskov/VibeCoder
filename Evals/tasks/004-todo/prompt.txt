@@ -1,0 +1,6 @@
+Build a macOS SwiftUI todo app in the current working directory. Requirements:
+- A text field at the top where I can type a new todo and press Return to add it.
+- A list below showing all todos.
+- Each row has a way to delete that todo (a button, or swipe).
+- Use Swift Package Manager (Package.swift + Sources/) so I can run it with `swift build && swift run`.
+- The app must build cleanly. Adding and deleting must actually mutate the visible list.
