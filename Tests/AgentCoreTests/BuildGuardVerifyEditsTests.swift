@@ -41,4 +41,63 @@ final class BuildGuardVerifyEditsTests: XCTestCase {
         let c = AgentLoop.Configuration()
         XCTAssertTrue(c.verifyEdits)
     }
+
+    func testSystemReminderIsWireOnly() {
+        XCTAssertTrue(SystemReminder.isWireOnly(SystemReminder.buildGuard(succeeded: true)))
+        XCTAssertTrue(SystemReminder.isWireOnly(
+            SystemReminder.buildGuard(succeeded: false, detail: "error: demo")))
+        XCTAssertTrue(SystemReminder.isWireOnly(
+            SystemReminder.autoVerify(path: "/tmp/a.swift", tail: "let x = 1")))
+        XCTAssertTrue(SystemReminder.isWireOnly(SystemReminder.memoryFirstTurn("- note")))
+        XCTAssertTrue(SystemReminder.isWireOnly(SystemReminder.interjection("stop")))
+        XCTAssertFalse(SystemReminder.isWireOnly("Please edit App.swift"))
+        XCTAssertFalse(SystemReminder.isWireOnly(""))
+    }
+
+    func testWireOnlyReminderDoesNotAppearInTranscript() {
+        let real = ChatMessage(role: .user, content: "fix the build")
+        let log = ChatMessage(
+            role: .user,
+            content: SystemReminder.autoVerify(path: "App.swift", tail: "let x = 1")
+        )
+        let build = ChatMessage(
+            role: .user,
+            content: SystemReminder.buildGuard(succeeded: true)
+        )
+        XCTAssertTrue(real.appearsInTranscript)
+        XCTAssertFalse(real.isWireOnlySystemReminder)
+        XCTAssertTrue(log.isWireOnlySystemReminder)
+        XCTAssertFalse(log.appearsInTranscript)
+        XCTAssertTrue(build.isWireOnlySystemReminder)
+        XCTAssertFalse(build.appearsInTranscript)
+    }
+
+    func testLastVisibleUserIndexSkipsHarnessLog() {
+        let msgs = [
+            ChatMessage(role: .user, content: "edit App.swift"),
+            ChatMessage(role: .assistant, content: "", toolCalls: [
+                ToolCallInvocation(id: "c1", name: "edit_file", arguments: "{}")
+            ]),
+            ChatMessage(role: .tool, content: "ok", toolCallID: "c1"),
+            ChatMessage(
+                role: .user,
+                content: SystemReminder.autoVerify(path: "App.swift", tail: "print(1)")
+            ),
+        ]
+        XCTAssertEqual(msgs.lastVisibleUserIndex(), 0)
+        XCTAssertEqual(msgs[msgs.lastVisibleUserIndex()!].content, "edit App.swift")
+    }
+
+    func testTurnGroupDoesNotTreatAutoVerifyAsANewUserTurn() {
+        let user = ChatMessage(role: .user, content: "edit App.swift")
+        let asst = ChatMessage(role: .assistant, content: "Done.")
+        let log = ChatMessage(
+            role: .user,
+            content: SystemReminder.autoVerify(path: "App.swift", tail: "print(1)")
+        )
+        let turns = Turn.group([user, asst, log])
+        XCTAssertEqual(turns.count, 1)
+        XCTAssertEqual(turns[0].user.content, "edit App.swift")
+        XCTAssertEqual(turns[0].answer?.content, "Done.")
+    }
 }

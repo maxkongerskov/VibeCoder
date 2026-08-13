@@ -260,6 +260,47 @@ final class BugHuntAppViewsTests: XCTestCase {
         XCTAssertEqual(url?.port, 8080)
     }
 
+    func testEmptyHeroIgnoresWireOnlyReminderLogs() {
+        let log = ChatMessage(
+            role: .user,
+            content: SystemReminder.autoVerify(path: "App.swift", tail: "let x = 1")
+        )
+        XCTAssertTrue(
+            ChatView.shouldShowEmptyBrandHero(
+                messages: [log],
+                isRunning: false,
+                streamingContent: "",
+                noticesEmpty: true
+            ),
+            "AutoVerify log must not count as a real chat turn"
+        )
+        let real = ChatMessage(role: .user, content: "hello")
+        XCTAssertFalse(
+            ChatView.shouldShowEmptyBrandHero(
+                messages: [real],
+                isRunning: false,
+                streamingContent: "",
+                noticesEmpty: true
+            )
+        )
+    }
+
+    func testSidebarPreviewSkipsTrailingAutoVerifyLog() {
+        var conv = Conversation(title: "t")
+        conv.messages = [
+            ChatMessage(role: .user, content: "edit App.swift"),
+            ChatMessage(role: .assistant, content: "Updated the file."),
+            ChatMessage(
+                role: .user,
+                content: SystemReminder.autoVerify(path: "App.swift", tail: "SECRET_TAIL")
+            ),
+        ]
+        let preview = ZCodeSidebar.previewLine(for: conv)
+        XCTAssertTrue(preview.contains("Updated the file."))
+        XCTAssertFalse(preview.contains("SECRET_TAIL"))
+        XCTAssertFalse(preview.contains("AutoVerify"))
+    }
+
     func testNormalizedEndpointAcceptsBareHostPort() {
         let url = ConnectionSettingsView.normalizedEndpointURL(from: "127.0.0.1:8080")
         XCTAssertEqual(url?.scheme, "http")

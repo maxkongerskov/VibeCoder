@@ -88,4 +88,12 @@ public enum SystemReminder: Sendable {
         \(tail)
         """
     }
+
+    /// Wire-only harness injections. They stay in conversation history for
+    /// the model (user-role so OpenAI tool pairing stays intact) but must
+    /// never render as a chat bubble or count as a user turn.
+    public static func isWireOnly(_ content: String) -> Bool {
+        content.trimmingCharacters(in: .whitespacesAndNewlines)
+            .hasPrefix("# System reminder")
+    }
 }

@@ -165,7 +165,7 @@ final class ChatViewModel: ObservableObject {
 
     /// Assistant message ids belonging to the open turn (after last user msg).
     private var currentTurnAssistantMessageIDs: [UUID] {
-        guard let lastUser = conversation.messages.lastIndex(where: { $0.role == .user }) else {
+        guard let lastUser = conversation.messages.lastVisibleUserIndex() else {
             return conversation.messages.filter { $0.role == .assistant }.map(\.id)
         }
         return conversation.messages[lastUser...]
@@ -2044,7 +2044,7 @@ final class ChatViewModel: ObservableObject {
     /// `liveToolStates` are not double-applied (duplicate create cards).
     func fileContentsBeforeCurrentTurn() -> [String: String] {
         var map: [String: String] = [:]
-        guard let lastUser = conversation.messages.lastIndex(where: { $0.role == .user }) else {
+        guard let lastUser = conversation.messages.lastVisibleUserIndex() else {
             return map
         }
         for msg in conversation.messages.prefix(lastUser) {
@@ -2427,7 +2427,7 @@ final class ChatViewModel: ObservableObject {
             return handleUndo()
         }
         // Otherwise restore latest file checkpoint and drop last user turn.
-        guard let lastUser = conversation.messages.lastIndex(where: { $0.role == .user }) else {
+        guard let lastUser = conversation.messages.lastVisibleUserIndex() else {
             return .handled(message: "Nothing to rewind.")
         }
         let removed = conversation.messages.count - lastUser
@@ -2813,7 +2813,7 @@ final class ChatViewModel: ObservableObject {
     private func formatSessionInfo() -> String {
         let modelID = conversation.modelID ?? app?.selectedModelID ?? "(none)"
         let modelName = app?.availableModels.first(where: { $0.id == modelID })?.displayName ?? modelID
-        let turns = conversation.messages.filter { $0.role == .user }.count
+        let turns = conversation.messages.filter { $0.role == .user && !$0.isWireOnlySystemReminder }.count
         let msgs = conversation.messages.count
         let mode = app?.executionMode.fullLabel ?? "?"
         let goal = sessionGoal.map { "Goal: \($0)" } ?? "Goal: (none)"

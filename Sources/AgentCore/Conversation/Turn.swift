@@ -40,6 +40,8 @@ public struct Turn: Identifiable, Sendable {
 
         for msg in messages where msg.role != .system {
             if msg.role == .user {
+                // Harness reminders are user-role on the wire only.
+                if msg.isWireOnlySystemReminder { continue }
                 flush()
                 currentUser = msg
             } else {

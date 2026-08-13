@@ -464,7 +464,7 @@ public actor LocalAPIServer {
     public static func splitHistoryAndUser(
         _ messages: [ChatMessage]
     ) -> (history: [ChatMessage], userMessage: String) {
-        if let lastIdx = messages.lastIndex(where: { $0.role == .user }) {
+        if let lastIdx = messages.lastVisibleUserIndex() {
             let history = Array(messages[..<lastIdx])
             let user = messages[lastIdx].content
             return (history, user)

@@ -72,6 +72,36 @@ final class ConversationMarkdownExportTests: XCTestCase {
         XCTAssertTrue(md.contains("hi"))
     }
 
+    func testSkipsWireOnlyAutoVerifyAndBuildGuardLogs() {
+        var c = Conversation(title: "Logs")
+        c.messages = [
+            ChatMessage(role: .user, content: "edit App.swift"),
+            ChatMessage(role: .assistant, content: "Updated App.swift."),
+            ChatMessage(
+                role: .user,
+                content: SystemReminder.autoVerify(
+                    path: "App.swift",
+                    tail: "THIS_TAIL_MUST_NOT_EXPORT"
+                )
+            ),
+            ChatMessage(
+                role: .user,
+                content: SystemReminder.buildGuard(
+                    succeeded: false,
+                    detail: "error: THIS_BUILD_LOG_MUST_NOT_EXPORT"
+                )
+            ),
+        ]
+        let md = ConversationMarkdownExport.render(conversation: c, exportedAt: fixed)
+        XCTAssertTrue(md.contains("edit App.swift"))
+        XCTAssertTrue(md.contains("Updated App.swift."))
+        XCTAssertFalse(md.contains("THIS_TAIL_MUST_NOT_EXPORT"), md)
+        XCTAssertFalse(md.contains("THIS_BUILD_LOG_MUST_NOT_EXPORT"), md)
+        XCTAssertFalse(md.contains("[AutoVerify]"), md)
+        XCTAssertFalse(md.contains("BuildGuard: build failed"), md)
+        XCTAssertEqual(md.components(separatedBy: "## User").count - 1, 1)
+    }
+
     func testToolResultFenceSurvivesEmbeddedBackticks() {
         let inv = ToolCallInvocation(id: "c1", name: "read_file", arguments: #"{"path":"a.md"}"#)
         var c = Conversation(title: "Fence")

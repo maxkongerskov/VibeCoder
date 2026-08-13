@@ -49,6 +49,7 @@ enum ConversationMarkdownExport {
                 continue
 
             case .user:
+                if msg.isWireOnlySystemReminder { continue }
                 let content = msg.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if content.isEmpty { continue }
                 out += "## User\n\n\(content)\n\n"

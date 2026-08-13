@@ -578,8 +578,8 @@ private struct ZCodeTaskRow: View {
 extension ZCodeSidebar {
     /// Last assistant (or user) line for the task list preview.
     static func previewLine(for conv: Conversation, cleanModelChrome: Bool = true) -> String {
-        let msg = conv.messages.last(where: { $0.role == .assistant })
-            ?? conv.messages.last(where: { $0.role == .user })
+        let msg = conv.messages.last(where: { $0.role == .assistant && $0.appearsInTranscript })
+            ?? conv.messages.last(where: { $0.role == .user && $0.appearsInTranscript })
         guard let content = msg?.content else { return "" }
         let display = msg?.role == .assistant
             ? ModelChrome.displayBody(content, enabled: cleanModelChrome)

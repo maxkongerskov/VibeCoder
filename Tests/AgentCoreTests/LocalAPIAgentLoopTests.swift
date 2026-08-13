@@ -56,6 +56,20 @@ final class LocalAPIAgentLoopTests: XCTestCase {
         XCTAssertEqual(history.last?.role, .assistant)
     }
 
+    func testSplitHistoryAndUserSkipsTrailingSystemReminder() {
+        let msgs = [
+            ChatMessage(role: .user, content: "edit App.swift"),
+            ChatMessage(role: .assistant, content: "ok"),
+            ChatMessage(
+                role: .user,
+                content: SystemReminder.autoVerify(path: "App.swift", tail: "let x = 1")
+            ),
+        ]
+        let (history, user) = LocalAPIServer.splitHistoryAndUser(msgs)
+        XCTAssertEqual(user, "edit App.swift")
+        XCTAssertTrue(history.isEmpty)
+    }
+
     func testAgentLoopTurnExecutesToolThenFinishes() async throws {
         await ToolRegistry.shared.registerBuiltins()
         // Turn 1: model requests list_directory; Turn 2: final prose.

@@ -46,6 +46,38 @@ final class ChronologicalTurnScopeTests: XCTestCase {
         XCTAssertEqual(live.first?.status, .running)
     }
 
+    func testLiveTurnIgnoresTrailingAutoVerifyLog() {
+        var convo = Conversation(title: "t")
+        let user = ChatMessage(role: .user, content: "edit App.swift")
+        let asst = ChatMessage(
+            role: .assistant,
+            content: "",
+            toolCalls: [ToolCallInvocation(id: "call_0", name: "edit_file", arguments: "{\"path\":\"App.swift\"}")]
+        )
+        let log = ChatMessage(
+            role: .user,
+            content: SystemReminder.autoVerify(path: "App.swift", tail: "let x = 1")
+        )
+        convo.messages = [user, asst, log]
+
+        let app = AppViewModel()
+        let vm = ChatViewModel(conversation: convo, app: app)
+        vm.toolCallsByMessage[asst.id] = [
+            ToolCallUIState(
+                id: "call_0",
+                toolName: "edit_file",
+                status: .running,
+                input: "{\"path\":\"App.swift\"}",
+                output: ""
+            )
+        ]
+        vm.isRunning = true
+
+        let live = vm.liveTurnToolStates
+        XCTAssertEqual(live.count, 1, "AutoVerify reminder must not close the live turn")
+        XCTAssertEqual(live.first?.toolName, "edit_file")
+    }
+
     func testCodeTimelineKeepsUniqueIdsAcrossTurnsWithSameToolCallId() {
         var convo = Conversation(title: "t")
         let u1 = ChatMessage(role: .user, content: "edit a")

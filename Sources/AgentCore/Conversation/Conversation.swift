@@ -264,6 +264,30 @@ public struct ChatMessage: Codable, Identifiable, Sendable {
         self.thinkingDurationSeconds = thinkingDurationSeconds
         self.images = images
     }
+
+    /// User-role BuildGuard / AutoVerify / memory / interjection injections.
+    public var isWireOnlySystemReminder: Bool {
+        role == .user && SystemReminder.isWireOnly(content)
+    }
+
+    /// Whether this message should appear as a chat bubble.
+    public var appearsInTranscript: Bool {
+        switch role {
+        case .system, .tool:
+            return false
+        case .assistant:
+            return true
+        case .user:
+            return !isWireOnlySystemReminder
+        }
+    }
+}
+
+extension Array where Element == ChatMessage {
+    /// Last real user prompt, skipping harness system-reminder rows.
+    public func lastVisibleUserIndex() -> Int? {
+        lastIndex { $0.role == .user && !$0.isWireOnlySystemReminder }
+    }
 }
 
 public struct ToolCallInvocation: Codable, Identifiable, Sendable {

@@ -427,8 +427,9 @@ struct ChatView: View {
         if !streamingContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return false
         }
-        // Only user/assistant count — system/tool noise shouldn't clear the hero.
-        let visible = messages.contains { $0.role == .user || $0.role == .assistant }
+        // Only real user/assistant bubbles count — system/tool/reminder
+        // noise shouldn't clear the hero.
+        let visible = messages.contains { $0.appearsInTranscript }
         return !visible
     }
 
@@ -524,9 +525,7 @@ struct ChatView: View {
     }
 
     private var renderBlocks: [RenderBlock] {
-        let visible = viewModel.conversation.messages.filter {
-            $0.role != .tool && $0.role != .system
-        }
+        let visible = viewModel.conversation.messages.filter(\.appearsInTranscript)
         var out: [RenderBlock] = []
         var assistantRun: [ChatMessage] = []
 
@@ -782,7 +781,8 @@ struct ChatView: View {
             }
             .onChange(of: viewModel.conversation.messages.count) { _, _ in
                 // Sending a new user turn always re-pins (ChatGPT behavior).
-                if viewModel.conversation.messages.last?.role == .user {
+                if viewModel.conversation.messages.last?.appearsInTranscript == true,
+                   viewModel.conversation.messages.last?.role == .user {
                     stickToBottom = true
                 }
                 guard stickToBottom else { return }
@@ -827,7 +827,7 @@ struct ChatView: View {
         let run: () -> Void = {
             if viewModel.isRunning {
                 proxy.scrollTo("pending", anchor: .bottom)
-            } else if let last = viewModel.conversation.messages.last {
+            } else if let last = viewModel.conversation.messages.last(where: { $0.appearsInTranscript }) {
                 if last.role == .user {
                     proxy.scrollTo(last.id, anchor: .top)
                 } else {
