@@ -81,7 +81,9 @@ public struct LMModel: Identifiable, Codable, Hashable, Sendable {
         if reasoningKeywords.contains(where: { l.contains($0) }) {
             caps.append(.reasoning)
         }
-        if visionKeywords.contains(where: { l.contains($0) }) {
+        if visionKeywords.contains(where: { l.contains($0) })
+            && !isLlama32TextOnly(l)
+            && !isGemma3TextOnly(l) {
             caps.append(.vision)
         }
         if longContextKeywords.contains(where: { l.contains($0) }) {
@@ -112,6 +114,7 @@ private let toolCapableKeywords = [
     "nemotron", "aya",
     "smollm", "internlm",
     "gpt-4", "gpt-5",                     // OpenAI frontier families
+    "gpt-3.5", "gpt-35", "gpt3.5",        // original function-calling model
     "minimax",                            // MiniMax-Text-01 / M1 / M2 — tool-capable,
                                           // but emit <minimax:tool_call> XML in content.
 ]
@@ -154,9 +157,28 @@ private let visionKeywords = [
 ]
 
 private let longContextKeywords = [
-    "128k", "256k", "1m", "gemini", "claude", "longctx",
-    "yi-",
+    "128k", "256k", "200k", "1m", "gemini", "claude", "longctx",
 ]
+
+/// Llama 3.2 1B/3B Instruct are text-only; 11B/90B are the VL checkpoints.
+private func isLlama32TextOnly(_ l: String) -> Bool {
+    guard l.contains("llama-3.2") || l.contains("llama3.2") else { return false }
+    if l.contains("11b") || l.contains("90b") || l.contains("vision") || l.contains("-vl") {
+        return false
+    }
+    return hasParamSize(l, "1b") || hasParamSize(l, "3b")
+}
+
+/// Gemma 3 1B is text-only; 4B+ are multimodal.
+private func isGemma3TextOnly(_ l: String) -> Bool {
+    guard l.contains("gemma-3") || l.contains("gemma3") else { return false }
+    return hasParamSize(l, "1b")
+}
+
+/// Match a parameter-size token (`1b`, `3b`) that is not a substring of `11b` / `13b`.
+private func hasParamSize(_ l: String, _ size: String) -> Bool {
+    l.range(of: "(^|[^0-9])\(size)([^0-9]|$)", options: .regularExpression) != nil
+}
 
 // MARK: - API response
 

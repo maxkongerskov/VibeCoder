@@ -35,7 +35,8 @@ public actor SessionReadTracker {
         sessionReadPaths: Set<String>
     ) -> Bool {
         let norm = SafeModeConfig.normalizePath(path)
-        return sessionReadPaths.contains(norm) || (byConversation[conversationID]?.contains(norm) == true)
+        let seeded = Set(sessionReadPaths.map { SafeModeConfig.normalizePath($0) })
+        return seeded.contains(norm) || (byConversation[conversationID]?.contains(norm) == true)
     }
 
     public func clear(conversationID: UUID) {

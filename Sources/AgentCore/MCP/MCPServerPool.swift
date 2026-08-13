@@ -335,11 +335,9 @@ public actor MCPServerPool {
     /// headless runs or when a doom-loop is detected.
     public func invokeTool(namespacedName: String, arguments: [String: Any],
                            timeout: TimeInterval = 120) async throws -> MCPJSONPayload {
-        // Split "server__tool" → (server, tool). Only the FIRST occurrence
-        // of `__` is used as the boundary. This correctly handles server
-        // names that contain `__` (e.g. "my__server__create_issue" →
-        // server="my__server", tool="create_issue").
-        guard let sep = namespacedName.range(of: MCPToolNaming.delimiter, options: .backwards) else {
+        // Split on the FIRST `__` so it matches `isMCPToolName` / publish:
+        // `demo__foo__bar` → server `demo`, tool `foo__bar`.
+        guard let sep = namespacedName.range(of: MCPToolNaming.delimiter) else {
             throw MCPClientError.invalidResponse("Tool name '\(namespacedName)' is not namespaced")
         }
         let server = String(namespacedName[..<sep.lowerBound])

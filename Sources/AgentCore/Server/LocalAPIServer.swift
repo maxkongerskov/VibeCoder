@@ -651,12 +651,15 @@ public actor LocalAPIServer {
         return headers
     }
 
+    /// Exact host match only — `http://localhost.evil.com` must not inherit
+    /// the `http://localhost` prefix allow-list.
     private static func isLocalhostOrigin(_ origin: String) -> Bool {
-        let lower = origin.lowercased()
-        return lower.hasPrefix("http://localhost")
-            || lower.hasPrefix("http://127.0.0.1")
-            || lower.hasPrefix("https://localhost")
-            || lower.hasPrefix("https://127.0.0.1")
+        guard let url = URL(string: origin),
+              let scheme = url.scheme?.lowercased(),
+              scheme == "http" || scheme == "https"
+        else { return false }
+        let host = (url.host ?? "").lowercased()
+        return host == "localhost" || host == "127.0.0.1" || host == "::1"
     }
 
     // MARK: - SSE chunk formatting

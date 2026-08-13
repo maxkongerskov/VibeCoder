@@ -271,14 +271,21 @@ public enum CodeNavService {
         let hits = SymbolIndex.find(symbol: symbol, projectRoot: root, maxResults: 1)
         guard let first = hits.first else { return nil }
         let url = URL(fileURLWithPath: first.path)
-        // Prefer column of symbol occurrence on the line.
-        let col: Int = {
-            if let range = first.snippet.range(of: symbol) {
-                return first.snippet.distance(from: first.snippet.startIndex, to: range.lowerBound)
-            }
-            return 0
-        }()
+        // LSP character is UTF-16 on the raw line, including leading indent.
+        // Do not use the trimmed snippet or Swift Character distance.
+        let col = utf16Column(of: symbol, inFile: first.path, line1: first.line)
         return (url, max(0, first.line - 1), max(0, col))
+    }
+
+    /// 0-based UTF-16 offset of `symbol` on the untrimmed source line.
+    private static func utf16Column(of symbol: String, inFile path: String, line1: Int) -> Int {
+        guard line1 >= 1,
+              let text = try? String(contentsOfFile: path, encoding: .utf8) else { return 0 }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
+        guard line1 <= lines.count else { return 0 }
+        let raw = String(lines[line1 - 1])
+        guard let range = raw.range(of: symbol) else { return 0 }
+        return raw.utf16.distance(from: raw.startIndex, to: range.lowerBound)
     }
 
     private static func lspDefinition(

@@ -37,13 +37,20 @@ public enum ContextAttachmentFormatter {
     public static func attachmentPrefix(
         for attachments: [ContextAttachment],
         maxBytesPerFile: Int = defaultMaxBytesPerFile,
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        encodedImagePaths: Set<String> = []
     ) -> String {
-        // Text-only path: images handled separately in composeMultimodal.
-        let nonImage = attachments.filter { !VisionImageEncoder.isImagePath($0.path) }
-        guard !nonImage.isEmpty else { return "" }
+        // Keep non-images plus any image that failed to encode so missing/
+        // corrupt shots still appear in the prompt (not dropped from both
+        // `images` and this prefix).
+        let included = attachments.filter { attachment in
+            if !VisionImageEncoder.isImagePath(attachment.path) { return true }
+            let expanded = (attachment.path as NSString).expandingTildeInPath
+            return !encodedImagePaths.contains(expanded) && !encodedImagePaths.contains(attachment.path)
+        }
+        guard !included.isEmpty else { return "" }
         var lines = ["[Attached context files]"]
-        for attachment in nonImage {
+        for attachment in included {
             var line = "- @\(attachment.displayName) (\(attachment.path))"
             if let size = attachment.byteSize {
                 line += " — \(formatBytes(size))"
@@ -89,10 +96,15 @@ public enum ContextAttachmentFormatter {
             let note = "[Attached images for vision: \(names)]\n\n"
             textOut = note + textOut
         }
+        var encodedImagePaths = Set<String>()
+        for image in images {
+            if let source = image.sourcePath { encodedImagePaths.insert(source) }
+        }
         let prefix = attachmentPrefix(
             for: attachments,
             maxBytesPerFile: maxBytesPerFile,
-            fileManager: fileManager)
+            fileManager: fileManager,
+            encodedImagePaths: encodedImagePaths)
         if !prefix.isEmpty {
             textOut = prefix + textOut
         }
@@ -110,9 +122,10 @@ public enum ContextAttachmentFormatter {
         guard fileManager.fileExists(atPath: expanded) else {
             return ["  (file missing on disk — agent should use read_file if needed)"]
         }
-        // Images are multimodal — never dump as "binary omitted" here.
+        // Images that reach this path failed vision encode (missing ones
+        // already returned above). Keep a prompt-visible note.
         if VisionImageEncoder.isImagePath(expanded) {
-            return ["  (image — sent as vision attachment)"]
+            return ["  (image missing or unreadable — not sent as vision attachment)"]
         }
         guard let data = fileManager.contents(atPath: expanded) else {
             return ["  (could not read file — agent should use read_file)"]
@@ -127,8 +140,7 @@ public enum ContextAttachmentFormatter {
         }
         var truncated = false
         if text.utf8.count > maxBytes {
-            // Truncate at byte boundary (not character offset).
-            text = String(bytes: text.utf8.prefix(maxBytes), encoding: .utf8) ?? text
+            text = truncateToValidUTF8(text, maxBytes: maxBytes)
             truncated = true
         }
         var block = ["```", text, "```"]
@@ -136,6 +148,21 @@ public enum ContextAttachmentFormatter {
             block.append("  …[truncated at \(formatBytes(maxBytes))]")
         }
         return block
+    }
+
+    /// Byte-cap `text` without splitting a multi-byte scalar. Backs up from
+    /// `maxBytes` to a valid UTF-8 boundary instead of falling back to the
+    /// full string when `String(bytes:encoding:)` fails mid-character.
+    private static func truncateToValidUTF8(_ text: String, maxBytes: Int) -> String {
+        guard maxBytes > 0 else { return "" }
+        var data = Data(text.utf8.prefix(maxBytes))
+        while !data.isEmpty {
+            if let sliced = String(data: data, encoding: .utf8) {
+                return sliced
+            }
+            data.removeLast()
+        }
+        return ""
     }
 
     private static func formatBytes(_ bytes: Int) -> String {

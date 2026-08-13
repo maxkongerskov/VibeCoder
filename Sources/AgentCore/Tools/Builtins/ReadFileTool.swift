@@ -45,7 +45,15 @@ public struct ReadFileTool: Tool {
         }
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false)
         let startIdx = max(0, offset - 1)
-        let endIdx = min(lines.count, startIdx + maxLines)
+        let safeMax = max(0, maxLines)
+        let endIdx: Int
+        if safeMax == 0 || startIdx >= lines.count {
+            endIdx = startIdx
+        } else if startIdx > lines.count - safeMax {
+            endIdx = lines.count
+        } else {
+            endIdx = startIdx + safeMax
+        }
         guard startIdx < lines.count else {
             return ToolResult(content: "File has \(lines.count) lines; offset \(offset) is past end.", isError: false)
         }

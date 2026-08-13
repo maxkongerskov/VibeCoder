@@ -255,39 +255,34 @@ public enum SkillDiscovery {
         var userInvocable = true
         var allowedTools: [String] = []
 
-        if body.hasPrefix("---") {
-            let parts = body.split(separator: "---", maxSplits: 2, omittingEmptySubsequences: false)
-            // ["", frontmatter, body...]
-            if parts.count >= 3 {
-                let fm = String(parts[1])
-                body = parts.dropFirst(2).joined(separator: "---")
-                let fields = parseFrontmatterFields(fm)
-                // Known control-plane keys; all other frontmatter keys are
-                // ignored gracefully (left in `fields` only during parse).
-                if let n = fields["name"] {
-                    name = sanitizeName(n)
-                }
-                if let d = fields["description"] {
-                    description = String(d.prefix(maxDescriptionLen))
-                }
-                if let flag = boolishFrontmatterValue(
-                    fields,
-                    keys: ["disable-model-invocation", "disable_model_invocation"]
-                ) {
-                    disableModelInvocation = flag
-                }
-                if let flag = boolishFrontmatterValue(
-                    fields,
-                    keys: ["user-invocable", "user_invocable"]
-                ) {
-                    userInvocable = flag
-                }
-                if let toolsRaw = firstFrontmatterValue(
-                    fields,
-                    keys: ["allowed-tools", "allowed_tools"]
-                ) {
-                    allowedTools = parseAllowedTools(toolsRaw)
-                }
+        if let split = splitFrontmatter(body) {
+            body = split.remainder
+            let fields = parseFrontmatterFields(split.fields)
+            // Known control-plane keys; all other frontmatter keys are
+            // ignored gracefully (left in `fields` only during parse).
+            if let n = fields["name"] {
+                name = sanitizeName(n)
+            }
+            if let d = fields["description"] {
+                description = String(d.prefix(maxDescriptionLen))
+            }
+            if let flag = boolishFrontmatterValue(
+                fields,
+                keys: ["disable-model-invocation", "disable_model_invocation"]
+            ) {
+                disableModelInvocation = flag
+            }
+            if let flag = boolishFrontmatterValue(
+                fields,
+                keys: ["user-invocable", "user_invocable"]
+            ) {
+                userInvocable = flag
+            }
+            if let toolsRaw = firstFrontmatterValue(
+                fields,
+                keys: ["allowed-tools", "allowed_tools"]
+            ) {
+                allowedTools = parseAllowedTools(toolsRaw)
             }
         }
 
@@ -631,7 +626,7 @@ public enum SkillDiscovery {
             text = String(text.dropFirst().dropLast())
         }
         return text
-            .split(whereSeparator: { $0 == "," || $0 == "\n" || $0 == ";" })
+            .split(whereSeparator: { $0 == "," || $0 == ";" || $0 == "\n" || $0.isWhitespace })
             .map { part -> String in
                 var out = part.trimmingCharacters(in: .whitespacesAndNewlines)
                 if out.hasPrefix("-") {
@@ -644,6 +639,29 @@ public enum SkillDiscovery {
                 return out.trimmingCharacters(in: .whitespacesAndNewlines)
             }
             .filter { !$0.isEmpty }
+    }
+
+    /// Split YAML frontmatter only on a line that is exactly `---` — not on
+    /// an embedded `---` inside a scalar (`description: see --- notes`).
+    static func splitFrontmatter(_ markdown: String) -> (fields: String, remainder: String)? {
+        var text = markdown
+        if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
+        guard text.hasPrefix("---") else { return nil }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard let first = lines.first,
+              first.trimmingCharacters(in: .whitespaces) == "---"
+        else { return nil }
+        var closeIndex: Int?
+        for idx in 1..<lines.count {
+            if lines[idx].trimmingCharacters(in: .whitespaces) == "---" {
+                closeIndex = idx
+                break
+            }
+        }
+        guard let closeIndex else { return nil }
+        let fields = lines[1..<closeIndex].joined(separator: "\n")
+        let remainder = lines[(closeIndex + 1)...].joined(separator: "\n")
+        return (fields, remainder)
     }
 
     /// Parse simple YAML-ish frontmatter: `key: value`, plus block scalars
@@ -688,6 +706,35 @@ public enum SkillDiscovery {
                 value = folded
                     ? block.joined(separator: " ").replacingOccurrences(of: "  ", with: " ")
                     : block.joined(separator: "\n")
+            } else if value.isEmpty {
+                // YAML block list: following indented `- item` lines
+                // (Grok/Claude `allowed-tools:` format).
+                var items: [String] = []
+                while i < lines.count {
+                    let cont = lines[i]
+                    let t = cont.trimmingCharacters(in: .whitespaces)
+                    if t.isEmpty {
+                        i += 1
+                        continue
+                    }
+                    if cont.first?.isWhitespace != true {
+                        break
+                    }
+                    if t.hasPrefix("-") {
+                        var item = String(t.drop(while: { $0 == "-" || $0.isWhitespace }))
+                        if (item.hasPrefix("\"") && item.hasSuffix("\"") && item.count >= 2)
+                            || (item.hasPrefix("'") && item.hasSuffix("'") && item.count >= 2) {
+                            item = String(item.dropFirst().dropLast())
+                        }
+                        if !item.isEmpty { items.append(item) }
+                        i += 1
+                        continue
+                    }
+                    break
+                }
+                if !items.isEmpty {
+                    value = items.joined(separator: "\n")
+                }
             } else {
                 // Strip optional surrounding quotes on single-line values.
                 if (value.hasPrefix("\"") && value.hasSuffix("\"") && value.count >= 2)

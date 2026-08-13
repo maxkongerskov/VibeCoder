@@ -310,15 +310,7 @@ public struct FetchRSSTool: Tool {
     }
 
     private static func isBlocked(host: String) -> Bool {
-        if host == "localhost" { return true }
-        let privatePrefixes = ["127.", "10.", "192.168.", "169.254.", "0."]
-        if privatePrefixes.contains(where: { host.hasPrefix($0) }) { return true }
-        if host.hasPrefix("172.") {
-            let parts = host.split(separator: ".")
-            if parts.count >= 2, let second = Int(parts[1]), (16...31).contains(second) { return true }
-        }
-        if host == "::1" || host == "[::1]" { return true }
-        return false
+        FetchURLTool.isBlocked(host: host)
     }
 }
 

@@ -88,9 +88,11 @@ public enum DocumentRenderingService {
         let md: String
         if let t = markdownText, !t.isEmpty {
             md = t
-        } else if let p = markdownPath, !p.isEmpty,
-                  let data = try? String(contentsOfFile: (p as NSString).expandingTildeInPath,
-                                         encoding: .utf8) {
+        } else if let p = markdownPath, !p.isEmpty {
+            let expanded = (p as NSString).expandingTildeInPath
+            guard let data = try? String(contentsOfFile: expanded, encoding: .utf8) else {
+                return "Error: could not read markdown_path"
+            }
             md = data
         } else {
             return "Error: provide either `markdown_path` or `markdown_text`."
@@ -190,7 +192,7 @@ public enum MarkdownToHTML {
                     body += lines[i] + "\n"; i += 1
                 }
                 i += 1
-                let langClass = lang.isEmpty ? "" : " class=\"lang-\(lang)\""
+                let langClass = lang.isEmpty ? "" : " class=\"lang-\(escapeAttr(lang))\""
                 out += "<pre><code\(langClass)>" + escape(body) + "</code></pre>\n"
                 continue
             }
@@ -218,12 +220,11 @@ public enum MarkdownToHTML {
                 continue
             }
 
-            // Unordered list — strip only the single leading marker char (+ optional space)
+            // Unordered list — strip indent + one marker char (+ optional space)
             if isULItem(line) {
                 var items: [String] = []
                 while i < lines.count, isULItem(lines[i]) {
-                    // Drop exactly one marker character (first char) then at most one space.
-                    var item = lines[i].dropFirst()
+                    var item = lines[i].drop(while: { $0 == " " }).dropFirst()
                     if item.first == " " { item = item.dropFirst() }
                     items.append("<li>\(inlineFormat(String(item)))</li>")
                     i += 1
@@ -232,12 +233,11 @@ public enum MarkdownToHTML {
                 continue
             }
 
-            // Ordered list
+            // Ordered list — strip only the leading `N. ` marker, not later digits
             if isOLItem(line) {
                 var items: [String] = []
                 while i < lines.count, isOLItem(lines[i]) {
-                    let text = lines[i].drop(while: { $0.isNumber || $0 == "." || $0 == " " })
-                    items.append("<li>\(inlineFormat(String(text)))</li>")
+                    items.append("<li>\(inlineFormat(stripOrderedMarker(lines[i])))</li>")
                     i += 1
                 }
                 out += "<ol>\n" + items.joined(separator: "\n") + "\n</ol>\n"
@@ -290,10 +290,27 @@ public enum MarkdownToHTML {
         return after < t.endIndex && t[after] == " "
     }
 
+    /// Strip a single leading `N. ` marker (and indent). Leaves later digits intact.
+    private static func stripOrderedMarker(_ s: String) -> String {
+        let t = s.drop(while: { $0 == " " })
+        var idx = t.startIndex
+        while idx < t.endIndex, t[idx].isNumber { idx = t.index(after: idx) }
+        guard idx < t.endIndex, t[idx] == "." else { return String(t) }
+        idx = t.index(after: idx)
+        if idx < t.endIndex, t[idx] == " " { idx = t.index(after: idx) }
+        return String(t[idx...])
+    }
+
     private static func escape(_ s: String) -> String {
         s.replacingOccurrences(of: "&", with: "&amp;")
          .replacingOccurrences(of: "<", with: "&lt;")
          .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    private static func escapeAttr(_ s: String) -> String {
+        escape(s)
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
     }
 
     /// Inline: `code`, **bold**, *italic*, [text](url).
@@ -303,8 +320,25 @@ public enum MarkdownToHTML {
         out = replace(out, pattern: "`([^`]+)`", with: "<code>$1</code>")
         out = replace(out, pattern: #"\*\*([^*]+)\*\*"#, with: "<strong>$1</strong>")
         out = replace(out, pattern: #"\*([^*]+)\*"#, with: "<em>$1</em>")
-        out = replace(out, pattern: #"\[([^\]]+)\]\(([^\)]+)\)"#, with: "<a href=\"$2\">$1</a>")
+        out = formatLinks(out)
         return out
+    }
+
+    private static func formatLinks(_ s: String) -> String {
+        guard let re = try? NSRegularExpression(pattern: #"\[([^\]]+)\]\(([^\)]+)\)"#) else { return s }
+        let matches = re.matches(in: s, range: NSRange(s.startIndex..., in: s))
+        var result = s
+        for match in matches.reversed() {
+            guard match.numberOfRanges >= 3,
+                  let full = Range(match.range, in: result),
+                  let textR = Range(match.range(at: 1), in: result),
+                  let hrefR = Range(match.range(at: 2), in: result)
+            else { continue }
+            let text = String(result[textR])
+            let href = escapeAttr(String(result[hrefR]))
+            result.replaceSubrange(full, with: "<a href=\"\(href)\">\(text)</a>")
+        }
+        return result
     }
 
     private static func replace(_ s: String, pattern: String, with template: String) -> String {

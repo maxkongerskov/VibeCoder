@@ -9,6 +9,9 @@ import Foundation
 
 enum LegacySettingsMigration {
 
+    /// UserDefaults key for the Codable `AppSettings` JSON blob.
+    static let appSettingsDefaultsKey = "agentos.newday.settings"
+
     static func migrateSafeModePaths(from defaults: UserDefaults = .standard) -> [String] {
         if let saved = defaults.array(forKey: pathsKey) as? [String] {
             return saved
@@ -23,7 +26,10 @@ enum LegacySettingsMigration {
         return ["swift build", "git", "ls"]
     }
 
+    /// Wipe legacy keys only after they have been sourced into AppSettings JSON.
+    /// First-run (no new settings blob) must leave allow-lists in place.
     static func clearLegacyKeys(in defaults: UserDefaults = .standard) {
+        guard defaults.data(forKey: appSettingsDefaultsKey) != nil else { return }
         defaults.removeObject(forKey: pathsKey)
         defaults.removeObject(forKey: shellKey)
     }

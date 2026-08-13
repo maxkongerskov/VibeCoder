@@ -40,6 +40,7 @@ public actor ConversationStore: ConversationStoring {
         var updated = conversation
         updated.updatedAt = Date()
         let data = try JSONEncoder.iso8601Pretty.encode(updated)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent(updated.id.uuidString + ".json")
         try data.write(to: url, options: .atomic)
     }

@@ -6,6 +6,7 @@
 import XCTest
 @testable import VibeCoderApp
 
+@MainActor
 final class BuildVerifyNoticeTests: XCTestCase {
 
     func testPassedNotice() {

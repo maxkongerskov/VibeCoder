@@ -17,16 +17,31 @@ public actor MCPSessionHolder {
     private var lastSchemas: [ToolSchema] = []
 
     /// Fingerprint for resolved server configs (order-insensitive).
+    /// Includes auth material so header / env / OAuth edits invalidate the pool.
     public static func fingerprint(of servers: [MCPServerConfig]) -> String {
         servers
             .map { s in
                 let cmd = s.command ?? ""
                 let url = s.url ?? ""
                 let args = s.args.joined(separator: " ")
-                return "\(s.name)|\(s.transport.rawValue)|\(cmd)|\(url)|\(args)|\(s.enabled)"
+                let headers = Self.stableMap(s.headers)
+                let env = Self.stableMap(s.env)
+                let oauth = s.oauth.map {
+                    "\($0.clientID)|\($0.authorizationURL)|\($0.tokenURL)|"
+                    + "\($0.scopes.joined(separator: " "))|\($0.clientSecret ?? "")|"
+                    + "\($0.callbackPort.map(String.init) ?? "")"
+                } ?? ""
+                let bearer = s.bearerTokenEnvVar ?? ""
+                return "\(s.name)|\(s.transport.rawValue)|\(cmd)|\(url)|\(args)|\(s.enabled)|h:\(headers)|e:\(env)|o:\(oauth)|b:\(bearer)"
             }
             .sorted()
             .joined(separator: "\n")
+    }
+
+    private static func stableMap(_ map: [String: String]) -> String {
+        map.sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: ",")
     }
 
     /// Borrow (or create) a connected pool for these servers.

@@ -252,6 +252,7 @@ public actor ToolRegistry {
         "create_plan", "update_todo", "revise_plan",
         "tool_search",
         "memory_search", "memory_get",
+        "ask_user",
     ]
 
     /// Mutators whose bodies call `MutationReview` — Ask mode may pass them

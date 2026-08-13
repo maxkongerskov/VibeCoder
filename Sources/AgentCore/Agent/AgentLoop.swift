@@ -750,12 +750,18 @@ public actor AgentLoop {
             }
             // Prefer dedicated reasoning channel; else promote <think> tags out
             // of content so history/panel get reasoningContent + clean body.
-            let (displayContent, reasoningSnapshot, stampedThinkSecs) =
+            // Parse tags from the raw stream so inline-cleaned content (think
+            // blocks already stripped before extract) still yields reasoning.
+            let thinkingSource = assistantContent.isEmpty ? normalized.content : assistantContent
+            let (taggedBody, reasoningSnapshot, stampedThinkSecs) =
                 Self.normalizeAssistantThinking(
                     channelReasoning: assistantReasoning,
-                    content: normalized.content,
+                    content: thinkingSource,
                     thinkingDurationSeconds: thinkingDurationSeconds
                 )
+            let displayContent = normalized.usedInlineFallback
+                ? normalized.content
+                : taggedBody
             let assistantMsg = ChatMessage(
                 role: .assistant,
                 content: displayContent,
@@ -786,7 +792,7 @@ public actor AgentLoop {
                     iteration: iteration, maxIterations: config.maxIterations,
                     stallWindow: config.stallWindow,
                     modelWantsToFinish: true,
-                    lastAssistantContent: assistantContent,
+                    lastAssistantContent: displayContent,
                     messages: convo.messages,
                     turnStartIndex: turnStartIndex,
                     recentToolSignatures: recentToolSignatures,
@@ -991,9 +997,10 @@ public actor AgentLoop {
                 // full tool batch (below) or at the next iteration start.
                 let batchStart = dispatchIndex
                 // Parallel only for true I/O-safe RO tools. Soft mutators
-                // (plan store, tool_search unlock) stay serial even if .readOnly.
+                // (plan store, tool_search unlock) and ask_user stay serial
+                // even if the registry marks them .readOnly.
                 while dispatchIndex < invocations.count,
-                      await registry.isParallelSafeReadOnlyTool(invocations[dispatchIndex].name) {
+                      await isParallelSafeReadOnlyDispatch(invocations[dispatchIndex].name) {
                     dispatchIndex += 1
                 }
                 let readOnlyBatch = Array(invocations[batchStart..<dispatchIndex])
@@ -1025,7 +1032,7 @@ public actor AgentLoop {
                 }
 
                 while dispatchIndex < invocations.count,
-                      !(await registry.isParallelSafeReadOnlyTool(invocations[dispatchIndex].name)) {
+                      !(await isParallelSafeReadOnlyDispatch(invocations[dispatchIndex].name)) {
                     // Cancel between serial mutators so Stop does not run remaining edits.
                     if Task.isCancelled {
                         for remaining in invocations[dispatchIndex...] {
@@ -1469,6 +1476,13 @@ public actor AgentLoop {
             let human = invocation.name.replacingOccurrences(of: "_", with: " ")
             return human.prefix(1).uppercased() + human.dropFirst() + "…"
         }
+    }
+
+    /// Parallel RO dispatch excludes `ask_user` — it suspends for a human
+    /// and must emit `.pendingQuestion` via `dispatchOne`.
+    private func isParallelSafeReadOnlyDispatch(_ name: String) async -> Bool {
+        if name == "ask_user" { return false }
+        return await registry.isParallelSafeReadOnlyTool(name)
     }
 
     private func dispatchReadOnlyBatch(

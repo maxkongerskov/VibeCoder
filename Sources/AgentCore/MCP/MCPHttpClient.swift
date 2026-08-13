@@ -30,6 +30,15 @@
 //
 
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#endif
+
+/// C `htonl` is a function-like macro Swift cannot import. Same-module
+/// helper so MCPCallbackServer can convert INADDR_LOOPBACK to network order.
+func htonl(_ value: in_addr_t) -> in_addr_t {
+    value.bigEndian
+}
 
 /// Errors specific to the HTTP transport layer. The JSON-RPC error
 /// cases (`serverError`, `invalidResponse`) are shared with the stdio
@@ -67,6 +76,9 @@ public actor MCPHttpClient {
     private var baseURL: URL?
     private var nextID = 1
     private(set) var isConnected = false
+    /// Session id from the initialize response (`Mcp-Session-Id`), replayed
+    /// on subsequent requests.
+    private var mcpSessionId: String?
 
     /// OAuth token provider closure, set when the server has an OAuth
     /// config. Returns a fresh (possibly just-refreshed) access token on
@@ -127,6 +139,7 @@ public actor MCPHttpClient {
         }
         baseURL = url
         isConnected = false
+        mcpSessionId = nil
 
         let initParams: [String: Any] = [
             "protocolVersion": "2024-11-05",
@@ -144,6 +157,7 @@ public actor MCPHttpClient {
     public func disconnect() {
         isConnected = false
         baseURL = nil
+        mcpSessionId = nil
         consecutiveRapidDeaths = 0
     }
 
@@ -213,7 +227,7 @@ public actor MCPHttpClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         request.httpBody = body
         await applyHeaders(to: &request)
         request.timeoutInterval = timeout
@@ -223,8 +237,14 @@ public actor MCPHttpClient {
             throw MCPHttpError.connectionFailed("Non-HTTP response")
         }
 
+        if let sid = http.value(forHTTPHeaderField: "Mcp-Session-Id"), !sid.isEmpty {
+            mcpSessionId = sid
+        }
+
         if (200...299).contains(http.statusCode) {
-            return (try parseResponseBody(data: data, id: requestID),
+            return (try parseResponseBody(
+                data: data, id: requestID,
+                contentType: http.value(forHTTPHeaderField: "Content-Type")),
                     http.statusCode, nil)
         }
 
@@ -247,6 +267,7 @@ public actor MCPHttpClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("application/json, text/event-stream", forHTTPHeaderField: "Accept")
         request.httpBody = body
         await applyHeaders(to: &request)
         // Fire-and-forget; don't wait for response.
@@ -261,16 +282,15 @@ public actor MCPHttpClient {
     ///   1. Plain `{"jsonrpc":"2.0","id":N,"result":{...}}` JSON, OR
     ///   2. SSE-formatted: `event: message\ndata: {...}\n\n`
     ///
-    /// We detect SSE by the presence of `data:` lines; otherwise we
-    /// parse as plain JSON. Either way, the payload is a JSON-RPC
-    /// response with our request's id.
-    private func parseResponseBody(data: Data, id: Int) throws -> MCPJSONPayload {
+    /// Treat as SSE only when Content-Type is event-stream or the body
+    /// starts with SSE fields — not when JSON merely contains `"data:"`.
+    private func parseResponseBody(data: Data, id: Int,
+                                   contentType: String?) throws -> MCPJSONPayload {
         guard let text = String(data: data, encoding: .utf8) else {
             throw MCPClientError.invalidResponse("Response body is not valid UTF-8")
         }
 
-        // SSE path: look for `data: {...}` lines.
-        if text.contains("data:") {
+        if Self.looksLikeSSE(text: text, contentType: contentType) {
             return try parseSSEResponse(text: text, expectedID: id)
         }
 
@@ -290,6 +310,19 @@ public actor MCPHttpClient {
             throw MCPClientError.invalidResponse("Missing 'result' in response")
         }
         return MCPJSONPayload(value: result)
+    }
+
+    /// SSE if the Content-Type is event-stream, or the body begins with
+    /// an SSE field (`data:`, `event:`, `id:`, `retry:`).
+    static func looksLikeSSE(text: String, contentType: String?) -> Bool {
+        if let ct = contentType?.lowercased(), ct.contains("text/event-stream") {
+            return true
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.hasPrefix("data:")
+            || trimmed.hasPrefix("event:")
+            || trimmed.hasPrefix("id:")
+            || trimmed.hasPrefix("retry:")
     }
 
     /// Parse an SSE-formatted response body. The server sends one or
@@ -361,6 +394,9 @@ public actor MCPHttpClient {
     /// The OAuth provider wins because it can refresh; the env var is a
     /// static value that never changes within a session.
     private func applyHeaders(to request: inout URLRequest) async {
+        if let sid = mcpSessionId, !sid.isEmpty {
+            request.setValue(sid, forHTTPHeaderField: "Mcp-Session-Id")
+        }
         for (key, value) in config.headers {
             // Don't let a user-configured Authorization header override
             // the one we're about to set from OAuth/env-var. Matches

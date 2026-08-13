@@ -155,17 +155,22 @@ public enum ToolAuthorization {
             return .deny(hookDeny.reason ?? "Denied by PreToolUse hook")
         }
 
-        // 2–3. Explicit rules: deny wins, then ask, then allow short-circuit
+        // 2–3. Explicit rules: deny wins over earlier ask, then ask, then allow.
+        // Scan every matching rule so an ask listed first cannot mask alwaysDeny.
+        var matchedAsk = false
         for rule in config.rules where rule.matches(tool: toolName, command: command) {
             switch rule.kind {
             case .deny:
                 return .deny("Denied by rule for tool '\(toolName)'")
             case .ask:
-                return .ask("Approval required by rule for tool '\(toolName)'")
+                matchedAsk = true
             case .allow:
                 // still must pass dangerous + plan + safe mode below for safety
                 break
             }
+        }
+        if matchedAsk {
+            return .ask("Approval required by rule for tool '\(toolName)'")
         }
 
         // Dangerous shell: never remembered; interactive shell approver or deny.
@@ -262,15 +267,20 @@ public enum ToolAuthorization {
             // Ask before mutations / non-RO shell
             if permission == .mutates || permission == .executes {
                 if context.patchReviewer != nil,
-                   permission == .mutates {
-                    // tool body will call MutationReview — allow through
+                   permission == .mutates,
+                   ToolRegistry.mutationReviewAwareTools.contains(toolName) {
+                    // Only mutators whose body calls MutationReview may pass
+                    // through (write/edit/delete/move/apply_patch). Others
+                    // (e.g. create_directory) must still Ask — a reviewer
+                    // present is not a silent-allow for every mutate.
                     return applyPlanAndSafeMode(
                         toolName: toolName, permission: permission,
                         arguments: arguments, context: context, base: .allow,
                         remembered: remMap)
                 }
-                // executes (run_shell, task, kill_task, MCP) always need
-                // explicit ask outcome when no silent auto path matched.
+                // executes (run_shell, task, kill_task, MCP) and non-review
+                // mutators always need an explicit ask when no silent auto
+                // path matched.
                 return .ask("Ask mode requires approval for '\(toolName)'")
             }
             return applyPlanAndSafeMode(
@@ -397,15 +407,21 @@ public enum ToolAuthorization {
         // Mutating tools: only session plan file (write_file/edit path args).
         // apply_patch embeds paths in the patch body — no top-level path arg,
         // so it must not fall through to allow (Wave C fail-closed).
+        // move_file: source=plan is not a license to overwrite any destination.
         if permission == .mutates {
             if toolName == "apply_patch" {
                 return .deny(
                     "Plan mode: apply_patch is blocked. Only the session plan file may be written. "
                     + "Switch to Auto or Full access after the plan is approved.")
             }
-            if let path = firstPathArgument(arguments) {
-                let resolved = resolvePath(path, base: context.workingDirectory)
-                if isSessionPlanPath(resolved, context: context) {
+            let pathValues = pathArgumentKeys.compactMap { arguments.stringOptional($0) }
+                .filter { !$0.isEmpty }
+            if !pathValues.isEmpty {
+                let allArePlan = pathValues.allSatisfy { raw in
+                    let resolved = resolvePath(raw, base: context.workingDirectory)
+                    return isSessionPlanPath(resolved, context: context)
+                }
+                if allArePlan {
                     return .allow
                 }
             }

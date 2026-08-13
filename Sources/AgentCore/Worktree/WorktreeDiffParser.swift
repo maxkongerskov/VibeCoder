@@ -129,11 +129,27 @@ public enum WorktreeDiffParser: Sendable {
             guard parts.count >= 3 else { continue }
             let add = Int(parts[0]) ?? 0
             let del = Int(parts[1]) ?? 0
-            let path = parts[2]
+            let path = destinationPathFromNumstat(parts[2])
             guard !path.isEmpty else { continue }
             map[path] = (add, del)
         }
         return map
+    }
+
+    /// Git rename numstat uses `old => new` or `prefix{old => new}suffix`.
+    /// Counts belong to the destination path.
+    static func destinationPathFromNumstat(_ raw: String) -> String {
+        let path = raw.trimmingCharacters(in: .whitespaces)
+        guard let arrow = path.range(of: " => ") else { return path }
+        if let open = path.range(of: "{"),
+           open.upperBound <= arrow.lowerBound,
+           let close = path.range(of: "}", range: arrow.upperBound..<path.endIndex) {
+            let prefix = String(path[..<open.lowerBound])
+            let destMid = String(path[arrow.upperBound..<close.lowerBound])
+            let suffix = String(path[close.upperBound...])
+            return prefix + destMid + suffix
+        }
+        return String(path[arrow.upperBound...])
     }
 
     // MARK: - unified diff

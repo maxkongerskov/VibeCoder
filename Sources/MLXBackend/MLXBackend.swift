@@ -47,8 +47,11 @@ public actor MLXBackend: InferenceBackend {
             let name = url.lastPathComponent
             // HF cache layout: models--<org>--<repo>
             guard name.hasPrefix("models--") else { return nil }
-            let parts = name.dropFirst("models--".count).split(separator: "-").map(String.init)
-            guard parts.count >= 2 else { return nil }
+            // HF cache: models--<org>--<repo> (split on "--", not "-").
+            // Single-segment: models--gpt2 → gpt2.
+            let rest = String(name.dropFirst("models--".count))
+            let parts = rest.components(separatedBy: "--").filter { !$0.isEmpty }
+            guard !parts.isEmpty else { return nil }
             let repoId = parts.joined(separator: "/")
             return ModelDescriptor(id: repoId, displayName: repoId, backend: .mlx, supportsTools: true)
         }

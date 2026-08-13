@@ -90,12 +90,23 @@ final class MentionSearchCoordinator: ObservableObject {
     private var searchGeneration = 0
 
     static func activeMentionQuery(in value: String) -> String? {
-        guard let atRange = value.range(of: "@", options: .backwards) else { return nil }
-        let tail = value[atRange.lowerBound...]
-        if tail.contains(where: { $0.isNewline }) { return nil }
-        let afterAt = tail.dropFirst()
-        if afterAt.contains(" ") { return nil }
-        return String(afterAt)
+        // Only treat `@` as a mention if it starts a token (start of string
+        // or after whitespace). The last `@` in `user@example.com` is not one.
+        var search = value.endIndex
+        while search > value.startIndex {
+            search = value.index(before: search)
+            guard value[search] == "@" else { continue }
+            if search > value.startIndex {
+                let prev = value[value.index(before: search)]
+                if !prev.isWhitespace { continue }
+            }
+            let tail = value[search...]
+            if tail.contains(where: { $0.isNewline }) { return nil }
+            let afterAt = tail.dropFirst()
+            if afterAt.contains(" ") { return nil }
+            return String(afterAt)
+        }
+        return nil
     }
 
     func warm(root: URL) async {

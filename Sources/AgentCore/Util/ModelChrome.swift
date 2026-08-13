@@ -33,8 +33,8 @@ public enum ModelChrome: Sendable {
         let channel = splitChannels(raw)
         let tag = ThinkTagSplit.parse(channel.body)
         var thinking = mergeThinking(channel.thinking, tag.thinking)
+        // Think-only input must stay empty-bodied — do not fall back to raw tags.
         var body = tag.body.trimmingCharacters(in: .whitespacesAndNewlines)
-        if body.isEmpty { body = channel.body.trimmingCharacters(in: .whitespacesAndNewlines) }
         thinking = thinking.map { stripControlTokens($0) }
         body = stripControlTokens(body)
             .trimmingCharacters(in: .whitespacesAndNewlines)

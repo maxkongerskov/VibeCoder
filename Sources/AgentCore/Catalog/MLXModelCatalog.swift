@@ -105,6 +105,39 @@ public enum CuratedMLXCatalog {
     /// Curated set as of 2026-06-01. Arch-verified against the
     /// mlx-swift-lm registry.
     public static let all: [CuratedMLXEntry] = [
+        // Small Qwen3 (seed catalog) — 8–16GB Macs. Without these,
+        // recommended() can only offer 24GB+ entries.
+        CuratedMLXEntry(
+            repoId: "mlx-community/Qwen3-0.6B-4bit",
+            displayName: "Qwen3 0.6B (4-bit)",
+            paramsB: 0.6, quant: "4-bit", downloadGB: 0.4, minRAMGB: 4,
+            toolCapable: true, recommendable: true,
+            blurb: "Tiny local Qwen3 · fits 8GB machines",
+            maxContextLength: 131072,
+            defaultContextLength: 32768,
+            samplingDefaults: SamplingDefaults(temperature: 0.7, topP: 0.8, topK: 20, repeatPenalty: 1.05),
+            stopSequences: ["<|im_end|>"]),
+        CuratedMLXEntry(
+            repoId: "mlx-community/Qwen3-1.7B-4bit",
+            displayName: "Qwen3 1.7B (4-bit)",
+            paramsB: 1.7, quant: "4-bit", downloadGB: 1.0, minRAMGB: 6,
+            toolCapable: true, recommendable: true,
+            blurb: "Small local Qwen3 · fits 8–16GB Macs",
+            maxContextLength: 131072,
+            defaultContextLength: 32768,
+            samplingDefaults: SamplingDefaults(temperature: 0.7, topP: 0.8, topK: 20, repeatPenalty: 1.05),
+            stopSequences: ["<|im_end|>"]),
+        CuratedMLXEntry(
+            repoId: "mlx-community/Qwen3-4B-4bit",
+            displayName: "Qwen3 4B (4-bit)",
+            paramsB: 4.0, quant: "4-bit", downloadGB: 2.3, minRAMGB: 8,
+            toolCapable: true, recommendable: true,
+            blurb: "Compact local Qwen3 · tool-capable, fits 16GB Macs",
+            maxContextLength: 131072,
+            defaultContextLength: 32768,
+            samplingDefaults: SamplingDefaults(temperature: 0.7, topP: 0.8, topK: 20, repeatPenalty: 1.05),
+            stopSequences: ["<|im_end|>"]),
+
         // Qwen 3.6 27B (Alibaba, 2026-04) — dense w/ vision
         CuratedMLXEntry(
             repoId: "lmstudio-community/Qwen3.6-27B-MLX-4bit",
@@ -213,11 +246,14 @@ public enum CuratedMLXCatalog {
     }
 
     /// Pick the most capable catalog model that comfortably fits the
-    /// given total system RAM.
+    /// given total system RAM. Never prefers a model whose `minRAMGB`
+    /// exceeds `ram` when a smaller entry exists. If nothing fits,
+    /// return the smallest-RAM catalog entry (do not pretend it fits).
     public static func recommended(forSystemRAMGB ram: Int) -> CuratedMLXEntry {
         let candidates = all.filter { $0.toolCapable && $0.recommendable }
         let fits = candidates.filter { $0.minRAMGB <= ram }
         if let best = fits.max(by: { $0.paramsB < $1.paramsB }) { return best }
+        if let smallest = all.min(by: { $0.minRAMGB < $1.minRAMGB }) { return smallest }
         return candidates.min(by: { $0.paramsB < $1.paramsB }) ?? all[0]
     }
 }

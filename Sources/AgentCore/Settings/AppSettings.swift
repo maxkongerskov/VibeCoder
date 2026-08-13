@@ -522,7 +522,7 @@ public actor SettingsStore {
 
     public static let shared = SettingsStore()
 
-    private let defaultsKey = "agentos.newday.settings"
+    private let defaultsKey = LegacySettingsMigration.appSettingsDefaultsKey
     private var cached: AppSettings
 
     public init() {
@@ -530,7 +530,15 @@ public actor SettingsStore {
            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data) {
             self.cached = decoded
         } else {
-            self.cached = AppSettings()
+            // First run: source legacy Safe Mode allow-lists before they
+            // can be cleared. Persist so subsequent `clearLegacyKeys` is safe.
+            var fresh = AppSettings()
+            fresh.safeModeAllowedPaths = LegacySettingsMigration.migrateSafeModePaths()
+            fresh.safeModeAllowedShellPrefixes = LegacySettingsMigration.migrateSafeModeShell()
+            self.cached = fresh
+            if let data = try? JSONEncoder().encode(fresh) {
+                UserDefaults.standard.set(data, forKey: defaultsKey)
+            }
         }
         // Clear legacy keys after first load so AppSettings is sole source.
         LegacySettingsMigration.clearLegacyKeys()

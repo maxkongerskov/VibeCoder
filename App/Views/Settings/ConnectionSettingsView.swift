@@ -850,7 +850,7 @@ private struct CustomEndpointPanel: View {
                     .autocorrectionDisabled()
                 }
 
-                if let preview = Self.normalizedEndpointURL(from: endpointText)?.absoluteString {
+                if let preview = ConnectionSettingsView.normalizedEndpointURL(from: endpointText)?.absoluteString {
                     baseURLRow(preview, label: "Resolved")
                 }
 
@@ -871,7 +871,7 @@ private struct CustomEndpointPanel: View {
     private func testCustom() async {
         await MainActor.run { testState = .testing }
         let raw = endpointText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let baseURL = Self.normalizedEndpointURL(from: raw) else {
+        guard let baseURL = ConnectionSettingsView.normalizedEndpointURL(from: raw) else {
             await MainActor.run {
                 testState = .failure(
                     "Invalid endpoint URL. Use e.g. http://127.0.0.1:8080/v1 (include http://)."
@@ -914,8 +914,11 @@ private struct CustomEndpointPanel: View {
             await MainActor.run { testState = .failure(error.localizedDescription) }
         }
     }
+}
 
+extension ConnectionSettingsView {
     /// Accepts full URLs and common shorthand (`127.0.0.1:8080`, `localhost:8080/v1`).
+    /// Strips a pasted `/v1/chat/completions` or `/chat/completions` down to the API root `/v1`.
     static func normalizedEndpointURL(from raw: String) -> URL? {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return nil }
@@ -934,17 +937,43 @@ private struct CustomEndpointPanel: View {
         guard var components = URLComponents(string: s),
               let host = components.host, !host.isEmpty else {
             // URLComponents can fail on some host:port forms; try URL then fix path.
-            guard var url = URL(string: s), url.host != nil else { return nil }
-            if url.path.isEmpty || url.path == "/" {
-                url = url.appendingPathComponent("v1")
+            guard let url = URL(string: s), url.host != nil else { return nil }
+            var fallback = URLComponents()
+            fallback.scheme = url.scheme
+            fallback.host = url.host
+            fallback.port = url.port
+            let path = url.path
+            if path.isEmpty || path == "/" {
+                fallback.path = "/v1"
+            } else {
+                fallback.path = stripChatCompletions(path)
             }
-            return url
+            return fallback.url
         }
 
         if components.path.isEmpty || components.path == "/" {
             components.path = "/v1"
+        } else {
+            components.path = stripChatCompletions(components.path)
         }
         return components.url
+    }
+
+    /// `/v1/chat/completions` and `/chat/completions` both collapse to `/v1`.
+    private static func stripChatCompletions(_ path: String) -> String {
+        var p = path
+        while p.count > 1, p.hasSuffix("/") { p.removeLast() }
+        let lower = p.lowercased()
+        if lower.hasSuffix("/v1/chat/completions") {
+            return String(p.dropLast("/chat/completions".count))
+        }
+        if lower.hasSuffix("/chat/completions") {
+            let trimmed = String(p.dropLast("/chat/completions".count))
+            if trimmed.lowercased().hasSuffix("/v1") { return trimmed }
+            if trimmed.isEmpty || trimmed == "/" { return "/v1" }
+            return trimmed + "/v1"
+        }
+        return p.isEmpty ? "/v1" : p
     }
 }
 

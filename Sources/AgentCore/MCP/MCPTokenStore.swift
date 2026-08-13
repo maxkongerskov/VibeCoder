@@ -198,6 +198,9 @@ public final class MCPTokenStore: @unchecked Sendable {
             } else {
                 try FileManager.default.moveItem(at: tmpURL, to: fileURL)
             }
+            // replaceItemAt keeps the destination's existing mode (e.g. 0644).
+            try FileManager.default.setAttributes(
+                attrs, ofItemAtPath: fileURL.path)
         } catch {
             Diagnostics.error(
                 "MCPTokenStore: credential write failed: \(error.localizedDescription)")

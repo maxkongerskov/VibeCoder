@@ -26,6 +26,10 @@ public actor PromptHistoryStore {
     /// small and the ↑/↓ cycle productive.
     private let maxEntries = 200
 
+    /// Serializes read-modify-write across PromptHistoryStore instances
+    /// that share a file URL (two actors would otherwise clobber each other).
+    private static let fileLock = NSLock()
+
     public init(fileURL: URL? = nil) {
         if let custom = fileURL {
             self.fileURL = custom
@@ -53,6 +57,8 @@ public actor PromptHistoryStore {
     public func record(_ prompt: String) {
         let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        Self.fileLock.lock()
+        defer { Self.fileLock.unlock() }
         var current = load()
         // Remove any existing identical entry so the new one goes to top.
         current.removeAll { $0 == trimmed }
@@ -65,6 +71,8 @@ public actor PromptHistoryStore {
     }
 
     public func clear() {
+        Self.fileLock.lock()
+        defer { Self.fileLock.unlock() }
         persist([])
     }
 

@@ -167,7 +167,7 @@ public struct ApplyPatchTool: Tool {
             }()
 
             // Track successful writes for mid-batch I/O rollback.
-            var committed: [(url: URL, original: String, path: String)] = []
+            var committed: [(url: URL, original: String, path: String, fileExisted: Bool)] = []
             var recordedHunkIDs: [UUID] = []
             var mutated: [String] = []
             var summary: [String] = []
@@ -189,7 +189,13 @@ public struct ApplyPatchTool: Tool {
                     var restoreFailed: [String] = []
                     for prior in committed.reversed() {
                         do {
-                            try prior.original.write(to: prior.url, atomically: true, encoding: .utf8)
+                            if !prior.fileExisted {
+                                if FileManager.default.fileExists(atPath: prior.url.path) {
+                                    try FileManager.default.removeItem(at: prior.url)
+                                }
+                            } else {
+                                try prior.original.write(to: prior.url, atomically: true, encoding: .utf8)
+                            }
                         } catch {
                             restoreFailed.append(prior.path)
                         }
@@ -213,7 +219,7 @@ public struct ApplyPatchTool: Tool {
                     )
                 }
 
-                committed.append((url: p.url, original: p.preview.originalContent, path: p.preview.path))
+                committed.append((url: p.url, original: p.preview.originalContent, path: p.preview.path, fileExisted: p.fileExisted))
                 mutated.append(p.preview.path)
 
                 let hunk = TrackedHunk(

@@ -170,30 +170,27 @@ enum CodeSessionBuilder {
     static func contentAfterEdit(previous: String?, state: ToolCallUIState) -> String? {
         if let written = writtenContent(from: state) { return written }
         let payload = argumentJSON(input: state.input, output: state.output)
-        guard var prev = previous else { return previous }
+        let replaceAll = boolValue(payload["replace_all"]) || boolValue(payload["replaceAll"])
 
         // SEARCH/REPLACE blocks (edit_file wire format).
         let pathHint = string(payload, keys: ["path", "file_path", "filePath"]) ?? ""
         if let editsText = string(payload, keys: ["edits", "edit", "blocks"]) {
             let normalised = ensureDefaultFilename(editsText, defaultPath: pathHint)
             if let blocks = try? EditBlockParser.findBlocks(in: normalised), !blocks.isEmpty {
+                var prev = previous ?? ""
                 for block in blocks {
-                    if block.original.isEmpty { continue }
-                    if let range = prev.range(of: block.original) {
-                        prev.replaceSubrange(range, with: block.updated)
-                    } else {
-                        prev = prev.replacingOccurrences(of: block.original, with: block.updated)
-                    }
+                    prev = applySearchReplace(block, to: prev, replaceAll: replaceAll)
                 }
                 return prev
             }
         }
 
+        guard var prev = previous else { return previous }
+
         // Legacy old_string / new_string.
         guard let old = string(payload, keys: ["old_string", "search", "find"]),
               let new = string(payload, keys: ["new_string", "replace", "replacement"])
         else { return previous }
-        let replaceAll = (payload["replace_all"] as? Bool) ?? false
         if replaceAll {
             return prev.replacingOccurrences(of: old, with: new)
         }
@@ -202,6 +199,45 @@ enum CodeSessionBuilder {
             return prev
         }
         return prev
+    }
+
+    /// Empty SEARCH seeds / appends the REPLACE body (file create).
+    /// `replace_all` replaces every occurrence of SEARCH.
+    private static func applySearchReplace(_ block: EditBlock, to content: String, replaceAll: Bool) -> String {
+        let search = block.original
+        if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            switch EditBlockApplier.apply(block, to: content) {
+            case .applied(let next): return next
+            case .failed: return content + block.updated
+            }
+        }
+        if replaceAll {
+            if content.contains(search) {
+                return content.replacingOccurrences(of: search, with: block.updated)
+            }
+            let s = search.hasSuffix("\n") ? String(search.dropLast()) : search
+            let r = block.updated.hasSuffix("\n") ? String(block.updated.dropLast()) : block.updated
+            return content.replacingOccurrences(of: s, with: r)
+        }
+        switch EditBlockApplier.apply(block, to: content) {
+        case .applied(let next): return next
+        case .failed:
+            if let range = content.range(of: search) {
+                var next = content
+                next.replaceSubrange(range, with: block.updated)
+                return next
+            }
+            return content
+        }
+    }
+
+    private static func boolValue(_ raw: Any?) -> Bool {
+        if let b = raw as? Bool { return b }
+        if let n = raw as? NSNumber { return n.boolValue }
+        if let s = raw as? String {
+            return ["true", "1", "yes"].contains(s.lowercased())
+        }
+        return false
     }
 
     static func normalizePath(_ path: String) -> String {
@@ -419,6 +455,10 @@ enum CodeSessionBuilder {
             todos = fromChecklist.todos
         }
 
+        if state.toolName == "revise_plan" {
+            todos = applyReviseMutations(payload, to: todos)
+        }
+
         guard !todos.isEmpty || (goal != "Task plan" && existing == nil) else {
             return existing
         }
@@ -427,6 +467,42 @@ enum CodeSessionBuilder {
             return Plan(goal: goal, todos: existing.todos)
         }
         return Plan(goal: goal, todos: todos)
+    }
+
+    /// Apply revise_plan `add` / `remove` onto the projected todo list.
+    /// Remove matches by id or step text (`["Verify"]` drops that step).
+    private static func applyReviseMutations(_ payload: [String: Any], to todos: [Todo]) -> [Todo] {
+        var todos = todos
+        let remove = stringArray(payload["remove"])
+        if !remove.isEmpty {
+            let drop = Set(remove)
+            todos.removeAll { drop.contains($0.id) || drop.contains($0.text) }
+        }
+        let add = stringArray(payload["add"])
+        if !add.isEmpty {
+            let nextID = (todos.compactMap { Int($0.id) }.max() ?? 0) + 1
+            var offset = 0
+            for text in add {
+                let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !t.isEmpty else { continue }
+                todos.append(Todo(id: String(nextID + offset), text: t))
+                offset += 1
+            }
+        }
+        return todos
+    }
+
+    private static func stringArray(_ raw: Any?) -> [String] {
+        if let strings = raw as? [String] { return strings }
+        if let any = raw as? [Any] {
+            return any.compactMap { item -> String? in
+                if let s = item as? String { return s }
+                if let i = item as? Int { return String(i) }
+                if let n = item as? NSNumber { return n.stringValue }
+                return nil
+            }
+        }
+        return []
     }
 
     private static func applyTodoUpdate(_ payload: [String: Any], to existing: Plan?) -> Plan? {
@@ -666,7 +742,9 @@ enum CodeSessionBuilder {
             .split(separator: "\n", omittingEmptySubsequences: false)
             .compactMap { raw -> CodeDiffLine? in
                 let line = String(raw)
-                if line.hasPrefix("+++") || line.hasPrefix("---") || line.hasPrefix("@@") {
+                // File headers are `+++ ` / `--- ` (space), same as UnifiedDiff.
+                // `+++i;` / `---n;` are real added/removed source lines.
+                if line.hasPrefix("+++ ") || line.hasPrefix("--- ") || line.hasPrefix("@@") {
                     return .context(line)
                 }
                 if line.hasPrefix("+") { return .added(String(line.dropFirst())) }

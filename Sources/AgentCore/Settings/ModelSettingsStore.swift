@@ -8,8 +8,8 @@
 //
 //  File layout per the DEV PLAN's BACKEND_PLAN.md §3.2:
 //    <baseDirectory>/model-settings/<safeId>.json
-//  where `safeId` is `modelId` with `/` replaced by `--` and `::` by `__`
-//  so the filename is filesystem-safe.
+//  where `safeId` is a percent-encoded `modelId` (alphanumerics, `.`, `-`,
+//  `_` kept literal) so `foo/bar` and `foo--bar` cannot share a file.
 //
 //  Adaptation note: the DEV PLAN's `AppSettings` had top-level load and
 //  inference fields (contextLength, gpuOffloadLayers, flashAttention,
@@ -274,14 +274,15 @@ public actor ModelSettingsStore {
         }
     }
 
-    /// Converts "org/name::file.gguf" to a filesystem-safe filename.
-    /// Catalog ids are typically "lmstudio-community/Foo-GGUF::bar.gguf";
-    /// the "/" and "::" both need to be replaced.
+    /// Converts a model id to a filesystem-safe filename.
+    /// Percent-encodes `/`, `:`, and other reserved characters so
+    /// `foo/bar` (`foo%2Fbar.json`) cannot collide with `foo--bar`.
     private func url(for modelId: String) -> URL {
-        let safeId = modelId
-            .replacingOccurrences(of: "/", with: "--")
-            .replacingOccurrences(of: "::", with: "__")
-        return directoryURL.appendingPathComponent("\(safeId).json")
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_"))
+        let safeId = modelId.addingPercentEncoding(withAllowedCharacters: allowed)
+            ?? modelId.replacingOccurrences(of: "/", with: "%2F")
+        let path = (directoryURL.path as NSString).appendingPathComponent("\(safeId).json")
+        return URL(fileURLWithPath: path)
     }
 
     private static let encoder: JSONEncoder = {

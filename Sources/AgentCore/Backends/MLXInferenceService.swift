@@ -186,8 +186,10 @@ public actor MLXInferenceService: InferenceBackend {
     /// to entries that have a populated snapshot directory under the
     /// downloader's cache base.
     public func listModels() async throws -> [ModelDescriptor] {
-        CuratedMLXCatalog.all.map { entry in
-            ModelDescriptor(
+        CuratedMLXCatalog.all.compactMap { entry in
+            let cacheDir = downloader.cacheDir(for: entry.repoId)
+            guard Self.hasPopulatedSnapshot(in: cacheDir) else { return nil }
+            return ModelDescriptor(
                 id: entry.repoId,
                 displayName: entry.displayName,
                 backend: .mlx,
@@ -196,6 +198,29 @@ public actor MLXInferenceService: InferenceBackend {
                 parameterCountB: entry.paramsB
             )
         }
+    }
+
+    /// True when `cacheDir/snapshots/<commit>/` exists and is non-empty.
+    nonisolated private static func hasPopulatedSnapshot(in cacheDir: URL) -> Bool {
+        let snapshots = cacheDir.appendingPathComponent("snapshots", isDirectory: true)
+        guard let commits = try? FileManager.default.contentsOfDirectory(
+            at: snapshots,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return false
+        }
+        for commit in commits {
+            let isDir = (try? commit.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            guard isDir else { continue }
+            let items = (try? FileManager.default.contentsOfDirectory(
+                at: commit,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )) ?? []
+            if !items.isEmpty { return true }
+        }
+        return false
     }
 
     /// Pre-populates the HF cache for the descriptor's repo. Does

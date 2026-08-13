@@ -91,7 +91,15 @@ public actor HunkTracker {
         if current != hunk.updatedContent {
             return .fileChanged
         }
-        try hunk.originalContent.write(to: url, atomically: true, encoding: .utf8)
+        // Create hunks store empty original — delete the file rather than
+        // leaving an empty stub (undo of a create is "file does not exist").
+        if hunk.originalContent.isEmpty {
+            if FileManager.default.fileExists(atPath: url.path) {
+                try FileManager.default.removeItem(at: url)
+            }
+        } else {
+            try hunk.originalContent.write(to: url, atomically: true, encoding: .utf8)
+        }
         hunk.status = .rolledBack
         hunks[id] = hunk
         return .rolledBack

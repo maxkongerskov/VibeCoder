@@ -187,14 +187,30 @@ public struct FetchURLTool: Tool {
     }
 
     static func isBlocked(host: String) -> Bool {
-        if host == "localhost" { return true }
+        var h = host.lowercased()
+        if h.hasPrefix("[") && h.hasSuffix("]") {
+            h = String(h.dropFirst().dropLast())
+        }
+        while h.hasSuffix(".") { h.removeLast() }
+        if h.isEmpty { return true }
+        if h == "localhost" || h == "0" { return true }
+        if h.hasPrefix("::ffff:") {
+            return isBlocked(host: String(h.dropFirst("::ffff:".count)))
+        }
+        if h.hasPrefix("0:0:0:0:0:ffff:") {
+            return isBlocked(host: String(h.dropFirst("0:0:0:0:0:ffff:".count)))
+        }
+        if h == "::1" { return true }
+        if !h.contains("."), !h.contains(":"), let n = UInt32(h) {
+            let dotted = "\((n >> 24) & 0xff).\((n >> 16) & 0xff).\((n >> 8) & 0xff).\(n & 0xff)"
+            return isBlocked(host: dotted)
+        }
         let privatePrefixes = ["127.", "10.", "192.168.", "169.254.", "0."]
-        if privatePrefixes.contains(where: { host.hasPrefix($0) }) { return true }
-        if host.hasPrefix("172.") {
-            let parts = host.split(separator: ".")
+        if privatePrefixes.contains(where: { h.hasPrefix($0) }) { return true }
+        if h.hasPrefix("172.") {
+            let parts = h.split(separator: ".")
             if parts.count >= 2, let second = Int(parts[1]), (16...31).contains(second) { return true }
         }
-        if host == "::1" || host == "[::1]" { return true }
         return false
     }
 }

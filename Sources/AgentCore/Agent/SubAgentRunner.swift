@@ -283,9 +283,9 @@ public enum SubAgentRunner {
             )
 
             var assistantContent = ""
-            // Bucket by index — see AgentLoop / InferenceBackend doc
-            // comments for why id-based bucketing breaks fragment merging.
-            var toolCallChunksByIndex: [Int: (id: String, name: String, arguments: String)] = [:]
+            // Same normalize seam as AgentLoop: name fragments merge/concat,
+            // empty args become "{}", inline JSON tool calls dispatch.
+            var streamAccumulator = ResponseNormalizer.Accumulator()
             do {
                 for try await chunk in backend.stream(request: request) {
                     if await isCancelled(jobID: jobID) {
@@ -301,15 +301,13 @@ public enum SubAgentRunner {
                         }
                     case .contentDelta(let s):
                         assistantContent += s
+                        streamAccumulator.ingestContentDelta(s)
                         if !s.isEmpty, let onStream {
                             await onStream(.contentDelta(s))
                         }
                     case .toolCallDelta(let index, let id, let name, let argsAppend):
-                        var entry = toolCallChunksByIndex[index] ?? (id: "", name: "", arguments: "")
-                        if let id, !id.isEmpty { entry.id = id }
-                        if let n = name, !n.isEmpty { entry.name = n }
-                        if let a = argsAppend { entry.arguments += a }
-                        toolCallChunksByIndex[index] = entry
+                        streamAccumulator.ingestToolCallDelta(
+                            index: index, id: id, name: name, argumentsAppend: argsAppend)
                     case .usage, .done:
                         continue
                     }
@@ -345,15 +343,15 @@ public enum SubAgentRunner {
                 break
             }
 
-            let invocations: [ToolCallInvocation] = toolCallChunksByIndex
-                .keys.sorted()
-                .compactMap { idx in
-                    guard let info = toolCallChunksByIndex[idx], !info.name.isEmpty else { return nil }
-                    let cid = info.id.isEmpty ? "tool_\(idx)_\(UUID().uuidString.prefix(8))" : info.id
-                    return ToolCallInvocation(id: cid, name: info.name, arguments: info.arguments)
-                }
+            let normalized = streamAccumulator.finalize()
+            let invocations = normalized.toolCalls.map { call in
+                let cid = call.id.isEmpty
+                    ? "tool_\(UUID().uuidString.prefix(8))"
+                    : call.id
+                return ToolCallInvocation(id: cid, name: call.name, arguments: call.arguments)
+            }
             let assistantMsg = ChatMessage(role: .assistant,
-                                           content: assistantContent,
+                                           content: normalized.content,
                                            toolCalls: invocations)
             convo.messages.append(assistantMsg)
 
@@ -373,7 +371,7 @@ public enum SubAgentRunner {
 
             // No tool calls → final answer. Stop.
             if invocations.isEmpty {
-                lastTextReply = assistantContent.trimmingCharacters(in: .whitespacesAndNewlines)
+                lastTextReply = normalized.content.trimmingCharacters(in: .whitespacesAndNewlines)
                 if let jobID {
                     await BackgroundJobManager.shared.updateSubagentOutput(
                         id: jobID,

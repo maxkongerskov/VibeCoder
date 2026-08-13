@@ -377,6 +377,18 @@ public actor MLXHubDownloader {
                                       aggregator: aggregator, token: token)
         }
 
+        // Refuse to publish a blob whose on-disk size disagrees with the
+        // manifest. Truncated 200s and short 206s must not become final.
+        if file.totalSize > 0 {
+            let attrs = try FileManager.default.attributesOfItem(atPath: partialURL.path)
+            let got = (attrs[.size] as? Int64) ?? -1
+            if got != file.totalSize {
+                try? FileManager.default.removeItem(at: partialURL)
+                throw MLXDownloadError.invalidResponse(
+                    "downloaded size \(got) != claimed \(file.totalSize) for \(file.path)")
+            }
+        }
+
         // SHA-verify when we have the expected hash. Skip for non-LFS
         // files.
         if let expected = file.sha256 {
@@ -421,6 +433,7 @@ public actor MLXHubDownloader {
                     guard let http2 = response2 as? HTTPURLResponse, http2.statusCode == 200 else {
                         throw MLXDownloadError.invalidResponse("403 even after URL refresh")
                     }
+                    try Self.validateSmallBody(data2, file: file)
                     try data2.write(to: partialURL)
                     await aggregator.add(deltaBytes: Int64(data2.count))
                     return
@@ -428,6 +441,7 @@ public actor MLXHubDownloader {
                 guard http.statusCode == 200 else {
                     throw MLXDownloadError.invalidResponse("status \(http.statusCode) for \(file.path)")
                 }
+                try Self.validateSmallBody(data, file: file)
                 try data.write(to: partialURL)
                 await aggregator.add(deltaBytes: Int64(data.count))
                 return
@@ -446,20 +460,41 @@ public actor MLXHubDownloader {
         repoId: String, revision: String,
         aggregator: ProgressAggregator, token: CancelToken
     ) async throws {
-        // Resume offset = existing partial size; we re-fetch from there.
+        // Resume: file size == total is NOT proof of completeness.
+        // Parallel pwrite leaves a full-size file with holes (high-offset
+        // write extends the file). We only skip remaining work when an
+        // LFS SHA matches. Otherwise restart from 0 — we do not persist
+        // a completed-range map, so a full-size .incomplete cannot be
+        // trusted as a sequential prefix.
         let fm = FileManager.default
-        let resumeOffset: Int64
+        let total = file.totalSize
+        var resumeOffset: Int64 = 0
         if fm.fileExists(atPath: partialURL.path) {
             let attrs = try fm.attributesOfItem(atPath: partialURL.path)
-            resumeOffset = (attrs[.size] as? Int64) ?? 0
-            await aggregator.add(deltaBytes: resumeOffset)   // credit resume bytes once
+            let existingSize = (attrs[.size] as? Int64) ?? 0
+            if existingSize >= total, total > 0 {
+                if let expected = file.sha256,
+                   let actual = try? Self.sha256Hex(of: partialURL),
+                   actual == expected {
+                    await aggregator.add(deltaBytes: total)
+                    return
+                }
+                try Data().write(to: partialURL)
+                resumeOffset = 0
+            } else if existingSize > 0, existingSize < total {
+                resumeOffset = existingSize
+                await aggregator.add(deltaBytes: resumeOffset)
+            } else {
+                resumeOffset = 0
+            }
         } else {
             fm.createFile(atPath: partialURL.path, contents: nil)
             resumeOffset = 0
         }
 
-        let total = file.totalSize
-        guard resumeOffset < total else { return }   // partial already complete
+        // Only skip remaining ranges for a strictly sequential prefix
+        // smaller than total. A full-size .incomplete is handled above.
+        guard resumeOffset < total else { return }
 
         // Chunk plan: aim for 4 chunks per file, min 50 MB per chunk.
         let minChunk: Int64 = 50 * 1024 * 1024
@@ -543,22 +578,58 @@ public actor MLXHubDownloader {
                     continue   // retry without burning a budget slot
                 }
 
-                // 206 Partial Content is the happy path; some CDNs
-                // return 200 with the requested bytes when the range
-                // covers the whole file — accept either.
-                guard http.statusCode == 206 || http.statusCode == 200 else {
-                    throw MLXDownloadError.invalidResponse("status \(http.statusCode) for chunk \(start)-\(end)")
+                let expectedLen = Int(end - start + 1)
+
+                if http.statusCode == 206 {
+                    // Short 206 is a failure. Honor Content-Range when
+                    // present: it must name this exact range and match
+                    // the body length.
+                    if let cr = http.value(forHTTPHeaderField: "Content-Range"),
+                       let parsed = Self.parseContentRange(cr) {
+                        let crLen = Int(parsed.end - parsed.start + 1)
+                        guard parsed.start == start,
+                              parsed.end == end,
+                              data.count == crLen,
+                              data.count == expectedLen else {
+                            throw MLXDownloadError.invalidResponse(
+                                "206 Content-Range \(cr) / \(data.count) bytes != requested \(start)-\(end)")
+                        }
+                    } else if data.count != expectedLen {
+                        throw MLXDownloadError.invalidResponse(
+                            "short 206 for chunk \(start)-\(end): got \(data.count) bytes")
+                    }
+                    try Self.write(data: data, at: start, using: handleBox)
+                    await aggregator.add(deltaBytes: Int64(data.count))
+                    return
                 }
 
-                // pwrite the chunk at its offset. FileHandle is not
-                // Sendable across actor boundaries; we wrap it in an
-                // unchecked box that serialises writes via an internal
-                // NSLock. The write itself is synchronous (no await) —
-                // NSLock cannot be used across suspension points on
-                // modern SDKs.
-                try Self.write(data: data, at: start, using: handleBox)
-                await aggregator.add(deltaBytes: Int64(data.count))
-                return
+                if http.statusCode == 200 {
+                    // Accept 200 only when the body is exactly the
+                    // requested range, or a full-object reply for the
+                    // sole (or leading) chunk. A mid-file 200 that
+                    // returns the whole object must not be pwrite'd at
+                    // `start` — that inflates the file.
+                    if data.count == expectedLen {
+                        try Self.write(data: data, at: start, using: handleBox)
+                        await aggregator.add(deltaBytes: Int64(data.count))
+                        return
+                    }
+                    // Full-object 200 at offset 0: CDN ignored Range.
+                    // Write the whole file at 0 even when other chunks
+                    // exist; mid-file 200s must not pwrite at `start`.
+                    if start == 0, file.totalSize > 0, data.count == file.totalSize {
+                        try Self.write(data: data, at: 0, using: handleBox)
+                        await aggregator.add(deltaBytes: Int64(data.count))
+                        return
+                    }
+                    if start > 0, file.totalSize > 0, data.count == file.totalSize {
+                        return
+                    }
+                    throw MLXDownloadError.invalidResponse(
+                        "HTTP 200 length \(data.count) != requested \(expectedLen) for chunk \(start)-\(end)")
+                }
+
+                throw MLXDownloadError.invalidResponse("status \(http.statusCode) for chunk \(start)-\(end)")
             } catch {
                 lastError = error
                 try? await Self.sleepBackoff(attempt: attempt)
@@ -580,8 +651,11 @@ public actor MLXHubDownloader {
         // against it), not just the bytes. Use a `HEAD` first; that
         // lands on the signed URL via 302 → 200 and we read
         // `response.url`.
-        let baseStr = "https://huggingface.co/\(repoId)/resolve/\(revision)/\(file)"
-        guard let baseURL = URL(string: baseStr) else {
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = "huggingface.co"
+        components.path = "/\(repoId)/resolve/\(revision)/\(file)"
+        guard let baseURL = components.url else {
             throw MLXDownloadError.invalidResponse("malformed resolve URL")
         }
         var req = URLRequest(url: baseURL)
@@ -592,7 +666,7 @@ public actor MLXHubDownloader {
             throw MLXDownloadError.invalidResponse("HEAD returned no HTTPURLResponse")
         }
         guard http.statusCode == 200, let final = response.url else {
-            throw MLXDownloadError.invalidResponse("HEAD \(baseStr) status \(http.statusCode)")
+            throw MLXDownloadError.invalidResponse("HEAD \(baseURL.absoluteString) status \(http.statusCode)")
         }
         // Cache for 50 min — well under HF's 1h signed-URL TTL.
         let expires = Date().addingTimeInterval(50 * 60)
@@ -670,6 +744,29 @@ public actor MLXHubDownloader {
         if let available = v.volumeAvailableCapacityForImportantUsage, available < needed {
             throw MLXDownloadError.insufficientDiskSpace(needed: needed, available: available)
         }
+    }
+
+    /// Small-file GET must return the manifest size when it is known.
+    nonisolated static func validateSmallBody(_ data: Data, file: HFTreeEntry) throws {
+        if file.totalSize > 0, Int64(data.count) != file.totalSize {
+            throw MLXDownloadError.invalidResponse(
+                "small-file length \(data.count) != claimed \(file.totalSize) for \(file.path)")
+        }
+    }
+
+    /// Parses `bytes START-END/TOTAL` (`TOTAL` may be `*`).
+    nonisolated static func parseContentRange(_ header: String) -> (start: Int64, end: Int64)? {
+        let trimmed = header.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+        guard lower.hasPrefix("bytes ") else { return nil }
+        let rest = trimmed.dropFirst(6)
+        let rangePart = rest.split(separator: "/", maxSplits: 1).first ?? rest[...]
+        let bounds = rangePart.split(separator: "-")
+        guard bounds.count == 2,
+              let start = Int64(bounds[0]),
+              let end = Int64(bounds[1]),
+              start >= 0, end >= start else { return nil }
+        return (start, end)
     }
 
     /// Serialised pwrite via the box's internal NSLock. SYNCHRONOUS on

@@ -34,6 +34,8 @@ public enum TokenEstimator {
     /// of model→cap mappings here.
     public static func percentOfContext(tokens: Int, contextSize: Int) -> Int {
         guard contextSize > 0 else { return 0 }
-        return Int((Double(tokens) / Double(contextSize) * 100).rounded())
+        let raw = (Double(tokens) / Double(contextSize) * 100).rounded()
+        if raw.isNaN || raw.isInfinite { return 0 }
+        return min(100, max(0, Int(raw)))
     }
 }

@@ -70,9 +70,10 @@ final class ShellApprovalCoordinatorService: ObservableObject {
     func handleSheetDismiss() {
         // Button path already set resolvedGeneration == sheetGeneration.
         if resolvedGeneration == sheetGeneration { return }
-        // If a new item was already presented via resolve() (generation incremented),
-        // this dismiss is just the old sheet closing — do not deny the new item.
-        if resolvedGeneration < sheetGeneration { return }
+        // First Esc: resolvedGeneration < sheetGeneration. Must deny the
+        // pending continuation or the turn hangs. After resolve(), pending
+        // is nil until the next sheet is presented, so the guard below
+        // skips leftover dismiss of the previous sheet.
         guard pendingContinuation != nil else { return }
         denyPendingAndDrain()
     }

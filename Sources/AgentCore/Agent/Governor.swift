@@ -137,7 +137,19 @@ public enum Governor {
     /// into the numeric progress signal the verifier-persistence check uses.
     public static func errorCount(inBuildLog log: String) -> Int {
         log.split(separator: "\n").reduce(into: 0) { acc, line in
-            if line.contains(" error:") { acc += 1 }
+            if isCompilerErrorLine(line) { acc += 1 }
         }
+    }
+
+    /// Swift (`file:12:5: error:`), cargo (`error:` / `error[E0425]:`),
+    /// and tsc (`error TS2304:` / `file.ts:1:1 - error TS2304:`).
+    private static func isCompilerErrorLine(_ line: Substring) -> Bool {
+        if line.contains(" error:") { return true }
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("error:") { return true }
+        if trimmed.hasPrefix("error[") { return true }
+        if trimmed.hasPrefix("error TS") { return true }
+        if line.contains(" error TS") { return true }
+        return false
     }
 }

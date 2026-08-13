@@ -90,24 +90,28 @@ public final class ChatChunkMapper: Sendable {
         var out: [ChatChunk] = []
         var emittedDone = false
         for choice in raw.choices {
-            if let reasoning = choice.delta.reasoningText, !reasoning.isEmpty {
-                out.append(.reasoningDelta(reasoning))
-            }
-            if let content = choice.delta.content, !content.isEmpty {
-                out.append(.contentDelta(content))
-            }
-            if let toolCalls = choice.delta.toolCalls {
-                for tc in toolCalls {
-                    // `index` is REQUIRED to merge fragments correctly. If
-                    // upstream omitted it (shouldn't happen with compliant
-                    // OpenAI-format servers), default to 0 so a single
-                    // call still works.
-                    out.append(.toolCallDelta(
-                        index: tc.index ?? 0,
-                        id: tc.id,
-                        name: tc.function?.name,
-                        argumentsAppend: tc.function?.arguments
-                    ))
+            // `delta` is optional: finish_reason-only terminator chunks
+            // omit it. Do not invent a delta just to keep mapping happy.
+            if let delta = choice.delta {
+                if let reasoning = delta.reasoningText, !reasoning.isEmpty {
+                    out.append(.reasoningDelta(reasoning))
+                }
+                if let content = delta.content, !content.isEmpty {
+                    out.append(.contentDelta(content))
+                }
+                if let toolCalls = delta.toolCalls {
+                    for tc in toolCalls {
+                        // `index` is REQUIRED to merge fragments correctly. If
+                        // upstream omitted it (shouldn't happen with compliant
+                        // OpenAI-format servers), default to 0 so a single
+                        // call still works.
+                        out.append(.toolCallDelta(
+                            index: tc.index ?? 0,
+                            id: tc.id,
+                            name: tc.function?.name,
+                            argumentsAppend: tc.function?.arguments
+                        ))
+                    }
                 }
             }
             if !emittedDone, let reason = choice.finishReason {
@@ -116,7 +120,10 @@ public final class ChatChunkMapper: Sendable {
             }
         }
         if let u = raw.usage {
-            out.append(.usage(promptTokens: u.promptTokens, completionTokens: u.completionTokens))
+            out.append(.usage(
+                promptTokens: u.promptTokens ?? 0,
+                completionTokens: u.completionTokens ?? 0
+            ))
         }
         return out
     }

@@ -6,6 +6,10 @@
 import Foundation
 
 public enum LSPFraming {
+    /// Hard cap so a hostile/corrupt Content-Length cannot pin the decoder
+    /// waiting for Int.max bytes, and so header+length addition cannot trap.
+    public static let maxContentLength = 64 * 1024 * 1024
+
     /// Encode a JSON body as an LSP framed message.
     public static func encode(_ body: Data) -> Data {
         let header = "Content-Length: \(body.count)\r\n\r\n"
@@ -35,17 +39,19 @@ public enum LSPFraming {
                     contentLength = Int(parts[1].trimmingCharacters(in: .whitespaces))
                 }
             }
-            guard let length = contentLength, length >= 0 else {
-                // Invalid/unparseable Content-Length. Strip the header and
-                // skip forward to the next framed boundary. Without a valid
-                // length we can't determine where the orphaned body ends, so
-                // discard everything up to the next \\r\\n\\r\\n (if any) and
-                // leave any leftover payload for the next read cycle.
+            let bodyStart = headerEnd.upperBound
+            guard let length = contentLength, length >= 0, length <= maxContentLength else {
+                // Invalid, unparseable, or absurd Content-Length. Strip the
+                // header so we do not wait forever / overflow on Int.max.
                 buffer.removeSubrange(buffer.startIndex..<headerEnd.upperBound)
                 continue
             }
-            let bodyStart = headerEnd.upperBound
-            let bodyEndOffset = buffer.distance(from: buffer.startIndex, to: bodyStart) + length
+            let headerBytes = buffer.distance(from: buffer.startIndex, to: bodyStart)
+            let (bodyEndOffset, overflow) = headerBytes.addingReportingOverflow(length)
+            if overflow {
+                buffer.removeSubrange(buffer.startIndex..<headerEnd.upperBound)
+                continue
+            }
             guard bodyEndOffset <= buffer.count else { break }
             let bodyEnd = buffer.index(buffer.startIndex, offsetBy: bodyEndOffset)
             let body = buffer.subdata(in: bodyStart..<bodyEnd)

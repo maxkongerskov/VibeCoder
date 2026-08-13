@@ -538,11 +538,25 @@ public enum ChatLoop {
                       "doesn't", "does not", "is empty", "was empty", "failed",
                       "error", "no match", "wasn't able", "was not able"]
         if honest.contains(where: { lower.contains($0) }) { return false }
-        // Success-claim markers.
+        // Success-claim markers. Skip a hit preceded by "not " / "n't "
+        // so "I have not completed the task" is not a success claim.
         let claims = ["done", "all set", "successfully", "completed", "created",
                       " passed", "fixed", "works now", "is working",
                       "tests pass", "build succeeded", "all good"]
-        return claims.contains(where: { lower.contains($0) })
+        return claims.contains(where: { containsUnnegatedClaim($0, in: lower) })
+    }
+
+    /// True when `needle` appears in `lower` without a "not " / "n't " prefix.
+    private static func containsUnnegatedClaim(_ needle: String, in lower: String) -> Bool {
+        var search = lower.startIndex
+        while let range = lower.range(of: needle, range: search..<lower.endIndex) {
+            let prefix = lower[..<range.lowerBound]
+            if !prefix.hasSuffix("not ") && !prefix.hasSuffix("n't ") {
+                return true
+            }
+            search = range.upperBound
+        }
+        return false
     }
 
     /// System-prompt block injected for ONE extra iteration when the

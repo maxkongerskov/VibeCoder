@@ -98,8 +98,9 @@ public actor ProjectsService {
 
     public func projects() -> [Project] { cache }
 
-    /// Re-load from the registry (re-running migration + pruning missing
-    /// folders). Returns the fresh list.
+    /// Re-load from the registry (re-running managed-folder migration).
+    /// Temporarily missing folders are kept so unmounted volumes return.
+    /// Returns the fresh list.
     @discardableResult
     public func reload() -> [Project] {
         cache = Self.load(rootURL: rootURL, registryURL: registryURL)
@@ -355,10 +356,10 @@ public actor ProjectsService {
             }
     }
 
-    /// Load the registry, prune entries whose folder no longer exists,
-    /// then merge in any managed sub-folders not yet recorded (migration
-    /// for projects created before the registry existed). Sorted newest
-    /// first.
+    /// Load the registry, keep entries even when the folder is temporarily
+    /// missing (unmounted volume, renamed-back path), then merge in any
+    /// managed sub-folders not yet recorded (migration for projects created
+    /// before the registry existed). Sorted newest first.
     private static func load(rootURL: URL, registryURL: URL) -> [Project] {
         var byPath: [String: Project] = [:]
 
@@ -366,9 +367,8 @@ public actor ProjectsService {
            let records = try? Self.decoder.decode([Record].self, from: data) {
             for r in records {
                 let url = URL(fileURLWithPath: r.path)
-                var isDir: ObjCBool = false
-                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir),
-                      isDir.boolValue else { continue }   // prune vanished folders
+                // Do not drop registry rows whose folder is gone right now —
+                // save() would otherwise permanently forget an unmounted disk.
                 byPath[url.standardizedFileURL.path] = Project(
                     id: r.id, name: r.name, url: url, createdAt: r.createdAt, isExternal: r.isExternal)
             }

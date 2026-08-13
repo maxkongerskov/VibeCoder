@@ -38,6 +38,12 @@ private enum MCPReadEvent: Sendable {
     case ended(exitCode: Int32)
 }
 
+/// Mutable leftover bytes for the stdout pump. `@unchecked Sendable` because
+/// `FileHandle.readabilityHandler` is invoked on a serial queue.
+private final class MCPUTF8Leftover: @unchecked Sendable {
+    var data = Data()
+}
+
 /// JSON-RPC result payload. `[String: Any]` is not `Sendable`; this box
 /// is safe because the dictionary is freshly parsed JSON owned by one caller.
 public struct MCPJSONPayload: @unchecked Sendable {
@@ -284,6 +290,10 @@ public actor MCPStdioClient {
     -> AsyncStream<MCPReadEvent> {
         AsyncStream { continuation in
             let handle = FileHandle(fileDescriptor: fileDescriptor, closeOnDealloc: false)
+            // Incomplete UTF-8 at a kernel-chunk boundary is held here until
+            // the rest of the sequence arrives. Decoding each `availableData`
+            // with `String(data:encoding:.utf8)` would drop those responses.
+            let leftover = MCPUTF8Leftover()
             handle.readabilityHandler = { source in
                 let chunk = source.availableData
                 if chunk.isEmpty {
@@ -293,7 +303,8 @@ public actor MCPStdioClient {
                     continuation.finish()
                     return
                 }
-                if let text = String(data: chunk, encoding: .utf8) {
+                leftover.data.append(chunk)
+                if let text = decodeUTF8Prefix(from: &leftover.data), !text.isEmpty {
                     continuation.yield(.chunk(text))
                 }
             }
@@ -301,6 +312,26 @@ public actor MCPStdioClient {
                 handle.readabilityHandler = nil
             }
         }
+    }
+
+    /// Decode complete UTF-8 from `buffer`, leaving a trailing incomplete
+    /// multi-byte sequence (at most 3 bytes) for the next read.
+    private static func decodeUTF8Prefix(from buffer: inout Data) -> String? {
+        guard !buffer.isEmpty else { return nil }
+        if let text = String(data: buffer, encoding: .utf8) {
+            buffer.removeAll(keepingCapacity: true)
+            return text
+        }
+        let count = buffer.count
+        let maxLookback = min(3, count)
+        for drop in 1...maxLookback {
+            let keep = count - drop
+            if let text = String(data: buffer.prefix(keep), encoding: .utf8) {
+                buffer.removeFirst(keep)
+                return text.isEmpty ? nil : text
+            }
+        }
+        return nil
     }
 
     private func handleProcessEnded(exitCode: Int32, generation: UInt64) {
@@ -368,34 +399,26 @@ enum MCPJSONRPCParser {
         else { return nil }
 
         if let error = json["error"] as? [String: Any] {
-            // JSON-RPC ids may be Int or (rarely) Double from JSONSerialization.
-            let id: Int?
-            if let i = json["id"] as? Int {
-                id = i
-            } else if let d = json["id"] as? Double {
-                id = Int(exactly: d) ?? nil
-            } else {
-                id = nil
-            }
-            guard let id else { return nil }
+            guard let id = coerceID(json["id"]) else { return nil }
             let code = error["code"] as? Int ?? -1
             let message = error["message"] as? String ?? "Unknown MCP error"
             return .failure(id: id, error: .serverError(code: code, message: message))
         }
 
-        let id: Int?
-        if let i = json["id"] as? Int {
-            id = i
-        } else if let d = json["id"] as? Double {
-            id = Int(exactly: d) ?? nil
-        } else {
-            id = nil
-        }
-        guard let id else { return nil }
+        guard let id = coerceID(json["id"]) else { return nil }
 
         if let result = json["result"] as? [String: Any] {
             return .success(id: id, payload: result)
         }
         return .failure(id: id, error: .invalidResponse("Missing result for id \(id)"))
+    }
+
+    /// JSON-RPC 2.0 ids may be number or string. We allocate Int ids, so
+    /// coerce string echoes (`"id":"1"`) back to Int so waiters still match.
+    static func coerceID(_ value: Any?) -> Int? {
+        if let i = value as? Int { return i }
+        if let d = value as? Double { return Int(exactly: d) }
+        if let s = value as? String { return Int(s) }
+        return nil
     }
 }

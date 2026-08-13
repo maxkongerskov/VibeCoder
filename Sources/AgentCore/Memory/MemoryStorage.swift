@@ -17,6 +17,7 @@ public struct MemoryStorage: Sendable {
     public let workspaceDir: URL
     public let workspacePath: URL
     public let ephemeral: Bool
+    private static let appendLock = NSLock()
 
     public static func defaultRoot() -> URL {
         AppSupport.directory("memory")
@@ -29,8 +30,8 @@ public struct MemoryStorage: Sendable {
         let hash = Self.workspaceHash(workspacePath)
         self.workspaceDir = global.appendingPathComponent(hash, isDirectory: true)
         let path = workspacePath.path
-        self.ephemeral = path.hasPrefix(NSTemporaryDirectory())
-            || path.contains("/T/")
+        let tmp = NSTemporaryDirectory()
+        self.ephemeral = path.hasPrefix(tmp)
             || path.contains("TemporaryDirectory")
     }
 
@@ -80,12 +81,14 @@ public struct MemoryStorage: Sendable {
         let url = scope == .global ? globalMemoryFile : workspaceMemoryFile
         let stamp = ISO8601DateFormatter().string(from: Date())
         let block = "\n\n## \(stamp)\n\n\(text.trimmingCharacters(in: .whitespacesAndNewlines))\n"
+        Self.appendLock.lock()
+        defer { Self.appendLock.unlock() }
         if FileManager.default.fileExists(atPath: url.path) {
             // Atomic append: read existing content, append new block, write back atomically.
             // FileHandle seek/write is not atomic and a crash in the middle corrupts the file.
-            var existing = ""
-            if let data = try? Data(contentsOf: url), let content = String(data: data, encoding: .utf8) {
-                existing = content
+            let data = try Data(contentsOf: url)
+            guard let existing = String(data: data, encoding: .utf8) else {
+                throw CocoaError(.fileReadInapplicableStringEncoding)
             }
             let updated = existing + block
             try updated.write(to: url, atomically: true, encoding: .utf8)

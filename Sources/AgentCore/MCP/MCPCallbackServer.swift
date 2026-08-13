@@ -113,11 +113,13 @@ public final class MCPCallbackServer: @unchecked Sendable {
         // Bind loopback only (RFC 8252 / OAuth redirect safety).
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
+        // Bind loopback only via requiredLocalEndpoint. Do not also pass
+        // `on: endpointPort` — specifying the port twice makes NWListener
+        // throw POSIXError EINVAL.
         params.requiredLocalEndpoint = NWEndpoint.hostPort(
-            host: "127.0.0.1", port: endpointPort)
+            host: NWEndpoint.Host("127.0.0.1"), port: endpointPort)
 
-        // Set up the listener on our chosen port.
-        let newListener = try NWListener(using: params, on: endpointPort)
+        let newListener = try NWListener(using: params)
         newListener.newConnectionHandler = { [weak self] conn in
             self?.handle(connection: conn)
         }
@@ -180,7 +182,7 @@ public final class MCPCallbackServer: @unchecked Sendable {
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)
         addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        addr.sin_addr.s_addr = INADDR_LOOPBACK  // 127.0.0.1 (network byte order)
+        addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK)  // 127.0.0.1 in network byte order
         addr.sin_port = 0                        // ephemeral
 
         let bindResult = withUnsafePointer(to: &addr) { ptr in

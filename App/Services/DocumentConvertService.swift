@@ -42,7 +42,12 @@ public enum DocumentConvertService {
             return "Error: could not infer source/target format. Provide `from` and `to`."
         }
         if fromFmt == toFmt {
-            // No-op; just copy.
+            // Same path + same format: do not delete the only copy.
+            let inURL = URL(fileURLWithPath: inExpanded).standardizedFileURL
+            let outURL = URL(fileURLWithPath: outExpanded).standardizedFileURL
+            if inURL.path == outURL.path {
+                return "Source and target format identical — already at \(output)."
+            }
             do {
                 if FileManager.default.fileExists(atPath: outExpanded) {
                     try FileManager.default.removeItem(atPath: outExpanded)

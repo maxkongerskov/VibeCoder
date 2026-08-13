@@ -88,6 +88,28 @@ struct ArtifactTests {
         #expect(cards[0].body == "let x = 1")
     }
 
+    @Test("synthesized error output is not marked success")
+    func rebuildErrorOutputIsFailure() {
+        let assistantID = UUID()
+        let assistant = ChatMessage(
+            id: assistantID,
+            role: .assistant,
+            content: "",
+            toolCalls: [
+                ToolCallInvocation(id: "tc-err", name: "read_file", arguments: #"{"path":"Missing.swift"}"#),
+            ]
+        )
+        let tool = ChatMessage(
+            role: .tool,
+            content: "Error: file not found",
+            toolCallID: "tc-err"
+        )
+        let cards = ArtifactRebuild.rebuild(from: [assistant, tool])
+        #expect(cards.count == 1)
+        #expect(cards[0].status == .failure)
+        #expect(cards[0].body.contains("file not found"))
+    }
+
     @Test("activityLabel matches make title for running tools")
     func activityLabelMatches() {
         let args = #"{"path":"Bar.swift"}"#

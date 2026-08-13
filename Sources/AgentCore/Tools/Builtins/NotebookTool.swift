@@ -60,6 +60,9 @@ public struct NotebookTool: Tool {
         let cellType = arguments.stringOptional("cellType")
 
         let url = resolvePath(path, base: context.workingDirectory)
+        if actionRaw != "read" {
+            try PathConfinement.requireInsideWorkspace(path: path, resolved: url, context: context)
+        }
         guard FileManager.default.fileExists(atPath: url.path) else {
             return ToolResult(content: "Error: notebook not found at \(path).", isError: true)
         }

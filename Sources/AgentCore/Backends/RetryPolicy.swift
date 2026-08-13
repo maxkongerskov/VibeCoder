@@ -143,8 +143,20 @@ public enum RetryClassifier {
             "socket is not connected",
             "not connected to host",
             "err_connection_refused",
+            // Offline / DNS / cannot-connect. Match both URLError.localizedDescription
+            // and the NSError fallback ("NSURLErrorDomain error -NNNN.").
+            "the internet connection appears to be offline",
+            "a server with the specified hostname could not be found",
+            "hostname could not be found",
+            "cannot find host",
+            "could not find host",
+            "cannot connect to host",
+            "code=-1003",   // NSURLErrorCannotFindHost
             "code=-1004",   // NSURLErrorCannotConnectToHost
-            "code=-1009",   // NSURLErrorNotConnectedToInternet (no local server either)
+            "code=-1009",   // NSURLErrorNotConnectedToInternet
+            "error -1003",
+            "error -1004",
+            "error -1009",
         ]
         return needles.contains { m.contains($0) }
     }

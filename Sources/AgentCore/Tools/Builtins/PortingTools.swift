@@ -81,9 +81,9 @@ public struct PortingTools: Tool {
         case "wrap_imports_can_import":
             return wrapImportsCanImport(arguments: arguments, base: base)
         case "generate_framework_shim":
-            return generateFrameworkShim(arguments: arguments, base: base)
+            return generateFrameworkShim(arguments: arguments, base: base, context: context)
         case "atomic_write_text":
-            return atomicWriteText(arguments: arguments, base: base)
+            return atomicWriteText(arguments: arguments, base: base, context: context)
         default:
             return ToolResult(
                 content: "Unknown action '\(action)'. Use scan_platform_imports, patch_dependency_checkout, wrap_imports_can_import, generate_framework_shim, or atomic_write_text.",
@@ -255,14 +255,20 @@ public struct PortingTools: Tool {
 
     // MARK: - generate_framework_shim
 
-    private func generateFrameworkShim(arguments: ToolArguments, base: URL) -> ToolResult {
+    private func generateFrameworkShim(arguments: ToolArguments, base: URL, context: ToolContext) -> ToolResult {
         guard let framework = arguments.stringOptional("framework"), !framework.isEmpty else {
             return ToolResult(content: "Error: `framework` is required for generate_framework_shim.", isError: true)
         }
         guard let outputPath = arguments.stringOptional("output_path"), !outputPath.isEmpty else {
             return ToolResult(content: "Error: `output_path` is required for generate_framework_shim.", isError: true)
         }
-        let expanded = resolvePath(outputPath, base: base).path
+        let outURL = resolvePath(outputPath, base: base)
+        do {
+            try PathConfinement.requireInsideWorkspace(path: outputPath, resolved: outURL, context: context)
+        } catch {
+            return ToolResult(content: "Error: \(error.localizedDescription)", isError: true)
+        }
+        let expanded = outURL.path
         let content: String
         switch framework {
         case "Combine": content = Self.combineShim()
@@ -285,14 +291,20 @@ public struct PortingTools: Tool {
 
     // MARK: - atomic_write_text
 
-    private func atomicWriteText(arguments: ToolArguments, base: URL) -> ToolResult {
+    private func atomicWriteText(arguments: ToolArguments, base: URL, context: ToolContext) -> ToolResult {
         guard let path = arguments.stringOptional("path"), !path.isEmpty else {
             return ToolResult(content: "Error: `path` is required for atomic_write_text.", isError: true)
         }
         guard let content = arguments.stringOptional("content") else {
             return ToolResult(content: "Error: `content` is required for atomic_write_text.", isError: true)
         }
-        let expanded = resolvePath(path, base: base).path
+        let outURL = resolvePath(path, base: base)
+        do {
+            try PathConfinement.requireInsideWorkspace(path: path, resolved: outURL, context: context)
+        } catch {
+            return ToolResult(content: "Error: \(error.localizedDescription)", isError: true)
+        }
+        let expanded = outURL.path
         let tmp = expanded + ".tmp"
         let parent = (expanded as NSString).deletingLastPathComponent
         if !parent.isEmpty {

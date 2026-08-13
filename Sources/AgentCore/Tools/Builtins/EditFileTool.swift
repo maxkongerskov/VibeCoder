@@ -163,7 +163,8 @@ public struct EditFileTool: Tool {
                 let search = block.original
                 if search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { continue }
                 let count = EditBlockApplier.countMatchWindows(
-                    search: search, in: existing, filename: block.filename)
+                    search: search, in: existing, filename: block.filename,
+                    replace: block.updated)
                 if count > 1 {
                     return ToolResult(
                         content: "edit_file: ambiguous SEARCH match in \(path) — found \(count) regions "
@@ -196,13 +197,16 @@ public struct EditFileTool: Tool {
                     let outcome = EditBlockApplier.apply(block, to: working)
                     switch outcome {
                     case .applied(let next):
-                        // No-op: if apply produced identical content, stop.
+                        // Identical content means SEARCH is a prefix of REPLACE
+                        // (or already applied). Stop to avoid an infinite loop.
                         guard next != working else { break }
                         working = next
                         appliedAny = true
+                        continue
                     case .failed:
                         break
                     }
+                    break
                 }
                 if !appliedAny {
                     fails.append((block, "SEARCH not found for replace_all in \(path)"))

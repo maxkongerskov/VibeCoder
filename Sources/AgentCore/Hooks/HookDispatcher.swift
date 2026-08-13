@@ -653,6 +653,23 @@ public enum HookDispatcher {
         case failed(String)
     }
 
+    /// Split `command args…` into the executable token and the remainder.
+    static func hookCommandHead(_ command: String) -> (head: String, rest: String) {
+        let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let split = trimmed.firstIndex(where: { $0.isWhitespace }) else {
+            return (trimmed, "")
+        }
+        let head = String(trimmed[..<split])
+        let rest = String(trimmed[trimmed.index(after: split)...])
+            .trimmingCharacters(in: .whitespaces)
+        return (head, rest)
+    }
+
+    /// Single-quote a path for `sh -c`.
+    static func quoteForShell(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     /// Spawn a command hook. Relative paths resolve against hooksDir; shell metacharacters use `sh -c`.
     static func runCommand(
         _ command: String,
@@ -679,26 +696,51 @@ public enum HookDispatcher {
         env["VIBECODER_HOOK_TOOL"] = toolName
         env["VIBECODER_HOOK_NAME"] = hookName
         env["GROK_HOOK_NAME"] = hookName
-        process.environment = env
 
-        let needsShell = trimmed.contains(" ")
-            || trimmed.contains("|")
+        let hasShellMeta = trimmed.contains("|")
             || trimmed.contains("&")
             || trimmed.contains(";")
             || trimmed.contains(">")
             || trimmed.contains("<")
             || trimmed.contains("$")
             || trimmed.hasPrefix("~")
+        let needsShell = hasShellMeta || trimmed.contains(" ")
+
+        // Relative first token (e.g. `deny-args.sh --strict`) must still
+        // resolve against hooksDir — do not fail-open via PATH-only `sh -c`.
+        let (head, rest) = Self.hookCommandHead(trimmed)
+        let hooksResolved: String? = {
+            guard !head.hasPrefix("/") else { return nil }
+            let candidate = hooksDir.appendingPathComponent(head)
+            if FileManager.default.isExecutableFile(atPath: candidate.path)
+                || FileManager.default.fileExists(atPath: candidate.path) {
+                return candidate.path
+            }
+            return nil
+        }()
 
         if needsShell {
+            let hooksPath = hooksDir.path
+            if let existing = env["PATH"], !existing.isEmpty {
+                env["PATH"] = hooksPath + ":" + existing
+            } else {
+                env["PATH"] = hooksPath
+            }
+            var shellCommand = trimmed
+            if let resolved = hooksResolved {
+                let quoted = Self.quoteForShell(resolved)
+                shellCommand = rest.isEmpty ? quoted : "\(quoted) \(rest)"
+            }
+            process.environment = env
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", trimmed]
+            process.arguments = ["-c", shellCommand]
         } else {
+            process.environment = env
             let path: String
             if trimmed.hasPrefix("/") {
                 path = trimmed
             } else {
-                path = hooksDir.appendingPathComponent(trimmed).path
+                path = hooksResolved ?? hooksDir.appendingPathComponent(trimmed).path
             }
             guard FileManager.default.isExecutableFile(atPath: path)
                     || FileManager.default.fileExists(atPath: path)

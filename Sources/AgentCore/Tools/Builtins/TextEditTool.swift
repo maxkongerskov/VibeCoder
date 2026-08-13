@@ -63,7 +63,7 @@ public struct TextEditTool: Tool {
 
         switch action {
         case "bulk_find_replace":
-            return bulkFindReplace(arguments: arguments, base: base)
+            return bulkFindReplace(arguments: arguments, base: base, context: context)
         case "text_stats":
             return textStats(arguments: arguments, base: base)
         case "generate_toc":
@@ -71,7 +71,7 @@ public struct TextEditTool: Tool {
         case "extract_citations":
             return extractCitations(arguments: arguments, base: base)
         case "fill_template":
-            return fillTemplate(arguments: arguments, base: base)
+            return fillTemplate(arguments: arguments, base: base, context: context)
         default:
             return ToolResult(content: "Unknown action '\(action)'.", isError: true)
         }
@@ -79,7 +79,7 @@ public struct TextEditTool: Tool {
 
     // MARK: - bulk_find_replace
 
-    private func bulkFindReplace(arguments: ToolArguments, base: URL) -> ToolResult {
+    private func bulkFindReplace(arguments: ToolArguments, base: URL, context: ToolContext) -> ToolResult {
         let rawPaths = arguments.stringArray("paths")
         let pattern = arguments.stringOptional("pattern") ?? ""
         let replacement = arguments.stringOptional("replacement") ?? ""
@@ -111,6 +111,11 @@ public struct TextEditTool: Tool {
 
         for raw in rawPaths {
             let url = resolvePath(raw, base: base)
+            do {
+                try PathConfinement.requireInsideWorkspace(path: raw, resolved: url, context: context)
+            } catch {
+                return ToolResult(content: "Error: \(error.localizedDescription)", isError: true)
+            }
             guard let original = try? String(contentsOf: url, encoding: .utf8) else {
                 perFile.append("  skip (unreadable): \(raw)")
                 continue
@@ -358,7 +363,7 @@ public struct TextEditTool: Tool {
 
     // MARK: - fill_template
 
-    private func fillTemplate(arguments: ToolArguments, base: URL) -> ToolResult {
+    private func fillTemplate(arguments: ToolArguments, base: URL, context: ToolContext) -> ToolResult {
         guard let templatePath = arguments.stringOptional("templatePath"), !templatePath.isEmpty else {
             return ToolResult(content: "Error: `templatePath` is required.", isError: true)
         }
@@ -402,6 +407,11 @@ public struct TextEditTool: Tool {
         let rendered = result as String
         if let outputPath = arguments.stringOptional("outputPath"), !outputPath.isEmpty {
             let outURL = resolvePath(outputPath, base: base)
+            do {
+                try PathConfinement.requireInsideWorkspace(path: outputPath, resolved: outURL, context: context)
+            } catch {
+                return ToolResult(content: "Error: \(error.localizedDescription)", isError: true)
+            }
             do {
                 try FileManager.default.createDirectory(at: outURL.deletingLastPathComponent(),
                                                         withIntermediateDirectories: true)

@@ -16,6 +16,9 @@ public actor PlanStore {
     public static let shared = PlanStore()
 
     private var plans: [UUID: Plan] = [:]
+    /// Working directories used for durable `plan.json`, so `clear(for:)`
+    /// can delete the on-disk copy without the caller re-passing cwd.
+    private var durableRoots: [UUID: URL] = [:]
 
     public init() {}
 
@@ -27,6 +30,7 @@ public actor PlanStore {
         if let workingDirectory,
            let disk = Self.loadDurable(conversation: conversation, workingDirectory: workingDirectory) {
             plans[conversation] = disk
+            durableRoots[conversation] = workingDirectory
             return disk
         }
         return nil
@@ -40,6 +44,7 @@ public actor PlanStore {
     public func setPlan(_ plan: Plan, for conversation: UUID, workingDirectory: URL?) {
         plans[conversation] = plan
         if let workingDirectory {
+            durableRoots[conversation] = workingDirectory
             Self.saveDurable(plan, conversation: conversation, workingDirectory: workingDirectory)
         }
     }
@@ -68,6 +73,7 @@ public actor PlanStore {
         guard let updated = updateTodo(id: todoID, status: status, result: result, for: conversation)
         else { return nil }
         if let workingDirectory {
+            durableRoots[conversation] = workingDirectory
             Self.saveDurable(updated, conversation: conversation, workingDirectory: workingDirectory)
         }
         return updated
@@ -97,12 +103,20 @@ public actor PlanStore {
                                    removingIDs: removingIDs, goal: goal)
         else { return nil }
         if let workingDirectory {
+            durableRoots[conversation] = workingDirectory
             Self.saveDurable(revised, conversation: conversation, workingDirectory: workingDirectory)
         }
         return revised
     }
 
-    public func clear(for conversation: UUID) { plans[conversation] = nil }
+    public func clear(for conversation: UUID, workingDirectory: URL? = nil) {
+        plans[conversation] = nil
+        let root = workingDirectory ?? durableRoots[conversation]
+        durableRoots[conversation] = nil
+        if let root {
+            Self.deleteDurable(conversation: conversation, workingDirectory: root)
+        }
+    }
 
     /// If the store has no plan for this conversation, rebuild from
     /// transcript tool_calls (create_plan / update_todo / revise_plan)
@@ -117,11 +131,13 @@ public actor PlanStore {
         if let workingDirectory,
            let disk = Self.loadDurable(conversation: conversation, workingDirectory: workingDirectory) {
             plans[conversation] = disk
+            durableRoots[conversation] = workingDirectory
             return disk
         }
         if let fromTranscript = PlanTranscript.latestPlan(in: messages) {
             plans[conversation] = fromTranscript
             if let workingDirectory {
+                durableRoots[conversation] = workingDirectory
                 Self.saveDurable(fromTranscript, conversation: conversation,
                                  workingDirectory: workingDirectory)
             }
@@ -168,6 +184,11 @@ public actor PlanStore {
         let file = durableFileURL(workingDirectory: workingDirectory, conversation: conversation)
         guard let data = try? Data(contentsOf: file) else { return nil }
         return try? JSONDecoder().decode(Plan.self, from: data)
+    }
+
+    private static func deleteDurable(conversation: UUID, workingDirectory: URL) {
+        let dir = durableDirectory(workingDirectory: workingDirectory, conversation: conversation)
+        try? FileManager.default.removeItem(at: dir)
     }
 }
 

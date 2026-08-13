@@ -154,7 +154,11 @@ public enum PermissionRules {
         snapshot: PermissionRulesSnapshot
     ) -> AuthorizationConfig {
         var out = config
-        out.rules = snapshot.rules + config.rules
+        // Deny first so first-match consumers cannot let an earlier ask
+        // mask alwaysDeny / deny rules (ToolAuthorization also deny-wins).
+        let combined = snapshot.rules + config.rules
+        out.rules = combined.filter { $0.kind == .deny }
+            + combined.filter { $0.kind != .deny }
         var rem = snapshot.grants
         for (k, v) in config.remembered {
             rem[k] = v

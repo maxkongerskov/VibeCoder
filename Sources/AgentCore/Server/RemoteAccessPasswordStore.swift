@@ -124,7 +124,10 @@ public final class RemoteAccessPasswordStore: @unchecked Sendable {
 
     /// Whether a password hash currently exists on disk.
     public func isSet() -> Bool {
-        queue.sync { _loadStored() != nil }
+        queue.sync {
+            guard let stored = _loadStored() else { return false }
+            return !stored.hash.isEmpty
+        }
     }
 
     /// Set (or change) the password. Rejects empty or < 6-char passwords.
@@ -150,21 +153,25 @@ public final class RemoteAccessPasswordStore: @unchecked Sendable {
             sessionSecret: Data(secret).base64EncodedString()
         )
 
-        _ = queue.sync {
-            _writeStored(stored)
+        let wrote = queue.sync { _writeStored(stored) }
+        if !wrote {
+            throw PasswordError.persistFailed
         }
     }
 
     /// Verify a plaintext password against the stored hash. Constant-time.
+    /// Trims the same way as `setPassword` so typed passwords with
+    /// accidental leading/trailing spaces still match.
     public func verify(_ plaintext: String) -> Bool {
         let stored = queue.sync { _loadStored() }
-        guard let stored else { return false }
+        guard let stored, !stored.hash.isEmpty else { return false }
 
         guard let saltData = Data(base64Encoded: stored.salt) else { return false }
         let salt = [UInt8](saltData)
 
+        let trimmed = plaintext.trimmingCharacters(in: .whitespacesAndNewlines)
         let derived = pbkdf2HMACSHA256(
-            password: plaintext,
+            password: trimmed,
             salt: salt,
             iterations: stored.iterations,
             keyLength: Self.hashBytes
@@ -255,13 +262,12 @@ public final class RemoteAccessPasswordStore: @unchecked Sendable {
     }
 
     /// Rotate the HMAC session secret, invalidating all outstanding cookies.
+    /// No-op when no password is stored — must not write an empty hash file
+    /// that would make `isSet()` true and lock the login gate.
     public func rotateSessionSecret() {
         let newSecret = Self.randomBytes(count: Self.secretBytes)
         _ = queue.sync {
-            var stored = _loadStored() ?? Stored(
-                hash: "", salt: "", iterations: Self.defaultIterations,
-                sessionSecret: ""
-            )
+            guard var stored = _loadStored(), !stored.hash.isEmpty else { return false }
             stored.sessionSecret = Data(newSecret).base64EncodedString()
             return _writeStored(stored)
         }
@@ -320,7 +326,13 @@ public final class RemoteAccessPasswordStore: @unchecked Sendable {
 
 // MARK: - Errors
 
-public enum PasswordError: Error, LocalizedError {
+public enum PasswordError: Error, LocalizedError, Equatable {
     case tooShort
-    public var errorDescription: String? { "Password must be at least 6 characters." }
+    case persistFailed
+    public var errorDescription: String? {
+        switch self {
+        case .tooShort: return "Password must be at least 6 characters."
+        case .persistFailed: return "Could not save the remote-access password."
+        }
+    }
 }

@@ -96,12 +96,18 @@ public enum WorktreeService {
         let branch = "agentcore/\(conversationShortId)"
 
         if worktreeExists(at: worktreePath) {
-            // Reuse only real git checkouts. A leftover non-git folder at the
-            // conventional path must not be treated as a healthy worktree
-            // (merge/discard would then operate on the wrong tree or fail opaquely).
+            // Reuse only a worktree of *this* project. A leftover non-git
+            // folder or an unrelated repo at the conventional path must not
+            // be treated as a healthy worktree (merge/discard would then
+            // operate on the wrong tree or silently adopt foreign history).
             guard isGitRepository(worktreePath) else {
                 throw WorktreeError.gitFailed(
                     "Path \(worktreePath) exists but is not a git worktree. "
+                    + "Remove that directory (or free the path) and try again.")
+            }
+            guard isWorktree(worktreePath, ofProject: project) else {
+                throw WorktreeError.gitFailed(
+                    "Path \(worktreePath) exists but is not a worktree of this project. "
                     + "Remove that directory (or free the path) and try again.")
             }
             // Prefer the actual checked-out branch so merge/discard targets
@@ -328,5 +334,42 @@ public enum WorktreeService {
 
     private static func normalize(_ path: String) -> String {
         (path as NSString).expandingTildeInPath
+    }
+
+    /// True when `path` is listed as a worktree of `project` (same git dir).
+    private static func isWorktree(_ path: String, ofProject project: String) -> Bool {
+        let want = resolvedPath(path)
+        let list = git(["worktree", "list", "--porcelain"],
+                       workingDirectory: project, timeout: 10)
+        if list.exitCode == 0 {
+            for line in list.stdout.split(whereSeparator: \.isNewline) {
+                let s = String(line)
+                guard s.hasPrefix("worktree ") else { continue }
+                let listed = String(s.dropFirst("worktree ".count))
+                if resolvedPath(listed) == want { return true }
+            }
+        }
+        // Fallback: same --git-common-dir as the project (linked worktree).
+        guard let projectCommon = gitCommonDir(project),
+              let pathCommon = gitCommonDir(path) else { return false }
+        return projectCommon == pathCommon
+    }
+
+    private static func gitCommonDir(_ path: String) -> String? {
+        let r = git(["rev-parse", "--git-common-dir"],
+                    workingDirectory: path, timeout: 5)
+        guard r.exitCode == 0 else { return nil }
+        let raw = r.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        if (raw as NSString).isAbsolutePath {
+            return resolvedPath(raw)
+        }
+        return resolvedPath((path as NSString).appendingPathComponent(raw))
+    }
+
+    private static func resolvedPath(_ path: String) -> String {
+        URL(fileURLWithPath: (path as NSString).expandingTildeInPath)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL.path
     }
 }

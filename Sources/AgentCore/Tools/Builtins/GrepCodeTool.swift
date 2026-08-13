@@ -37,8 +37,9 @@ public struct GrepCodeTool: Tool {
         let maxResults = arguments.intOptional("maxResults") ?? 200
         let target = resolvePath(path, base: context.workingDirectory)
 
-        var args = ["-RnE", pattern, target.path]
+        var args = ["-RnE"]
         if let inc = include { args.append("--include=\(inc)") }
+        args += ["--", pattern, target.path]
 
         let result = ShellRunner.run(executable: "/usr/bin/grep", arguments: args, timeout: 30)
         // grep returns 1 when no matches; treat as success-with-empty.
@@ -46,8 +47,9 @@ public struct GrepCodeTool: Tool {
             return ToolResult(content: "grep failed: \(result.stderr)", isError: true)
         }
         let lines = result.stdout.split(separator: "\n", omittingEmptySubsequences: true)
-        let capped = lines.prefix(maxResults).joined(separator: "\n")
-        let truncated = lines.count > maxResults
+        let cap = max(0, maxResults)
+        let capped = lines.prefix(cap).joined(separator: "\n")
+        let truncated = cap > 0 && lines.count > cap
             ? "\n… [\(lines.count - maxResults) more results — narrow your pattern or use 'include']"
             : ""
         return ToolResult(content: capped.isEmpty ? "(no matches)" : capped + truncated)

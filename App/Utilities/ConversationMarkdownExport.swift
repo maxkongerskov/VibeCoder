@@ -62,11 +62,11 @@ enum ConversationMarkdownExport {
                     out += "## Tool — `\(inv.name)`\n\n"
                     let args = inv.arguments.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !args.isEmpty {
-                        out += "**Arguments:**\n\n```json\n\(args)\n```\n\n"
+                        out += "**Arguments:**\n\n\(fenced(args, language: "json"))\n\n"
                     }
-                    out += "**Result:**\n\n```\n\(result)\n```\n\n"
+                    out += "**Result:**\n\n\(fenced(result))\n\n"
                 } else {
-                    out += "## Tool\n\n```\n\(result)\n```\n\n"
+                    out += "## Tool\n\n\(fenced(result))\n\n"
                 }
             }
         }
@@ -128,5 +128,16 @@ enum ConversationMarkdownExport {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withFullDate, .withTime, .withColonSeparatorInTime]
         return f.string(from: date)
+    }
+
+    /// Fence body with enough backticks that an embedded ``` cannot close it.
+    private static func fenced(_ body: String, language: String = "") -> String {
+        var tickCount = 3
+        for line in body.components(separatedBy: "\n") {
+            let run = line.prefix(while: { $0 == "`" }).count
+            if run >= tickCount { tickCount = run + 1 }
+        }
+        let fence = String(repeating: "`", count: tickCount)
+        return "\(fence)\(language)\n\(body)\n\(fence)"
     }
 }

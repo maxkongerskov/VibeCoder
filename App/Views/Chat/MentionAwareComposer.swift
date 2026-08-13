@@ -317,7 +317,9 @@ struct MentionAwareComposer: View {
                 attachments.append(attachment)
             }
         }
-        if let range = text.range(of: #"@[^\s\n]*$"#, options: .regularExpression) {
+        // Only strip an @-token at the start of the string or after whitespace.
+        // `max@icloud.com` must not be treated as a mention.
+        if let range = text.range(of: #"(?:(?<=^)|(?<=\s))@[^\s\n]*$"#, options: .regularExpression) {
             text.removeSubrange(range)
         }
         mentionSearch.dismiss()

@@ -189,10 +189,13 @@ public final class DoomLoopDetector: @unchecked Sendable {
     }
 
     /// Drain all recorded signals (for diagnostics / logging).
+    /// Subsequent `take()` calls return `[]` until new signals arrive.
     public func take() -> [DoomLoopSignal] {
         lock.lock()
         defer { lock.unlock() }
-        return signals
+        let drained = signals
+        signals.removeAll(keepingCapacity: false)
+        return drained
     }
 
     // MARK: - Internal

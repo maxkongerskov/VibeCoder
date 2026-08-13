@@ -154,6 +154,39 @@ public actor OpenAICompatibleClient {
                             throw BackendError.http(status: http.statusCode, body: errBody)
                         }
 
+                        // Some servers ignore `stream: true` and return a
+                        // single `application/json` chat.completion. Yield
+                        // that body (or throw) — never succeed with 0 chunks.
+                        if let http = response as? HTTPURLResponse {
+                            let contentType = (http.value(forHTTPHeaderField: "Content-Type") ?? "")
+                                .lowercased()
+                            if contentType.contains("application/json")
+                                && !contentType.contains("event-stream") {
+                                var bodyData = Data()
+                                for try await byte in bytes {
+                                    bodyData.append(byte)
+                                }
+                                do {
+                                    let mapped = try Self.mapNonStreamingCompletion(bodyData)
+                                    guard !mapped.isEmpty else {
+                                        throw BackendError.decoding(
+                                            "non-SSE chat.completion produced no chunks")
+                                    }
+                                    for c in mapped {
+                                        continuation.yield(c)
+                                        emittedToConsumer = true
+                                    }
+                                    continuation.finish()
+                                    return
+                                } catch let error as BackendError {
+                                    throw error
+                                } catch {
+                                    throw BackendError.decoding(
+                                        "non-SSE chat.completion: \(error.localizedDescription)")
+                                }
+                            }
+                        }
+
                         // Success path: stream SSE lines through the decoder.
                         var emittedDoneChunk = false
                         for try await line in bytes.lines {
@@ -525,7 +558,8 @@ public struct ChatCompletionChunk: Decodable {
     public let choices: [Choice]
     public let usage: Usage?
     public struct Choice: Decodable {
-        public let delta: Delta
+        /// Optional: finish_reason-only terminator chunks omit `delta`.
+        public let delta: Delta?
         public let finishReason: String?
         enum CodingKeys: String, CodingKey { case delta; case finishReason = "finish_reason" }
     }
@@ -553,16 +587,157 @@ public struct ChatCompletionChunk: Decodable {
         public let function: Function?
         public struct Function: Decodable {
             public let name: String?
+            /// Wire `arguments` may be a JSON string (OpenAI) or a JSON
+            /// object (Ollama / some llama.cpp builds). Objects are
+            /// re-encoded so the rest of the stack still sees a String.
             public let arguments: String?
+
+            enum CodingKeys: String, CodingKey { case name, arguments }
+
+            public init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                name = try c.decodeIfPresent(String.self, forKey: .name)
+                guard c.contains(.arguments), try !c.decodeNil(forKey: .arguments) else {
+                    arguments = nil
+                    return
+                }
+                if let s = try? c.decode(String.self, forKey: .arguments) {
+                    arguments = s
+                    return
+                }
+                let raw = try c.decode(FlexibleJSON.self, forKey: .arguments)
+                arguments = raw.jsonString
+            }
         }
     }
     public struct Usage: Decodable {
-        public let promptTokens: Int
-        public let completionTokens: Int
+        /// Optional so a partial `usage` object does not fail-closed and
+        /// drop sibling `choices` / content on the same event.
+        public let promptTokens: Int?
+        public let completionTokens: Int?
         enum CodingKeys: String, CodingKey {
             case promptTokens = "prompt_tokens"
             case completionTokens = "completion_tokens"
         }
+    }
+}
+
+/// Non-streaming `/v1/chat/completions` body (server ignored `stream: true`).
+struct ChatCompletionResponse: Decodable {
+    struct Choice: Decodable {
+        struct Message: Decodable {
+            let role: String?
+            let content: String?
+            let reasoningContent: String?
+            let toolCalls: [ChatCompletionChunk.ToolCall]?
+            enum CodingKeys: String, CodingKey {
+                case role, content
+                case reasoningContent = "reasoning_content"
+                case toolCalls = "tool_calls"
+            }
+        }
+        let message: Message?
+        let delta: ChatCompletionChunk.Delta?
+        let finishReason: String?
+        enum CodingKeys: String, CodingKey {
+            case message, delta
+            case finishReason = "finish_reason"
+        }
+    }
+    let choices: [Choice]
+    let usage: ChatCompletionChunk.Usage?
+}
+
+extension OpenAICompatibleClient {
+    /// Map a full (non-SSE) chat.completion JSON body into ChatChunks.
+    fileprivate static func mapNonStreamingCompletion(_ data: Data) throws -> [ChatChunk] {
+        let decoded = try JSONDecoder().decode(ChatCompletionResponse.self, from: data)
+        var out: [ChatChunk] = []
+        var emittedDone = false
+        for choice in decoded.choices {
+            let reasoning = choice.message?.reasoningContent ?? choice.delta?.reasoningText
+            if let reasoning, !reasoning.isEmpty {
+                out.append(.reasoningDelta(reasoning))
+            }
+            let content = choice.message?.content ?? choice.delta?.content
+            if let content, !content.isEmpty {
+                out.append(.contentDelta(content))
+            }
+            let toolCalls = choice.message?.toolCalls ?? choice.delta?.toolCalls
+            if let toolCalls {
+                for tc in toolCalls {
+                    out.append(.toolCallDelta(
+                        index: tc.index ?? 0,
+                        id: tc.id,
+                        name: tc.function?.name,
+                        argumentsAppend: tc.function?.arguments
+                    ))
+                }
+            }
+            if !emittedDone, let reason = choice.finishReason {
+                out.append(.done(finishReason: reason))
+                emittedDone = true
+            }
+        }
+        if let u = decoded.usage {
+            out.append(.usage(
+                promptTokens: u.promptTokens ?? 0,
+                completionTokens: u.completionTokens ?? 0
+            ))
+        }
+        if out.isEmpty {
+            throw BackendError.decoding("non-SSE chat.completion had no choices/content")
+        }
+        return out
+    }
+}
+
+/// Decodes any JSON value and re-encodes it as a compact JSON string.
+private struct FlexibleJSON: Decodable {
+    let jsonString: String
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() {
+            jsonString = "null"
+            return
+        }
+        if let b = try? c.decode(Bool.self) {
+            jsonString = b ? "true" : "false"
+            return
+        }
+        if let i = try? c.decode(Int.self) {
+            jsonString = String(i)
+            return
+        }
+        if let d = try? c.decode(Double.self) {
+            jsonString = String(d)
+            return
+        }
+        if let s = try? c.decode(String.self) {
+            jsonString = s
+            return
+        }
+        if let arr = try? c.decode([FlexibleJSON].self) {
+            jsonString = "[\(arr.map(\.jsonString).joined(separator: ","))]"
+            return
+        }
+        if let obj = try? c.decode([String: FlexibleJSON].self) {
+            let parts = obj.map { key, value in
+                "\(Self.encodeJSONString(key)):\(value.jsonString)"
+            }
+            jsonString = "{\(parts.joined(separator: ","))}"
+            return
+        }
+        throw DecodingError.dataCorruptedError(in: c, debugDescription: "unsupported JSON")
+    }
+
+    private static func encodeJSONString(_ s: String) -> String {
+        guard let data = try? JSONEncoder().encode(s),
+              let out = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return out
     }
 }
 

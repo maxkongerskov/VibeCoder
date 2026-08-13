@@ -145,14 +145,15 @@ struct AgentSystemPromptComposer {
         }
 
         var systemPromptTokens: Int
-        if let budget = input.config.contextBudgetTokens,
+        if input.config.contextBudgetTokens != nil,
            let contextLength = input.model.contextLength,
            !input.messages.isEmpty {
             let baseTokens = parts.reduce(0) { $0 + TokenEstimator.estimate($1) }
             let usedTokens = ChatLoop.estimateTotalTokens(
                 systemPromptTokens: baseTokens,
                 messages: input.messages)
-            let pct = min(100, Int(Double(usedTokens) / Double(budget) * 100))
+            let pct = min(100, TokenEstimator.percentOfContext(
+                tokens: usedTokens, contextSize: contextLength))
             let notice = """
             Context usage: ~\(usedTokens) / \(contextLength) tokens (~\(pct)% used). \
             Prefer targeted reads (offset/limit) over whole-file reads to conserve context.

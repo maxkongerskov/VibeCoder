@@ -134,7 +134,7 @@ public struct XcodeProjectEditorTool: Tool {
         }
 
         // 7. Inject PBXFileReference
-        let refLine = "\t\t\(fileRefUUID) /* \(fileName) */ = {isa = PBXFileReference; lastKnownFileType = \(fileType); path = \(relPath); sourceTree = \"<group>\"; };"
+        let refLine = "\t\t\(fileRefUUID) /* \(fileName) */ = {isa = PBXFileReference; lastKnownFileType = \(fileType); path = \(Self.quotePbxPath(relPath)); sourceTree = \"<group>\"; };"
         guard let updatedRef = Self.insertBefore(pbxproj, marker: "/* End PBXFileReference section */", line: refLine) else {
             return ToolResult(content: "Error: could not find the PBXFileReference section in pbxproj.", isError: true)
         }
@@ -308,6 +308,20 @@ public struct XcodeProjectEditorTool: Tool {
         case "txt":                return ("text", false)
         default:                   return ("text", false)
         }
+    }
+
+    /// OpenStep plist tokens with spaces (or other non-identifier chars)
+    /// must be quoted: `path = "My File.swift";`.
+    private static func quotePbxPath(_ path: String) -> String {
+        let unquotedOK = !path.isEmpty && path.unicodeScalars.allSatisfy { scalar in
+            CharacterSet.alphanumerics.contains(scalar)
+                || scalar == "." || scalar == "_" || scalar == "/" || scalar == "-"
+        }
+        if unquotedOK { return path }
+        let escaped = path
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
     }
 
     private static func makeRelativePath(absolute file: String, base: String) -> String? {

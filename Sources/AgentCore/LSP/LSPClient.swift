@@ -19,13 +19,36 @@ private struct JSONObject: @unchecked Sendable {
     let dict: [String: Any]
 }
 
+/// Continuation wrapper that resumes at most once. Timeout `failPending`
+/// and a later `transport.write` throw must not double-resume.
+private final class OneShotContinuation: @unchecked Sendable {
+    private let continuation: CheckedContinuation<JSONObject, Error>
+    private var didResume = false
+
+    init(_ continuation: CheckedContinuation<JSONObject, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning value: JSONObject) {
+        guard !didResume else { return }
+        didResume = true
+        continuation.resume(returning: value)
+    }
+
+    func resume(throwing error: Error) {
+        guard !didResume else { return }
+        didResume = true
+        continuation.resume(throwing: error)
+    }
+}
+
 /// Thin LSP JSON-RPC client. Supports initialize, definition, references,
 /// workspace/symbol, didOpen/didChange/didSave. Not a full multi-language
 /// IDE host — honest partial bridge for SourceKit (or mock) sessions.
 public actor LSPClient {
     private let transport: any LSPTransport
     private var nextId = 1
-    private var pending: [Int: CheckedContinuation<JSONObject, Error>] = [:]
+    private var pending: [Int: OneShotContinuation] = [:]
     private var readTask: Task<Void, Never>?
     private var buffer = Data()
     private var initialized = false
@@ -273,12 +296,13 @@ public actor LSPClient {
         framed: Data,
         cont: CheckedContinuation<JSONObject, Error>
     ) async {
-        pending[id] = cont
+        let oneShot = OneShotContinuation(cont)
+        pending[id] = oneShot
         do {
             try await transport.write(framed)
         } catch {
             pending.removeValue(forKey: id)
-            cont.resume(throwing: error)
+            oneShot.resume(throwing: error)
         }
     }
 

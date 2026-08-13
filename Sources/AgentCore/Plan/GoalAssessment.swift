@@ -43,7 +43,8 @@ public enum GoalAssessment: Sendable {
     ///
     /// Rules (conservative — prefer continue over false complete):
     /// 1. Recent tool errors always block achievement (even with a “complete” plan).
-    /// 2. Structured plan with failed todos → not achieved.
+    /// 2. Structured plan with failed todos → not achieved; failed items
+    ///    stay in gaps alongside pending / in_progress (do not collapse).
     /// 3. Structured plan with only skipped todos (no real done) → not achieved.
     /// 4. Structured plan with every todo done/skipped and ≥1 done → achieved.
     /// 5. Structured plan with open todos → not achieved; gaps = open items.
@@ -63,9 +64,9 @@ public enum GoalAssessment: Sendable {
                     achieved: false,
                     gaps: ["Recent tool failures are unresolved for goal: \(shortGoal(goalDescription))"])
             }
-            if plan.hasFailures {
-                return Result(achieved: false, gaps: ["Plan reports failed steps"])
-            }
+            // Failed todos block achievement, but must stay in the same
+            // open-item gap list as pending / in_progress so stall
+            // fingerprints still move when other work progresses.
             if plan.isComplete {
                 let anyDone = plan.todos.contains { $0.status == .done }
                 if !anyDone {

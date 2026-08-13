@@ -155,8 +155,7 @@ public enum PDFToolsService {
             return "Error: `output` is required."
         }
         let angleAny = args["angle"]
-        let angle = (angleAny as? Int) ?? Int((angleAny as? Double) ?? -1)
-        guard [90, 180, 270, -90].contains(angle) else {
+        guard let angle = integerExactly(angleAny), [90, 180, 270, -90].contains(angle) else {
             return "Error: `angle` must be 90, 180, 270 (or -90)."
         }
         let pagesArg = (args["pages"] as? String) ?? "all"
@@ -164,9 +163,7 @@ public enum PDFToolsService {
         guard let doc = PDFDocument(url: URL(fileURLWithPath: expanded)) else {
             return "Error: could not open \(input)."
         }
-        let targetPages: [Int] = pagesArg.lowercased() == "all"
-            ? Array(1...doc.pageCount)
-            : parsePageRange(pagesArg, max: doc.pageCount)
+        let targetPages = parsePageRange(pagesArg, max: doc.pageCount)
 
         let targetSet = Set(targetPages.map { $0 - 1 })
         for i in 0..<doc.pageCount where targetSet.contains(i) {
@@ -322,19 +319,22 @@ public enum PDFToolsService {
     }
 
     /// Parse "1-5,7,9-11" into [1,2,3,4,5,7,9,10,11]. Out-of-range values
-    /// are dropped silently. Empty/nil = full range.
-    private static func parsePageRange(_ s: String?, max: Int) -> [Int] {
+    /// are dropped silently. Empty/nil/"all" = full range. Never builds
+    /// an inverted ClosedRange (empty PDF / "4-10" on a 3-page doc).
+    static func parsePageRange(_ s: String?, max: Int) -> [Int] {
+        guard max >= 1 else { return [] }
+        let full = Array(1...max)
         guard let s = s?.trimmingCharacters(in: .whitespacesAndNewlines), !s.isEmpty else {
-            return Array(1...max)
+            return full
         }
-        if s.lowercased() == "all" { return Array(1...max) }
+        if s.lowercased() == "all" { return full }
         var pages: [Int] = []
         for chunk in s.split(separator: ",") {
             let t = chunk.trimmingCharacters(in: .whitespaces)
             if t.contains("-") {
-                let parts = t.split(separator: "-").map { Int($0.trimmingCharacters(in: .whitespaces)) ?? 0 }
+                let parts = t.split(separator: "-").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
                 if parts.count == 2, parts[0] >= 1, parts[1] >= parts[0] {
-                    for p in parts[0]...min(parts[1], max) { pages.append(p) }
+                    pages.append(contentsOf: clampedClosedRange(from: parts[0], to: parts[1], max: max))
                 }
             } else if let p = Int(t), p >= 1, p <= max {
                 pages.append(p)
@@ -344,6 +344,31 @@ public enum PDFToolsService {
         var seen = Set<Int>(); var out: [Int] = []
         for p in pages where !seen.contains(p) { seen.insert(p); out.append(p) }
         return out
+    }
+
+    /// Intersection of `from...to` with `1...max`. Empty when they don't overlap.
+    private static func clampedClosedRange(from: Int, to: Int, max: Int) -> [Int] {
+        let lo = from
+        let hi = min(to, max)
+        guard lo <= hi else { return [] }
+        return Array(lo...hi)
+    }
+
+    /// Int conversion that refuses out-of-range Doubles (e.g. 1e20) instead of trapping.
+    private static func integerExactly(_ any: Any?) -> Int? {
+        if let n = any as? NSNumber {
+            return Int(exactly: n.doubleValue)
+        }
+        if let d = any as? Double {
+            return Int(exactly: d)
+        }
+        if let i = any as? Int {
+            return i
+        }
+        if let s = any as? String {
+            return Int(s.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return nil
     }
 }
 

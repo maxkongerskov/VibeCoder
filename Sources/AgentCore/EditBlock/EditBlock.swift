@@ -346,18 +346,32 @@ public enum EditBlockApplier {
     /// (exact lines, then leading-whitespace flex, then optional blank-first-line strip).
     /// Aligns unique-match gates with what `apply` would actually edit.
     /// Empty / whitespace-only SEARCH → 0 (create/append is not multi-match).
-    public static func countMatchWindows(search: String, in content: String, filename: String = "") -> Int {
+    public static func countMatchWindows(
+        search: String,
+        in content: String,
+        filename: String = "",
+        replace: String = ""
+    ) -> Int {
         let beforeText = stripQuotedWrapping(search, fname: filename)
         if beforeText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return 0
         }
         let (_, wholeLines) = prep(content)
         let (_, partLines) = prep(beforeText)
+        // Same outdent basis as apply: min leading WS of SEARCH and REPLACE.
+        // Omitted/empty REPLACE is treated as 0-indent so we do not outdent
+        // SEARCH further than apply would for a typical unindented REPLACE.
+        let replaceLines: [String]
+        if replace.isEmpty {
+            replaceLines = ["x"]
+        } else {
+            replaceLines = prep(stripQuotedWrapping(replace, fname: filename)).1
+        }
 
         let exact = countPerfectWindows(whole: wholeLines, part: partLines)
         if exact > 0 { return exact }
 
-        let ws = countWhitespaceWindows(whole: wholeLines, part: partLines)
+        let ws = countWhitespaceWindows(whole: wholeLines, part: partLines, replace: replaceLines)
         if ws > 0 { return ws }
 
         // Same as apply: strip spurious leading blank line on SEARCH and retry.
@@ -366,7 +380,7 @@ public enum EditBlockApplier {
             let trimmed = Array(partLines.dropFirst())
             let e2 = countPerfectWindows(whole: wholeLines, part: trimmed)
             if e2 > 0 { return e2 }
-            let w2 = countWhitespaceWindows(whole: wholeLines, part: trimmed)
+            let w2 = countWhitespaceWindows(whole: wholeLines, part: trimmed, replace: replaceLines)
             if w2 > 0 { return w2 }
         }
         return 0
@@ -384,11 +398,11 @@ public enum EditBlockApplier {
         return count
     }
 
-    static func countWhitespaceWindows(whole: [String], part: [String]) -> Int {
+    static func countWhitespaceWindows(whole: [String], part: [String], replace: [String] = []) -> Int {
         guard !part.isEmpty, part.count <= whole.count else { return 0 }
-        // Outdent part by min leading whitespace (same as replaceWithMissingLeadingWhitespace).
+        // Outdent by min leading whitespace of SEARCH+REPLACE (same as apply).
         var partAdj = part
-        let allLeading: [Int] = part.compactMap { line in
+        let allLeading: [Int] = (part + replace).compactMap { line in
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty { return nil }
             return line.prefix { $0 == " " || $0 == "\t" }.count

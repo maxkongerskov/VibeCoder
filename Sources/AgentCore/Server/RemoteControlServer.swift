@@ -124,6 +124,11 @@ public actor RemoteControlServer {
     ///   - lifetime: token validity
     @discardableResult
     public func start(port: Int = 18765, lifetime: TimeInterval = 3600) throws -> String {
+        // Validate before tearing down a live listener — `start(port: 0)`
+        // must not kill a running session or replace its token.
+        guard port > 0, port <= 65_535, let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
+            throw ServerError.invalidPort(port)
+        }
         if listener != nil { stop() }
         self.port = port
         let newToken = Self.makeToken()
@@ -132,9 +137,6 @@ public actor RemoteControlServer {
 
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
-        guard port > 0, port <= 65_535, let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
-            throw ServerError.invalidPort(port)
-        }
         // All interfaces — LAN phones/laptops need this (unlike LocalAPIServer).
         let newListener = try NWListener(using: params, on: nwPort)
         newListener.stateUpdateHandler = { state in

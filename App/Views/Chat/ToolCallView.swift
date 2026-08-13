@@ -336,30 +336,49 @@ private struct ExitBadge: View {
 
 // MARK: - ShellOutput parsing
 //
-// The run_shell tool prefixes its captured output with `[exit N]` on
-// the first non-blank line. Pull that out so we can render it as a
-// proper badge in ShellBlock and strip it from the body so the user
-// doesn't see "[exit 0]" twice.
+// The run_shell tool emits `$ cmd\n[exit N]\nstdout`. Scan the first
+// few lines for `[exit N]` so we can render a badge and strip that
+// line from the body.
 
 enum ShellOutput {
-    /// Returns the exit code if the first non-empty line is `[exit N]`.
+    /// RunShellTool emits `$ cmd\n[exit N]\nstdout` — scan the first few
+    /// lines rather than only the first non-empty line.
+    private static let scanLineLimit = 8
+    private static let exitPattern = #"^\s*\[exit (-?\d+)\]\s*$"#
+
+    /// Returns the exit code if any of the first few lines is `[exit N]`.
     static func exitCode(from output: String) -> Int? {
-        let firstLine = output.split(separator: "\n", omittingEmptySubsequences: true).first ?? ""
-        let pattern = #"^\[exit (-?\d+)\]$"#
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: String(firstLine),
-                                           range: NSRange(firstLine.startIndex..., in: firstLine)),
-              let codeRange = Range(match.range(at: 1), in: firstLine)
-        else { return nil }
-        return Int(firstLine[codeRange])
+        guard let regex = try? NSRegularExpression(pattern: exitPattern) else { return nil }
+        let lines = output.split(separator: "\n", omittingEmptySubsequences: false)
+        for line in lines.prefix(scanLineLimit) {
+            let s = String(line)
+            let range = NSRange(s.startIndex..., in: s)
+            if let match = regex.firstMatch(in: s, range: range),
+               let codeRange = Range(match.range(at: 1), in: s) {
+                return Int(s[codeRange])
+            }
+        }
+        return nil
     }
 
-    /// Strip the leading `[exit N]` line so OutputBlock doesn't show
-    /// it (we've already promoted it to ExitBadge).
+    /// Remove the `[exit N]` line (not merely line 0) so OutputBlock
+    /// doesn't show it — we've already promoted it to ExitBadge.
     static func stripExitLine(from output: String) -> String {
-        guard exitCode(from: output) != nil else { return output }
+        guard let regex = try? NSRegularExpression(pattern: exitPattern) else { return output }
         let lines = output.split(separator: "\n", omittingEmptySubsequences: false)
-        return lines.dropFirst().joined(separator: "\n")
+        var result: [Substring] = []
+        var removed = false
+        for (index, line) in lines.enumerated() {
+            if !removed && index < scanLineLimit {
+                let s = String(line)
+                if regex.firstMatch(in: s, range: NSRange(s.startIndex..., in: s)) != nil {
+                    removed = true
+                    continue
+                }
+            }
+            result.append(line)
+        }
+        return result.joined(separator: "\n")
     }
 }
 

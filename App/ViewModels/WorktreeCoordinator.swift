@@ -66,23 +66,22 @@ final class WorktreeCoordinator: ObservableObject {
         guard let conversations,
               let idx = conversations.conversationIndex(for: conversationID) else { return }
         let convo = conversations.conversation(at: idx)
-        if let projectRoot = convo.projectRoot,
-           let branch = convo.worktreeBranch,
-           let worktreeURL = convo.worktreeRootURL {
-            do {
-                try WorktreeService.discard(
-                    worktreePath: worktreeURL.path,
-                    branch: branch,
-                    projectFolder: projectRoot.path
-                )
-            } catch let err as WorktreeError {
-                worktreeError = err.errorDescription
-            } catch {
-                worktreeError = "Discard failed: \(error.localizedDescription)"
-            }
+        guard let projectRoot = convo.projectRoot,
+              let branch = convo.worktreeBranch,
+              let worktreeURL = convo.worktreeRootURL else { return }
+        do {
+            try WorktreeService.discard(
+                worktreePath: worktreeURL.path,
+                branch: branch,
+                projectFolder: projectRoot.path
+            )
+            conversations.updateConversation(at: idx) { $0.worktreeBranch = nil }
+            conversations.syncChatViewModel(conversationID) { $0.conversation.worktreeBranch = nil }
+            conversations.saveConversationSnapshot(at: idx)
+        } catch let err as WorktreeError {
+            worktreeError = err.errorDescription
+        } catch {
+            worktreeError = "Discard failed: \(error.localizedDescription)"
         }
-        conversations.updateConversation(at: idx) { $0.worktreeBranch = nil }
-        conversations.syncChatViewModel(conversationID) { $0.conversation.worktreeBranch = nil }
-        conversations.saveConversationSnapshot(at: idx)
     }
 }

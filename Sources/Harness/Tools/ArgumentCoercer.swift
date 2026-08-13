@@ -114,6 +114,9 @@ public enum ArgumentCoercer {
             case .coerced(let cv, let note):
                 out[p.name] = cv
                 notes.append(note)
+            case .omit:
+                // Optional null → drop the key. Required null → missing.
+                if p.required { missing.append(p.name) }
             case .fail(let got):
                 typeErrors.append(ArgTypeError(key: p.name, expected: expectedDescription(p), got: got))
             }
@@ -133,6 +136,8 @@ public enum ArgumentCoercer {
     private enum Coerced {
         case exact(JSONValue)
         case coerced(JSONValue, String)
+        /// JSON null on an optional parameter — omit the key.
+        case omit
         case fail(got: String)
     }
 
@@ -143,6 +148,8 @@ public enum ArgumentCoercer {
     }
 
     private static func coerce(_ v: JSONValue, to p: ToolParameter) -> Coerced {
+        if case .null = v { return .omit }
+
         // Enum constraint is checked on top of the (string) type.
         if let allowed = p.enumValues {
             guard case .string(let s) = v else { return .fail(got: v.typeName) }
@@ -169,10 +176,11 @@ public enum ArgumentCoercer {
                 }
                 return .fail(got: "number \(trimDouble(d)) exceeds Int range for `\(p.name)`")
             case .string(let s):
-                if let i = Int(s.trimmingCharacters(in: .whitespaces)) {
+                let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let i = Int(trimmed) {
                     return .coerced(.int(i), "parsed \"\(s)\" as integer for `\(p.name)`")
                 }
-                if let d = Double(s), d == d.rounded() {
+                if let d = Double(trimmed), d == d.rounded() && d.isFinite {
                     if let i = Int(exactly: d) {
                         return .coerced(.int(i), "parsed \"\(s)\" as integer for `\(p.name)`")
                     }
@@ -187,7 +195,8 @@ public enum ArgumentCoercer {
             case .double: return .exact(v)
             case .int(let i): return .coerced(.double(Double(i)), "coerced integer \(i) to number for `\(p.name)`")
             case .string(let s):
-                if let d = Double(s.trimmingCharacters(in: .whitespaces)) {
+                let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let d = Double(trimmed) {
                     return .coerced(.double(d), "parsed \"\(s)\" as number for `\(p.name)`")
                 }
                 return .fail(got: "string \"\(s)\"")
@@ -198,7 +207,7 @@ public enum ArgumentCoercer {
             switch v {
             case .bool: return .exact(v)
             case .string(let s):
-                switch s.trimmingCharacters(in: .whitespaces).lowercased() {
+                switch s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
                 case "true": return .coerced(.bool(true), "parsed \"\(s)\" as boolean for `\(p.name)`")
                 case "false": return .coerced(.bool(false), "parsed \"\(s)\" as boolean for `\(p.name)`")
                 default: return .fail(got: "string \"\(s)\"")
@@ -209,12 +218,39 @@ public enum ArgumentCoercer {
             }
 
         case .array:
+            let elems: [JSONValue]
+            var elemNotes: [String] = []
             switch v {
-            case .array: return .exact(v)
+            case .array(let a):
+                elems = a
             case .string, .int, .double, .bool:
-                return .coerced(.array([v]), "wrapped single value in an array for `\(p.name)`")
-            default: return .fail(got: v.typeName)
+                elems = [v]
+                elemNotes.append("wrapped single value in an array for `\(p.name)`")
+            default:
+                return .fail(got: v.typeName)
             }
+            let elemType = p.arrayElementType ?? .string
+            var outElems: [JSONValue] = []
+            for (idx, elem) in elems.enumerated() {
+                let elemParam = ToolParameter(
+                    name: "\(p.name)[\(idx)]",
+                    type: elemType,
+                    required: true)
+                switch coerce(elem, to: elemParam) {
+                case .exact(let cv):
+                    outElems.append(cv)
+                case .coerced(let cv, let note):
+                    outElems.append(cv)
+                    elemNotes.append(note)
+                case .omit:
+                    return .fail(got: "null")
+                case .fail(let got):
+                    return .fail(got: got)
+                }
+            }
+            let result = JSONValue.array(outElems)
+            if elemNotes.isEmpty { return .exact(result) }
+            return .coerced(result, elemNotes.joined(separator: "; "))
 
         case .object:
             switch v {

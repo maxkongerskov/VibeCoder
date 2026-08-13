@@ -90,7 +90,10 @@ public actor OMLXBackend: InferenceBackend {
         // Prefer status endpoint so the picker shows loaded vs not-loaded.
         if let status = try? await modelManager.fetchStatus(), !status.models.isEmpty {
             let bare = (try? await client.listModels()) ?? []
-            let byID = Dictionary(uniqueKeysWithValues: bare.map { ($0.id, $0) })
+            // Duplicate /v1/models ids (same base + profile) must not trap.
+            let byID = Dictionary(bare.map { ($0.id, $0) }, uniquingKeysWith: { first, second in
+                second.contextLength != nil ? second : first
+            })
             var seen = Set<String>()
             var out: [ModelDescriptor] = []
             for entry in status.models {
@@ -157,12 +160,20 @@ public actor OMLXBackend: InferenceBackend {
         let wireTools: [ChatCompletionRequestBody.WireTool]? = request.tools.isEmpty ? nil : request.tools.map {
             .init(function: .init(name: $0.name, description: $0.description, parameters: $0.parameters))
         }
-        return ChatCompletionRequestBody(
+        var body = ChatCompletionRequestBody(
             model: request.model.id,
             messages: wireMessages,
             tools: wireTools,
             sampling: request.sampling,
             stream: true
         )
+        if let thinking = request.thinking {
+            ThinkingModelScanner.applyThinking(
+                to: &body.extraBody,
+                capability: thinking.capability,
+                effort: thinking.effort
+            )
+        }
+        return body
     }
 }

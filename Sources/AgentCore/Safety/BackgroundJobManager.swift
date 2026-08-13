@@ -492,7 +492,9 @@ public actor BackgroundJobManager {
             var t: [BackgroundJobCompletion] = []
             var r: [BackgroundJobCompletion] = []
             for c in pendingCompletions {
-                if c.conversationID == conversationID || c.conversationID == nil {
+                // Nil-conversation completions are unscoped — do not steal
+                // them when draining a specific conversation.
+                if c.conversationID == conversationID {
                     t.append(c)
                 } else {
                     r.append(c)
@@ -510,7 +512,7 @@ public actor BackgroundJobManager {
     public func peekPendingCompletions(conversationID: UUID? = nil) -> [BackgroundJobCompletion] {
         if let conversationID {
             return pendingCompletions.filter {
-                $0.conversationID == conversationID || $0.conversationID == nil
+                $0.conversationID == conversationID
             }
         }
         return pendingCompletions
@@ -520,7 +522,7 @@ public actor BackgroundJobManager {
     public func clearPendingCompletions(conversationID: UUID? = nil) {
         if let conversationID {
             pendingCompletions.removeAll {
-                $0.conversationID == conversationID || $0.conversationID == nil
+                $0.conversationID == conversationID
             }
         } else {
             pendingCompletions.removeAll()

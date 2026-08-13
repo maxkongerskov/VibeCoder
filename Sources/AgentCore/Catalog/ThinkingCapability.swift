@@ -161,11 +161,11 @@ public enum ThinkingModelScanner {
         let id = normalizeModelId(modelId)
         guard !id.isEmpty else { return nil }
 
-        // --- GLM / z.ai (GLM-5.x, ChatGLM, MoE variants) ---
+        // --- GLM / z.ai (GLM-5.x, GLM-4.5+ MoE). ChatGLM-3/4 are not this API. ---
         // API: thinking { type } + reasoning_effort high|max only.
         if matches(id, anyOf: [
             "glm-5", "glm5", "glm_5", "glm-4.5", "glm-4.6", "glm-4.7",
-            "chatglm", "glm-moe", "glm_moe", "glm-4-moe",
+            "glm-moe", "glm_moe", "glm-4-moe",
         ]) {
             return ThinkingCapability(
                 style: .glmThinking,
@@ -174,8 +174,8 @@ public enum ThinkingModelScanner {
                 label: "Thinking")
         }
 
-        // --- MiniMax ---
-        if matches(id, anyOf: ["minimax", "mini-max", "minimax-m3", "minimax-m2"]) {
+        // --- MiniMax reasoners (M1/M2/M3). Text-01 is plain chat. ---
+        if matches(id, anyOf: ["minimax-m1", "minimax-m2", "minimax-m3", "mini-max-m"]) {
             return ThinkingCapability(
                 style: .openaiReasoningEffort,
                 levels: minimaxLevels,
@@ -206,9 +206,14 @@ public enum ThinkingModelScanner {
                 label: "Thinking")
         }
 
-        // --- Qwen / QwQ thinking variants (not plain qwen2.5 instruct) ---
-        if matches(id, anyOf: ["qwq", "qwen3"])
-            || (id.contains("qwen") && id.contains("think"))
+        // --- Qwen / QwQ thinking variants (not plain qwen2.5 instruct,
+        //     and not official Qwen3-*-Instruct-2507 non-thinking dumps) ---
+        let isQwen3Instruct2507 = id.contains("qwen3")
+            && id.contains("instruct")
+            && id.contains("2507")
+        if !isQwen3Instruct2507
+            && (matches(id, anyOf: ["qwq", "qwen3"])
+                || (id.contains("qwen") && id.contains("think")))
         {
             return ThinkingCapability(
                 style: .openaiReasoningEffort,
@@ -226,11 +231,13 @@ public enum ThinkingModelScanner {
                 label: "Reasoning")
         }
 
-        // --- Claude extended thinking ---
-        if matches(id, anyOf: ["claude-sonnet-4", "claude-opus-4",
-                                 "claude-3-7", "claude-3.7"])
-            || (id.contains("claude") && (id.contains("sonnet") || id.contains("opus")))
-        {
+        // --- Claude extended thinking (3.7 / 4+ only; 3.5 / 3 Opus / 3 Sonnet
+        //     reject thinking.budget_tokens with HTTP 400) ---
+        if matches(id, anyOf: [
+            "claude-sonnet-4", "claude-opus-4", "claude-haiku-4",
+            "claude-3-7", "claude-3.7",
+            "claude-4-", "claude-4.",
+        ]) || id.hasSuffix("claude-4") || id.contains("claude4") {
             return ThinkingCapability(
                 style: .anthropicBudget,
                 levels: claudeLevels,

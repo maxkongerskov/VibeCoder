@@ -228,7 +228,11 @@ public struct ChatMessage: Codable, Identifiable, Sendable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
-        role = try c.decodeIfPresent(Role.self, forKey: .role) ?? .assistant
+        if let rawRole = try c.decodeIfPresent(String.self, forKey: .role) {
+            role = Role(rawValue: rawRole) ?? .assistant
+        } else {
+            role = .assistant
+        }
         content = try c.decodeIfPresent(String.self, forKey: .content) ?? ""
         reasoningContent = try c.decodeIfPresent(String.self, forKey: .reasoningContent)
         toolCalls = try c.decodeIfPresent([ToolCallInvocation].self, forKey: .toolCalls) ?? []

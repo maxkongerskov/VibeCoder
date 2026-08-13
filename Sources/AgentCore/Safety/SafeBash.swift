@@ -85,6 +85,7 @@ public enum SafeBash: Sendable {
         "git push",
         "eval",
         "source",
+        ".", // source builtin (`. ./script`, `. script`)
     ]
 
     /// Light wrappers peeled before RO / dangerous classification so
@@ -116,7 +117,14 @@ public enum SafeBash: Sendable {
 
     /// Classify a single shell segment (already split on chain operators).
     public static func isDangerousSegment(_ segment: String) -> Bool {
-        let tokens = peelWrappers(tokenize(segment))
+        // `echo $(rm …)` / `echo \`rm …\`` — treat substitution payloads
+        // like `bash -c` (fail closed if the inner command is dangerous).
+        if commandSubstitutionPayloads(in: segment).contains(where: { isDangerous($0) }) {
+            return true
+        }
+
+        var tokens = peelWrappers(tokenize(segment))
+        tokens = peelGitGlobalOptions(tokens)
         guard !tokens.isEmpty else { return false }
 
         // Nested interpreter scripts: `bash -c 'rm -rf /'`, `python -c '…'`.
@@ -416,7 +424,7 @@ public enum SafeBash: Sendable {
     /// Bare wrappers with no following command (`env`, `time`) are left intact
     /// so they can still match `readOnlyPrimaries`.
     public static func peelWrappers(_ tokens: [String]) -> [String] {
-        var t = tokens
+        var t = basenamePrimary(dropLeadingAssignments(tokens))
         while let first = t.first.map({ $0.lowercased() }),
               wrapperPrimaries.contains(first) {
             var probe = Array(t.dropFirst())
@@ -450,6 +458,30 @@ public enum SafeBash: Sendable {
                         // Combined form -n2 etc. — already consumed.
                     }
                 }
+            } else if first == "nice" {
+                // `nice [-n N | --adjustment=N] command…`
+                while let head = probe.first {
+                    if head == "-n" || head == "--adjustment" {
+                        probe.removeFirst()
+                        if !probe.isEmpty, !probe[0].hasPrefix("-") {
+                            probe.removeFirst()
+                        }
+                        continue
+                    }
+                    if head.hasPrefix("--adjustment=") {
+                        probe.removeFirst()
+                        continue
+                    }
+                    if head.hasPrefix("-n"), head.count > 2 {
+                        probe.removeFirst()
+                        continue
+                    }
+                    if head.hasPrefix("-") {
+                        probe.removeFirst()
+                        continue
+                    }
+                    break
+                }
             } else {
                 while let head = probe.first {
                     if head.hasPrefix("-") {
@@ -464,9 +496,201 @@ public enum SafeBash: Sendable {
                 }
             }
             guard !probe.isEmpty else { break }
-            t = probe
+            t = basenamePrimary(dropLeadingAssignments(probe))
         }
         return t
+    }
+
+    /// `VAR=value` tokens that precede a command (`FOO=1 rm …`).
+    private static func isAssignmentToken(_ token: String) -> Bool {
+        guard !token.hasPrefix("-"),
+              let eq = token.firstIndex(of: "="),
+              eq > token.startIndex else { return false }
+        return true
+    }
+
+    private static func dropLeadingAssignments(_ tokens: [String]) -> [String] {
+        var t = tokens
+        while let first = t.first, isAssignmentToken(first) {
+            t.removeFirst()
+        }
+        return t
+    }
+
+    /// Classify `/bin/rm` / `/usr/bin/chmod` by basename, not only the prefix.
+    private static func basenamePrimary(_ tokens: [String]) -> [String] {
+        guard let first = tokens.first else { return tokens }
+        let base = (first as NSString).lastPathComponent
+        guard !base.isEmpty, base != first else { return tokens }
+        var out = tokens
+        out[0] = base
+        return out
+    }
+
+    /// Drop `git -C <dir>` / `--git-dir=` / other globals so `git push` is visible.
+    static func peelGitGlobalOptions(_ tokens: [String]) -> [String] {
+        guard let first = tokens.first?.lowercased(), first == "git" else { return tokens }
+        var i = 1
+        let takesValue: Set<String> = [
+            "-c", "-C",
+            "--git-dir", "--work-tree", "--namespace",
+            "--config-env", "--exec-path",
+        ]
+        let boolFlags: Set<String> = [
+            "-p", "-P", "--paginate", "--no-pager",
+            "--bare", "--help", "--version",
+            "--no-replace-objects", "--no-lazy-fetch", "--no-optional-locks",
+            "--literal-pathspecs", "--glob-pathspecs",
+            "--noglob-pathspecs", "--icase-pathspecs",
+        ]
+        while i < tokens.count {
+            let t = tokens[i]
+            let lower = t.lowercased()
+            if takesValue.contains(t) || takesValue.contains(lower) {
+                i += 2
+                continue
+            }
+            if lower.hasPrefix("--git-dir=") || lower.hasPrefix("--work-tree=")
+                || lower.hasPrefix("--namespace=") || lower.hasPrefix("--config-env=")
+                || lower.hasPrefix("--exec-path=") {
+                i += 1
+                continue
+            }
+            if boolFlags.contains(t) || boolFlags.contains(lower) {
+                i += 1
+                continue
+            }
+            break
+        }
+        guard i > 1, i <= tokens.count else { return tokens }
+        if i >= tokens.count { return ["git"] }
+        return ["git"] + Array(tokens[i...])
+    }
+
+    /// `$(…)` and backtick payloads outside single quotes.
+    public static func commandSubstitutionPayloads(in command: String) -> [String] {
+        var payloads: [String] = []
+        var i = command.startIndex
+        var inSingle = false
+        var inDouble = false
+        var escape = false
+        while i < command.endIndex {
+            let ch = command[i]
+            if escape {
+                escape = false
+                i = command.index(after: i)
+                continue
+            }
+            if ch == "\\" {
+                escape = true
+                i = command.index(after: i)
+                continue
+            }
+            if ch == "'" && !inDouble {
+                inSingle.toggle()
+                i = command.index(after: i)
+                continue
+            }
+            if ch == "\"" && !inSingle {
+                inDouble.toggle()
+                i = command.index(after: i)
+                continue
+            }
+            if inSingle {
+                i = command.index(after: i)
+                continue
+            }
+            if ch == "$" {
+                let next = command.index(after: i)
+                if next < command.endIndex, command[next] == "(" {
+                    let (payload, end) = extractBalancedParenPayload(command, openParen: next)
+                    payloads.append(payload)
+                    i = end
+                    continue
+                }
+            }
+            if ch == "`" {
+                let (payload, end) = extractBacktickPayload(command, openTick: i)
+                payloads.append(payload)
+                i = end
+                continue
+            }
+            i = command.index(after: i)
+        }
+        return payloads
+    }
+
+    /// Unclosed `$(` fails closed: remaining text is the payload.
+    private static func extractBalancedParenPayload(
+        _ s: String, openParen: String.Index
+    ) -> (String, String.Index) {
+        var depth = 1
+        var i = s.index(after: openParen)
+        var inSingle = false
+        var inDouble = false
+        var escape = false
+        while i < s.endIndex {
+            let ch = s[i]
+            if escape {
+                escape = false
+                i = s.index(after: i)
+                continue
+            }
+            if ch == "\\" {
+                escape = true
+                i = s.index(after: i)
+                continue
+            }
+            if ch == "'" && !inDouble {
+                inSingle.toggle()
+                i = s.index(after: i)
+                continue
+            }
+            if ch == "\"" && !inSingle {
+                inDouble.toggle()
+                i = s.index(after: i)
+                continue
+            }
+            if !inSingle && !inDouble {
+                if ch == "(" {
+                    depth += 1
+                } else if ch == ")" {
+                    depth -= 1
+                    if depth == 0 {
+                        let payload = String(s[s.index(after: openParen)..<i])
+                        return (payload, s.index(after: i))
+                    }
+                }
+            }
+            i = s.index(after: i)
+        }
+        return (String(s[s.index(after: openParen)...]), s.endIndex)
+    }
+
+    private static func extractBacktickPayload(
+        _ s: String, openTick: String.Index
+    ) -> (String, String.Index) {
+        var i = s.index(after: openTick)
+        var escape = false
+        while i < s.endIndex {
+            let ch = s[i]
+            if escape {
+                escape = false
+                i = s.index(after: i)
+                continue
+            }
+            if ch == "\\" {
+                escape = true
+                i = s.index(after: i)
+                continue
+            }
+            if ch == "`" {
+                let payload = String(s[s.index(after: openTick)..<i])
+                return (payload, s.index(after: i))
+            }
+            i = s.index(after: i)
+        }
+        return (String(s[s.index(after: openTick)...]), s.endIndex)
     }
 
     /// Extract `bash -c 'script'` / `sh -lc 'script'` payload when present.

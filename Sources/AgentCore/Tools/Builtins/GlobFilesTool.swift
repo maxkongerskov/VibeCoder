@@ -52,7 +52,16 @@ public struct GlobFilesTool: Tool {
         )
         while let url = enumerator?.nextObject() as? URL {
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
-            let rel = url.path.replacingOccurrences(of: baseDirectory.path + "/", with: "")
+            let basePath = baseDirectory.standardizedFileURL.path
+            let urlPath = url.standardizedFileURL.path
+            let rel: String
+            if urlPath == basePath {
+                rel = url.lastPathComponent
+            } else if urlPath.hasPrefix(basePath + "/") {
+                rel = String(urlPath.dropFirst(basePath.count + 1))
+            } else {
+                rel = url.path.replacingOccurrences(of: baseDirectory.path + "/", with: "")
+            }
             let range = NSRange(rel.startIndex..., in: rel)
             if regex.firstMatch(in: rel, options: [], range: range) != nil {
                 results.append(url)
@@ -69,11 +78,14 @@ public struct GlobFilesTool: Tool {
             if c == "*" {
                 let next = glob.index(after: i)
                 if next < glob.endIndex && glob[next] == "*" {
-                    out += "(?:.*/)?"
                     i = glob.index(after: next)
-                    // Skip the literal '/' that follows ** (e.g., **/*.swift → *(?:.*/)? + /* → extra /)
+                    // **/*.swift → any directory prefix + rest of pattern
                     if i < glob.endIndex && glob[i] == "/" {
+                        out += "(?:.*/)?"
                         i = glob.index(after: i)
+                    } else {
+                        // trailing ** or ** alone must match files at any depth
+                        out += ".*"
                     }
                     continue
                 }

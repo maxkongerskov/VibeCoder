@@ -31,6 +31,11 @@ final class ConversationCoordinator: ObservableObject {
     @discardableResult
     func runScheduledTask(_ task: ScheduledTask) async -> UUID? {
         guard let host else { return nil }
+        let selected = host.selectedModelID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !selected.isEmpty else {
+            Diagnostics.warn("Scheduler: skipping \"\(task.name)\" — no model selected")
+            return nil
+        }
         guard !host.availableModels.isEmpty else {
             Diagnostics.warn("Scheduler: skipping \"\(task.name)\" — no model available")
             return nil
@@ -85,6 +90,9 @@ final class ConversationCoordinator: ObservableObject {
     }
 
     func deleteConversation(_ id: UUID) {
+        if let vm = chatViewModels[id] {
+            vm.cancelForDeletion()
+        }
         conversations.removeAll { $0.id == id }
         chatViewModels.removeValue(forKey: id)
         // Prefer next visible (non-archived) task — never land on an archived row
@@ -142,6 +150,10 @@ final class ConversationCoordinator: ObservableObject {
         let visible = sidebarOrderedConversations()
         guard let here = visible.firstIndex(where: { $0.id == id }),
               here + 1 < visible.count else { return }
+        // Pin group is a hard partition. Last pinned sitting above the first
+        // unpinned cannot move down — rewriting dates would be a no-op on
+        // order but would still dirty `updatedAt`.
+        guard visible[here + 1].pinned == visible[here].pinned else { return }
         let belowID = visible[here + 1].id
 
         guard let aIdx = conversations.firstIndex(where: { $0.id == id }),
@@ -199,7 +211,8 @@ final class ConversationCoordinator: ObservableObject {
             pinned: source.pinned,
             archived: false,
             orchestratorBriefs: source.orchestratorBriefs,
-            railUserPreference: source.railUserPreference
+            railUserPreference: source.railUserPreference,
+            stickyContextPins: source.stickyContextPins
         )
         conversations.insert(copy, at: 0)
         selectedConversationID = copy.id
@@ -214,6 +227,9 @@ final class ConversationCoordinator: ObservableObject {
 
     func deleteAllConversations() {
         let ids = conversations.map(\.id)
+        for vm in chatViewModels.values {
+            vm.cancelForDeletion()
+        }
         conversations.removeAll()
         chatViewModels.removeAll()
         selectedConversationID = nil

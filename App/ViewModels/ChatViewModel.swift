@@ -192,6 +192,12 @@ final class ChatViewModel: ObservableObject {
 
     private weak var app: AppViewModel?
     private var runTask: Task<Void, Never>?
+    /// User-message id that opened the in-flight turn. `finishRun` only
+    /// stamps `workDurationSeconds` on assistants after this id.
+    private var currentTurnUserMessageID: UUID?
+    /// Set when the conversation is deleted mid-turn so the run task must
+    /// not persist and resurrect it.
+    private var persistSuppressed = false
 
     /// Whether the in-flight run is headless. Set at `send`, read in
     /// `consume` (to bypass the notification frontmost-check) and in
@@ -343,6 +349,7 @@ final class ChatViewModel: ObservableObject {
 
     /// Write the current conversation snapshot to disk (e.g. after attaching skills).
     func persistConversation() {
+        guard !persistSuppressed else { return }
         let snapshot = conversation
         Task { try? await ConversationStore.shared.save(snapshot) }
     }
@@ -450,6 +457,7 @@ final class ChatViewModel: ObservableObject {
             statusLine = "No plan to approve yet."
             return
         }
+        let previousMode = app.executionMode
         app.executionMode = .build
         let goal = activePlan?.goal.trimmingCharacters(in: .whitespacesAndNewlines)
         let goalBit = (goal?.isEmpty == false) ? goal! : "the approved plan"
@@ -465,7 +473,12 @@ final class ChatViewModel: ObservableObject {
 
         Use update_todo to mark steps in_progress/done as you work. Prefer edit_file/apply_patch over re-planning unless blocked.
         """
-        send(prompt)
+        let started = send(prompt)
+        // send() reads executionMode for this turn, so flip first — but
+        // revert if send bails (no model, empty compose, hook deny).
+        if !started, app.executionMode == .build {
+            app.executionMode = previousMode
+        }
     }
 
     /// Reject / stay in plan mode — no mode change, no auto-run (S2).
@@ -644,7 +657,7 @@ final class ChatViewModel: ObservableObject {
         // parent's @Published `conversations` array and this VM's
         // `conversation` stay in lockstep and the rename is persisted.
         if Self.isUntitled(conversation) {
-            let derived = Self.deriveTitle(from: composedText)
+            let derived = Self.deriveTitle(from: trimmed)
             if !derived.isEmpty {
                 app.renameConversation(id: conversation.id, to: derived)
             }
@@ -662,6 +675,7 @@ final class ChatViewModel: ObservableObject {
             images: visionImages
         )
         conversation.messages.append(optimisticUserMsg)
+        currentTurnUserMessageID = optimisticUserMessageId
 
         isRunning = true
         streamingContent = ""
@@ -970,7 +984,7 @@ final class ChatViewModel: ObservableObject {
                 // know about subsequent UI mutations. We then save the
                 // merged value (not raw `finalConvo`) so disk + memory
                 // agree.
-                let persisted: Conversation = await MainActor.run {
+                let persisted: Conversation? = await MainActor.run {
                     var merged = finalConvo
                     merged.worktreeBranch = self.conversation.worktreeBranch
                     merged.projectRoot = self.conversation.projectRoot
@@ -992,26 +1006,30 @@ final class ChatViewModel: ObservableObject {
                     // events during the run; do not blindly +1 here (that
                     // double-counted with evaluateTurnEnd).
                     self.finishRun(status: Task.isCancelled ? "Cancelled." : "Done.")
-                    return merged
+                    return self.persistSuppressed ? nil : merged
                 }
-                try? await ConversationStore.shared.save(persisted)
-                await app.refreshConversations()
+                if let persisted {
+                    try? await ConversationStore.shared.save(persisted)
+                    await app.refreshConversations()
+                }
             } catch {
                 // Real failure (backend unreachable, stream error). The
                 // user's message and any partial progress were mirrored
                 // into self.conversation by the event stream — persist
                 // them so the turn isn't lost. Cancellation can also land
                 // here if the backend tears the stream down mid-stop.
-                let partial: Conversation = await MainActor.run {
+                let partial: Conversation? = await MainActor.run {
                     let cancelled = Task.isCancelled
                         || error is CancellationError
                         || (error as? BackendError).map { if case .cancelled = $0 { return true }; return false } ?? false
                     self.finishRun(status: cancelled
                                    ? "Cancelled."
                                    : "Error: \(error.localizedDescription)")
-                    return self.conversation
+                    return self.persistSuppressed ? nil : self.conversation
                 }
-                try? await ConversationStore.shared.save(partial)
+                if let partial {
+                    try? await ConversationStore.shared.save(partial)
+                }
             }
         }
         return true
@@ -1023,6 +1041,13 @@ final class ChatViewModel: ObservableObject {
         if let idx = conversation.messages.lastIndex(where: { $0.id == id && $0.role == .user }) {
             conversation.messages.remove(at: idx)
         }
+    }
+
+    /// Cancel the in-flight turn and skip the end-of-run save so deleting
+    /// this conversation cannot resurrect it from disk.
+    func cancelForDeletion() {
+        persistSuppressed = true
+        cancel()
     }
 
     /// Request cooperative cancellation. State is NOT flipped here — the
@@ -1056,14 +1081,23 @@ final class ChatViewModel: ObservableObject {
             worktreeRoot: roots.worktree
         )
 
-        // Stamp "Worked for Ns" on the final assistant message of this turn
-        // so history shows the same duration + hairline as the live header.
+        // Stamp "Worked for Ns" on THIS turn's final assistant only —
+        // never rewrite a previous turn when this one produced no reply.
         if let started = workStartedAt {
             let secs = max(1, Int(Date().timeIntervalSince(started).rounded()))
-            if let idx = conversation.messages.lastIndex(where: { $0.role == .assistant }) {
+            let afterUser: Int
+            if let userID = currentTurnUserMessageID,
+               let userIdx = conversation.messages.firstIndex(where: { $0.id == userID }) {
+                afterUser = userIdx
+            } else {
+                afterUser = conversation.messages.count
+            }
+            if let idx = conversation.messages.lastIndex(where: { $0.role == .assistant }),
+               idx > afterUser {
                 conversation.messages[idx].workDurationSeconds = secs
             }
         }
+        currentTurnUserMessageID = nil
 
         // Drop undelivered interjections so they never poison the *next* turn
         // (drain only runs at iteration start — late follow-ups after the last
@@ -2265,7 +2299,12 @@ final class ChatViewModel: ObservableObject {
         reasoningStartedAt = nil
         currentActivityLabel = nil
         statusLine = "Conversation cleared."
-        Task { try? await ConversationStore.shared.save(conversation) }
+        planStoreSnapshot = nil
+        let convoID = conversation.id
+        Task {
+            await PlanStore.shared.clear(for: convoID)
+            try? await ConversationStore.shared.save(self.conversation)
+        }
     }
 
     /// `/skill [name] [args…]` — list skills, or queue a skill body for the next
@@ -2694,6 +2733,7 @@ final class ChatViewModel: ObservableObject {
             name: name,
             shortPrompt: prompt,
             longPrompt: prompt,
+            projectFolder: conversation.projectRoot?.path,
             frequency: frequency,
             timeOfDayMinutes: timeOfDay,
             setupComplete: true
@@ -2707,6 +2747,14 @@ final class ChatViewModel: ObservableObject {
     }
 
     private enum LoopIntervalKind { case none, manual, hourly, daily, weekly }
+
+    /// True for `30m` / `1h` / `2d` — a non-empty digit run then the unit.
+    /// Bare `h`/`m`/`d` must not parse (`"".allSatisfy` is vacuously true).
+    private static func isNumericDuration(_ token: String, unit: Character) -> Bool {
+        guard token.count >= 2, token.last == unit else { return false }
+        let digits = token.dropLast()
+        return !digits.isEmpty && digits.allSatisfy(\.isNumber)
+    }
 
     private static func parseLoopArgs(_ raw: String) -> (LoopIntervalKind, String) {
         let lower = raw.lowercased()
@@ -2724,19 +2772,25 @@ final class ChatViewModel: ObservableObject {
         let token = String(first).lowercased()
         let rest = parts.count > 1 ? String(parts[1]) : ""
 
-        if token == "hourly" || token.hasSuffix("h") && token.dropLast().allSatisfy(\.isNumber) {
-            return (.hourly, rest.isEmpty ? raw : rest)
-        }
-        if token == "daily" || (token.hasSuffix("d") && token.dropLast().allSatisfy(\.isNumber)) {
+        let interval: LoopIntervalKind?
+        if token == "hourly" || isNumericDuration(token, unit: "h") {
+            interval = .hourly
+        } else if token == "daily" || isNumericDuration(token, unit: "d") {
             let days = Int(token.dropLast()) ?? 1
-            return (days >= 7 ? .weekly : .daily, rest.isEmpty ? raw : rest)
-        }
-        if token.hasSuffix("m") && token.dropLast().allSatisfy(\.isNumber) {
+            interval = days >= 7 ? .weekly : .daily
+        } else if isNumericDuration(token, unit: "m") {
             // Sub-hour → hourly is the finest TaskFrequency we have.
-            return (.hourly, rest.isEmpty ? raw : rest)
+            interval = .hourly
+        } else if token == "weekly" {
+            interval = .weekly
+        } else {
+            interval = nil
         }
-        if token == "weekly" {
-            return (.weekly, rest.isEmpty ? raw : rest)
+
+        if let interval {
+            // Interval token consumed. Empty remainder is a usage error,
+            // not "the interval token is the prompt" (`/loop 1h`).
+            return (interval, rest)
         }
         return (.none, raw)
     }
@@ -3121,13 +3175,14 @@ extension ChatViewModel {
 
 // MARK: - PB2 lifecycle hooks (UserPromptSubmit / Stop)
 
-/// Project/worktree roots used for hook discovery (same order as Safe Mode).
+/// Project/worktree roots used for hook discovery.
+/// `project` is the bound project (or opened folder) — never the worktree
+/// path — so `HookDispatcher.hooksDir` still finds `.vibecoder/hooks` in
+/// the real project when a sibling worktree is active.
 extension ChatViewModel {
     fileprivate func lifecycleHookRoots() -> (project: URL?, worktree: URL?) {
         let worktree = conversation.worktreeRootURL
-        let project = worktree
-            ?? conversation.projectRoot
-            ?? app?.openedProject?.url
+        let project = conversation.projectRoot ?? app?.openedProject?.url
         return (project, worktree)
     }
 }

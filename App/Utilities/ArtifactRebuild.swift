@@ -65,7 +65,14 @@ enum ArtifactRebuild {
         }
         return assistant.toolCalls.map { inv in
             let output = outputByID[inv.id] ?? ""
-            let status: ToolCallStatus = output.isEmpty ? .pending : .success
+            let status: ToolCallStatus
+            if output.isEmpty {
+                status = .pending
+            } else if outputIndicatesError(output) {
+                status = .failure
+            } else {
+                status = .success
+            }
             return ToolCallUIState(
                 id: inv.id,
                 toolName: inv.name,
@@ -74,5 +81,18 @@ enum ArtifactRebuild {
                 output: output
             )
         }
+    }
+
+    /// Persisted tool messages have no `isError` flag — infer from the body.
+    private static func outputIndicatesError(_ output: String) -> Bool {
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let first = trimmed.split(whereSeparator: \.isNewline).first.map(String.init) ?? trimmed
+        let lower = first.lowercased()
+        if lower.hasPrefix("error:") { return true }
+        if lower.hasPrefix("error ") { return true }
+        if lower.hasPrefix("tool error") { return true }
+        if lower.contains("error: file not found") { return true }
+        return false
     }
 }

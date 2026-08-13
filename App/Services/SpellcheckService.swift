@@ -24,9 +24,11 @@ public enum SpellcheckService {
         if let t = text, !t.isEmpty {
             body = t
             label = "inline text (\(t.count) chars)"
-        } else if let p = path, !p.isEmpty,
-                  let data = try? String(contentsOfFile: (p as NSString).expandingTildeInPath,
-                                         encoding: .utf8) {
+        } else if let p = path, !p.isEmpty {
+            let expanded = (p as NSString).expandingTildeInPath
+            guard let data = try? String(contentsOfFile: expanded, encoding: .utf8) else {
+                return "Error: could not read path"
+            }
             body = data
             label = (p as NSString).lastPathComponent
         } else {

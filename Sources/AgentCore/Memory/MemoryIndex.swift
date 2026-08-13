@@ -69,6 +69,9 @@ public final class MemoryIndex: @unchecked Sendable {
         } else {
             chunks.append(chunk)
         }
+        let snapshot = chunks
+        lock.unlock()
+        persist(snapshot)
     }
 
     public func upsertMany(_ newChunks: [MemoryChunk]) {
@@ -83,8 +86,7 @@ public final class MemoryIndex: @unchecked Sendable {
         // Read snapshot under lock to prevent concurrent modifies from being lost.
         let snapshot = chunks
         lock.unlock()
-        // Persist outside the lock to avoid blocking other reads during disk I/O.
-        // The snapshot is safe because we took it while holding the lock.
+        persist(snapshot)
     }
 
     public func reindex(storage: MemoryStorage) {
@@ -115,13 +117,26 @@ public final class MemoryIndex: @unchecked Sendable {
         // Keep existing tool/injection/compaction_recovery chunks that were
         // explicitly upserted by the agent. Drop older auto-generated ones
         // so reindex can replace them with fresh content from memory files.
-        let keep = chunks.filter {
+        let previous = chunks
+        let keep = previous.filter {
             ["tool", "injection", "compaction_recovery"].contains($0.source)
         }
         // Deduplicate: remove old chunks whose text matches new content.
         let newTexts = Set(built.map { $0.text })
         let kept = keep.filter { !newTexts.contains($0.text) }
-        chunks = kept + built
+        // Preserve createdAt so age decay still applies after reindex.
+        var ageByKey: [String: TimeInterval] = [:]
+        for c in previous {
+            ageByKey["\(c.path)\u{0}\(c.text)"] = c.createdAt
+        }
+        let aged = built.map { chunk -> MemoryChunk in
+            var copy = chunk
+            if let old = ageByKey["\(chunk.path)\u{0}\(chunk.text)"] {
+                copy.createdAt = old
+            }
+            return copy
+        }
+        chunks = kept + aged
         lock.unlock()
         persist()
     }
@@ -295,6 +310,10 @@ public final class MemoryIndex: @unchecked Sendable {
         lock.lock()
         let snapshot = chunks
         lock.unlock()
+        persist(snapshot)
+    }
+
+    private func persist(_ snapshot: [MemoryChunk]) {
         let dir = indexURL.deletingLastPathComponent()
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let encoder = JSONEncoder()
@@ -304,10 +323,8 @@ public final class MemoryIndex: @unchecked Sendable {
                 out += s + "\n"
             }
         }
-        // Persist failure is logged rather than silently dropped, because
-        // a missing index means all new memory data is lost on restart.
-        if !out.isEmpty {
-            try? out.write(to: indexURL, atomically: true, encoding: .utf8)
-        }
+        // Always write, including an empty snapshot, so a full reindex
+        // cannot leave a stale index.jsonl behind.
+        try? out.write(to: indexURL, atomically: true, encoding: .utf8)
     }
 }

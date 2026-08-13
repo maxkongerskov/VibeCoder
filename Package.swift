@@ -86,7 +86,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AgentCoreTests",
-            dependencies: ["AgentCore"],
+            dependencies: ["AgentCore", "Harness", "EvalRunnerLib", "MLXBackend"],
             path: "Tests/AgentCoreTests"
         ),
         .testTarget(

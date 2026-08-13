@@ -42,9 +42,11 @@ public actor XAIBackend: InferenceBackend {
     public func listModels() async throws -> [ModelDescriptor] {
         if let bare = try? await client.listModels(), !bare.isEmpty {
             return bare.map { m in
+                let catalogCtx = Self.fallbackModels.first(where: { $0.id == m.id })?.context
                 let ctx = ModelContextLengthResolver.resolve(
                     modelId: m.id,
                     apiValue: m.contextLength)
+                    ?? catalogCtx
                 return ModelDescriptor(
                     id: m.id,
                     displayName: prettyName(m.id),

@@ -89,7 +89,6 @@ public final class ProcessLSPTransport: LSPTransport, @unchecked Sendable {
                 }
             }
         }
-        try process.run()
         self.process = process
         self.stdinPipe = stdinPipe
         self.stdoutPipe = stdoutPipe

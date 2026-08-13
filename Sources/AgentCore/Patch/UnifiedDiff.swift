@@ -80,16 +80,28 @@ public enum UnifiedDiff {
             currentHunks = []
         }
 
-        for line in text.split(separator: "\n", omittingEmptySubsequences: false) {
-            let s = String(line)
-            if s.hasPrefix("--- ") {
+        let rawLines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var minusPath: String?
+        var i = 0
+        while i < rawLines.count {
+            let s = rawLines[i]
+            // File headers are `--- ` / `+++ ` (dash/plus ×3 + space). Inside a
+            // hunk, `-- comment` / `++i;` and even `--- keep` / `+++ i;` are
+            // body lines — only a ---/+++ *pair* starts a new file there.
+            let isHeaderPair = s.hasPrefix("--- ")
+                && i + 1 < rawLines.count
+                && rawLines[i + 1].hasPrefix("+++ ")
+            if isHeaderPair || (hunkHeader == nil && s.hasPrefix("--- ")) {
                 flushFile()
+                minusPath = cleanDiffPath(String(s.dropFirst(4)))
+                i += 1
                 continue
             }
-            if s.hasPrefix("+++ ") {
-                let rest = String(s.dropFirst(4))
-                let cleaned = rest.hasPrefix("b/") ? String(rest.dropFirst(2)) : rest
-                currentPath = cleaned.trimmingCharacters(in: .whitespaces)
+            if s.hasPrefix("+++ "), hunkHeader == nil {
+                let plusPath = cleanDiffPath(String(s.dropFirst(4)))
+                currentPath = resolvedPatchPath(minus: minusPath, plus: plusPath)
+                minusPath = nil
+                i += 1
                 continue
             }
             if s.hasPrefix("@@") {
@@ -97,17 +109,45 @@ public enum UnifiedDiff {
                 if let parsed = parseHunkHeader(s) {
                     hunkHeader = parsed
                 }
+                i += 1
                 continue
             }
-            if hunkHeader == nil { continue }
+            if hunkHeader == nil {
+                i += 1
+                continue
+            }
             if s.hasPrefix("+") { hunkLines.append(.added(String(s.dropFirst()))) }
             else if s.hasPrefix("-") { hunkLines.append(.removed(String(s.dropFirst()))) }
             else if s.hasPrefix(" ") { hunkLines.append(.context(String(s.dropFirst()))) }
             else if s.isEmpty { hunkLines.append(.context("")) }
             // ignore other diagnostics lines
+            i += 1
         }
         flushFile()
         return patches
+    }
+
+    /// Strip `a/`/`b/` prefixes and a `diff -u` tab+timestamp suffix.
+    private static func cleanDiffPath(_ raw: String) -> String {
+        var s = raw
+        if let tab = s.firstIndex(of: "\t") {
+            s = String(s[..<tab])
+        }
+        s = s.trimmingCharacters(in: .whitespaces)
+        if s == "/dev/null" { return s }
+        if s.hasPrefix("a/") || s.hasPrefix("b/") {
+            s = String(s.dropFirst(2))
+        }
+        return s
+    }
+
+    /// Deletion (`+++ /dev/null`) keeps the `---` source path; otherwise
+    /// the `+++` destination (new file, rename, edit).
+    private static func resolvedPatchPath(minus: String?, plus: String) -> String {
+        if plus == "/dev/null", let minus, minus != "/dev/null", !minus.isEmpty {
+            return minus
+        }
+        return plus
     }
 
     private static func parseHunkHeader(_ s: String) -> (Int, Int, Int, Int)? {
@@ -151,10 +191,12 @@ public enum UnifiedDiff {
             // search content (all additions). Insert replacement lines at
             // position 0 (or end if newStart > 1, but convention is pos 0).
             if expected.isEmpty {
-                // Insert all replacement lines before index `start` (0-based).
-                // If oldStart == 1, start = 0 → insert at beginning.
-                // Clamp to [0, lines.count].
-                let insertPos = max(0, min(start, lines.count))
+                // Context-free insert: oldStart 0 means beginning of file.
+                // oldStart past EOF must fail closed — never clamp-and-append.
+                let insertPos = hunk.oldStart <= 0 ? 0 : start
+                guard insertPos >= 0, insertPos <= lines.count else {
+                    return .failure("hunk @ line \(hunk.oldStart) extends past end of \(lines.count)-line file")
+                }
                 lines.insert(contentsOf: replacement, at: insertPos)
                 continue
             }

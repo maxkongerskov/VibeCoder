@@ -108,7 +108,9 @@ public actor RememberedGrants {
     ///
     /// Fingerprints the **full chain** so Always on `git status` never
     /// also matches `git status && npm install`. Each segment is peeled
-    /// (wrappers) and capped at 8 tokens; segments join with ` && `.
+    /// (wrappers); every remaining token is kept so Always on a long
+    /// `npm install … extra-ok` cannot also match `… EVILPKG`.
+    /// Segments join with ` && `.
     public static func fingerprint(command: String) -> String {
         let segs = SafeBash.segments(of: command)
         guard !segs.isEmpty else {
@@ -119,7 +121,7 @@ public actor RememberedGrants {
             if tokens.isEmpty {
                 return seg.trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            return tokens.prefix(8).joined(separator: " ")
+            return tokens.joined(separator: " ")
         }
         return parts.joined(separator: " && ")
     }
@@ -130,8 +132,12 @@ public actor RememberedGrants {
             ?? context.workingDirectory.path
     }
 
-    /// Whether grants allow access to `resolved` (exact path or under a `dir:` grant).
-    /// Tool-level allow (`toolName` with nil fingerprint) also matches.
+    /// Whether **path:/dir:** grants allow access to `resolved`.
+    ///
+    /// Tool-level Always (`toolName` + nil fingerprint) does **not** match —
+    /// that grant skips Ask for in-workspace calls, but must not skip
+    /// workspace confinement. Only `path:` / `dir:` fingerprints may
+    /// authorize an outside path. Path-specific Never overrides any allow.
     public static func allowsPath(
         _ resolved: URL,
         toolName: String,
@@ -141,9 +147,19 @@ public actor RememberedGrants {
         let normalized = SafeModeConfig.normalizePath(resolved.path)
         guard !normalized.isEmpty else { return false }
 
-        // Tool-level always-allow for this tool.
-        let toolKey = GrantKey(projectKey: projectKey, toolName: toolName, commandFingerprint: nil)
-        if grants[toolKey] == .allow { return true }
+        // Path-specific Never overrides tool-level Always and directory allow.
+        let pathKeyNever = GrantKey(
+            projectKey: projectKey,
+            toolName: Self.pathGrantToolName,
+            commandFingerprint: "path:" + normalized
+        )
+        if grants[pathKeyNever] == .never { return false }
+        let pathToolKeyNever = GrantKey(
+            projectKey: projectKey,
+            toolName: toolName,
+            commandFingerprint: "path:" + normalized
+        )
+        if grants[pathToolKeyNever] == .never { return false }
 
         // Exact path grant (path: or legacy bare).
         let pathFP = PathConfinement.pathGrantFingerprint(resolved)
@@ -155,12 +171,6 @@ public actor RememberedGrants {
         if grants[pathKey] == .allow { return true }
         let pathKeyTool = GrantKey(projectKey: projectKey, toolName: toolName, commandFingerprint: pathFP)
         if grants[pathKeyTool] == .allow { return true }
-
-        // Path-specific .never grants override directory .allow (most specific wins).
-        let pathKeyNever = GrantKey(projectKey: projectKey, toolName: Self.pathGrantToolName, commandFingerprint: "path:" + normalized)
-        if grants[pathKeyNever] == .never { return false }
-        let pathToolKeyNever = GrantKey(projectKey: projectKey, toolName: toolName, commandFingerprint: "path:" + normalized)
-        if grants[pathToolKeyNever] == .never { return false }
 
         // Directory grants: any ancestor dir: grant.
         for (key, decision) in grants {

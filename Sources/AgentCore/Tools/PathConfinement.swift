@@ -167,11 +167,16 @@ public enum PathConfinement {
     public static func directoryGrantFingerprint(_ url: URL) -> String {
         var isDir: ObjCBool = false
         let path = url.path
-        if FileManager.default.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
-            return "dir:" + SafeModeConfig.normalizePath(path)
+        if FileManager.default.fileExists(atPath: path, isDirectory: &isDir) {
+            if isDir.boolValue {
+                return "dir:" + SafeModeConfig.normalizePath(path)
+            }
+            // Existing file → grant its parent directory.
+            return "dir:" + SafeModeConfig.normalizePath(url.deletingLastPathComponent().path)
         }
-        // File path → grant parent directory.
-        return "dir:" + SafeModeConfig.normalizePath(url.deletingLastPathComponent().path)
+        // Missing path: treat it as the intended directory, not the parent.
+        // Otherwise "Always allow /tmp/new-project" would grant all of /tmp.
+        return "dir:" + SafeModeConfig.normalizePath(path)
     }
 
     /// Deepest common ancestor directory for a set of paths (for "Always allow folder").

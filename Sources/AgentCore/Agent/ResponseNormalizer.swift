@@ -109,10 +109,18 @@ public enum ResponseNormalizer {
                 usedInlineFallback: false)
         }
 
-        let parsed = InlineToolCallParser.extract(from: content)
+        // Never treat tool JSON rehearsed inside <think>…</think> as live calls.
+        let extractSource = ThinkTagSplit.parse(content).body
+        let parsed = InlineToolCallParser.extract(from: extractSource)
+        if parsed.calls.isEmpty {
+            return Result(
+                content: content.trimmingCharacters(in: .whitespacesAndNewlines),
+                toolCalls: [],
+                usedInlineFallback: false)
+        }
         return Result(
             content: parsed.cleaned,
             toolCalls: parsed.calls,
-            usedInlineFallback: !parsed.calls.isEmpty)
+            usedInlineFallback: true)
     }
 }

@@ -18,9 +18,12 @@ public enum ContextBudget {
     }
 
     /// Apply optional user cap (`maxContextWindowTokens`; 0 = no cap).
+    /// Effective window is `min(model, max)` when the user cap is set —
+    /// no 2048 floor (a 512-token model stays 512; a 1024 user cap stays 1024).
     public static func cappedWindow(modelWindow: Int, maxContextWindowTokens: Int) -> Int {
-        guard maxContextWindowTokens > 0 else { return max(2_048, modelWindow) }
-        return max(2_048, min(modelWindow, maxContextWindowTokens))
+        let window = max(1, modelWindow)
+        guard maxContextWindowTokens > 0 else { return window }
+        return max(1, min(window, maxContextWindowTokens))
     }
 
     /// Budget = threshold% of the (possibly capped) window.

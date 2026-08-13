@@ -247,16 +247,16 @@ public actor AgentOSServeServer {
             return
         }
 
-        let schemas: [ToolSchema]
+        // Serve's opt-in attaches ToolRegistry schemas on the proxy request.
+        // Do not route through `ServeToolsPolicy.tools(.agentLoop)` — that
+        // helper returns `[]` because LocalAPI loads tools inside AgentLoop.
+        let tools: [ToolSchema]
         if agentToolsEnabled {
             await ToolRegistry.shared.registerBuiltins()
-            schemas = await ToolRegistry.shared.schemas()
+            tools = await ToolRegistry.shared.schemas()
         } else {
-            schemas = []
+            tools = []
         }
-        let tools = ServeToolsPolicy.tools(
-            policy: .resolve(agentToolsEnabled: agentToolsEnabled),
-            registeredSchemas: schemas)
 
         let model = ModelDescriptor(id: modelID, displayName: modelID, backend: backend.identifier)
         let streamID = UUID()
