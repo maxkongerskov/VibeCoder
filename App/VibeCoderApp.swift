@@ -33,6 +33,7 @@ struct VibeCoderApp: App {
                 case .ready:
                     RootView()
                         .environmentObject(app)
+                        .hidesSystemFocusRing()
                         .transition(.opacity)
                 }
             }

@@ -122,6 +122,7 @@ struct MentionAwareComposer: View {
             }
         }
         .focusable()
+        .hidesSystemFocusRing()
         .onKeyPress(.upArrow) {
             guard mentionSearch.showPopup else { return .ignored }
             mentionSearch.selectPrevious()

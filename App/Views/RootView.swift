@@ -172,6 +172,7 @@ struct RootView: View {
         )
         .toolbarBackground(.hidden, for: .windowToolbar)
         .modifier(RemoveWindowTitleModifier())
+        .hidesSystemFocusRing()
     }
 
     private var navigationWithSheets: some View {

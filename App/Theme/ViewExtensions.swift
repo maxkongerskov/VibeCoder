@@ -21,6 +21,13 @@ extension View {
                     .stroke(Theme.Palette.divider, lineWidth: 0.5)
             )
     }
+
+    /// Hide SwiftUI's default keyboard-focus chrome (the blue rounded
+    /// rectangle). Designed surfaces already have their own hover/focus
+    /// treatment; the system ring is not part of the UI.
+    func hidesSystemFocusRing() -> some View {
+        self.focusEffectDisabled()
+    }
 }
 
 /// Bridges `NSVisualEffectView` into SwiftUI so views can use authentic
@@ -91,5 +98,20 @@ struct WindowChromeAdjuster: NSViewRepresentable {
         // Content draws under the titlebar so sidebar collapse doesn't
         // leave a titled dead strip; traffic lights stay usable.
         window.styleMask.insert(.fullSizeContentView)
+
+        // AppKit draws its own blue focus ring on NSTextField / NSTextView
+        // and on any `.focusable()` SwiftUI host. Strip it for the window.
+        if let content = window.contentView {
+            stripAppKitFocusRings(in: content)
+        }
+    }
+
+    private static func stripAppKitFocusRings(in view: NSView) {
+        if view.focusRingType != .none {
+            view.focusRingType = .none
+        }
+        for child in view.subviews {
+            stripAppKitFocusRings(in: child)
+        }
     }
 }

@@ -398,6 +398,7 @@ struct InputBarViewV2: View {
                 axis: .vertical
             )
             .textFieldStyle(.plain)
+            .hidesSystemFocusRing()
             .font(Theme.Typography.body(size: fontSize))
             .foregroundStyle(Theme.Palette.primary)
             .lineLimit(1 ... Theme.ChatLayout.inputEditorMaxLines)
