@@ -137,6 +137,86 @@ final class HookDispatcherV2Tests: XCTestCase {
             denied.message ?? "nil")
     }
 
+    // MARK: - Worktree cwd fallback (bound-but-missing worktree)
+
+    /// A bound worktree that does not exist on disk (deleted, or never
+    /// created) must not fail-open the hook: the project-root deny hook has
+    /// to run and deny. (Regression: the hook process was spawned with the
+    /// missing worktree as cwd → chdir ENOENT → spawn failure → fail-open,
+    /// so deny hooks silently stopped working for worktree-bound chats.)
+    func testUserPromptSubmitDeniesWhenWorktreeMissing() throws {
+        let script = hooks.appendingPathComponent("deny-prompt-wt.sh")
+        try """
+        #!/bin/sh
+        exit 2
+        """.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        let config: [String: Any] = [
+            "hooks": [
+                "UserPromptSubmit": [
+                    ["hooks": [["type": "command", "command": "deny-prompt-wt.sh"]]]
+                ]
+            ]
+        ]
+        try JSONSerialization.data(withJSONObject: config)
+            .write(to: hooks.appendingPathComponent("hooks.json"))
+
+        // Sibling worktree path that does not exist on disk.
+        let missingWorktree = root.appendingPathComponent("agentcore-deadbeef")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missingWorktree.path))
+
+        let denied = HookDispatcher.userPromptSubmit(
+            prompt: "this should be blocked",
+            projectRoot: root,
+            worktreeRoot: missingWorktree)
+        XCTAssertFalse(
+            denied.allow,
+            "deny hook must fire even when the bound worktree is missing: \(denied.message ?? "nil")")
+    }
+
+    /// When the worktree DOES exist, hooks run with the worktree as cwd
+    /// (hooks see the worktree as the project dir) — the pre-fix behavior
+    /// that the missing-worktree fallback must not regress.
+    func testUserPromptSubmitRunsWorktreeAsCwdWhenItExists() throws {
+        let worktree = root.appendingPathComponent("agentcore-live")
+        try FileManager.default.createDirectory(
+            at: worktree, withIntermediateDirectories: true)
+
+        let marker = worktree.appendingPathComponent("cwd-check.txt")
+        let script = hooks.appendingPathComponent("cwd-check.sh")
+        try """
+        #!/bin/sh
+        echo "$PWD" > "\(marker.path)"
+        exit 0
+        """.write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        let config: [String: Any] = [
+            "hooks": [
+                "UserPromptSubmit": [
+                    ["hooks": [["type": "command", "command": "cwd-check.sh"]]]
+                ]
+            ]
+        ]
+        try JSONSerialization.data(withJSONObject: config)
+            .write(to: hooks.appendingPathComponent("hooks.json"))
+
+        let d = HookDispatcher.userPromptSubmit(
+            prompt: "hello",
+            projectRoot: root,
+            worktreeRoot: worktree)
+        XCTAssertTrue(d.allow)
+        let cwd = try String(contentsOf: marker, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        XCTAssertEqual(
+            URL(fileURLWithPath: cwd).standardizedFileURL.path,
+            worktree.standardizedFileURL.path,
+            "hook cwd must be the existing worktree")
+    }
+
     // MARK: - SessionStart / Stop smoke
 
     func testSessionStartRunsCommand() throws {

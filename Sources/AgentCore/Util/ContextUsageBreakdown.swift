@@ -31,19 +31,52 @@ public struct ContextUsageBreakdown: Sendable, Equatable {
     /// Effective model context window after user max-window cap.
     public let windowTokens: Int
     public let compactThresholdPercent: Double
+    /// True when `totalTokens` is anchored to the model server's actual
+    /// `prompt_tokens` (calibrated) rather than the pure chars/4 estimate.
+    /// Category rows are proportionally rescaled to sum to the calibrated
+    /// total, so the breakdown stays internally consistent.
+    public let isCalibrated: Bool
 
     public init(
         categories: [Category],
         totalTokens: Int,
         budgetTokens: Int,
         windowTokens: Int,
-        compactThresholdPercent: Double
+        compactThresholdPercent: Double,
+        isCalibrated: Bool = false
     ) {
         self.categories = categories
         self.totalTokens = totalTokens
         self.budgetTokens = budgetTokens
         self.windowTokens = windowTokens
         self.compactThresholdPercent = compactThresholdPercent
+        self.isCalibrated = isCalibrated
+    }
+
+    /// Return a copy anchored to an actual server-reported token total:
+    /// `totalTokens` becomes `calibratedTotal` and each category is
+    /// proportionally rescaled so the rows still sum to the total. Used when
+    /// the meter is calibrated to real model usage instead of the estimate.
+    /// If either total is non-positive, returns `self` unchanged.
+    public func calibrated(to calibratedTotal: Int) -> ContextUsageBreakdown {
+        guard totalTokens > 0, calibratedTotal > 0 else { return self }
+        let scale = Double(calibratedTotal) / Double(totalTokens)
+        let rescaled = categories.map { cat in
+            Category(
+                id: cat.id,
+                label: cat.label,
+                tokens: Int((Double(cat.tokens) * scale).rounded()),
+                detail: cat.detail
+            )
+        }
+        return ContextUsageBreakdown(
+            categories: rescaled,
+            totalTokens: calibratedTotal,
+            budgetTokens: budgetTokens,
+            windowTokens: windowTokens,
+            compactThresholdPercent: compactThresholdPercent,
+            isCalibrated: true
+        )
     }
 
     public var budgetFraction: Double {

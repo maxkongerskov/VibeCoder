@@ -133,4 +133,36 @@ final class OpenAICompatibleClientTests: XCTestCase {
         consume.cancel()
         _ = try? await consume.value
     }
+
+    // MARK: - stream_options.include_usage (context-meter calibration)
+
+    private func encodedBodyJSON(_ body: ChatCompletionRequestBody) throws -> [String: Any] {
+        let data = try JSONEncoder().encode(body)
+        return try JSONSerialization.jsonObject(with: data) as? [String: Any] ?? [:]
+    }
+
+    func testRequestBodyRequestsUsageWhenStreaming() throws {
+        let body = ChatCompletionRequestBody(
+            model: "test",
+            messages: [.init(role: "user", content: "hi")],
+            sampling: .coder,
+            stream: true)
+        let json = try encodedBodyJSON(body)
+        XCTAssertEqual(json["stream"] as? Bool, true)
+        let opts = json["stream_options"] as? [String: Any]
+        XCTAssertEqual(opts?["include_usage"] as? Bool, true,
+                       "streaming requests must ask the server for usage stats")
+    }
+
+    func testRequestBodyOmitsStreamOptionsWhenNotStreaming() throws {
+        let body = ChatCompletionRequestBody(
+            model: "test",
+            messages: [.init(role: "user", content: "hi")],
+            sampling: .coder,
+            stream: false)
+        let json = try encodedBodyJSON(body)
+        XCTAssertEqual(json["stream"] as? Bool, false)
+        XCTAssertNil(json["stream_options"],
+                     "stream_options is only valid with stream:true; must be omitted otherwise")
+    }
 }

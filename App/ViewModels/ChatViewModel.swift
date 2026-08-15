@@ -24,6 +24,23 @@ final class ChatViewModel: ObservableObject {
     private var pendingContentDelta = ""
     private var pendingReasoningDelta = ""
     private var streamFlushTask: Task<Void, Never>?
+
+    // ── Context-meter calibration (real usage anchor) ─────────────────
+    /// Actual `prompt_tokens` from the most recent model response. nil until
+    /// the first server-reported usage arrives (or the server doesn't report
+    /// usage, in which case the meter stays on the chars/4 estimate).
+    /// Internal (not private) so tests can seed the anchor directly.
+    internal var usageAnchorPromptTokens: Int?
+    /// Chars/4 estimate of the conversation at the moment
+    /// `usageAnchorPromptTokens` was captured — request only, excluding the
+    /// in-flight streaming reply (the server's prompt_tokens covers the
+    /// request, not the reply still being generated). The meter adds the
+    /// estimated growth since this anchor to the real number.
+    internal var usageAnchorEstimatedTotal: Int?
+    /// Conversation + model the anchor was captured for. A mismatch (new chat
+    /// or model switch) means the anchor is stale and must be ignored.
+    internal var usageAnchorConversationID: UUID?
+    internal var usageAnchorModelID: String?
     /// Quiet human-facing status. Never shows iteration/loop counters.
     @Published var statusLine: String = ""
     @Published var pendingPatch: PendingPatch?          // patch awaiting review
@@ -213,8 +230,14 @@ final class ChatViewModel: ObservableObject {
     /// Optional hook for unit tests to observe the resolved loop config.
     internal var onLoopConfigPrepared: ((AgentLoop.Configuration) -> Void)?
 
-    /// Live estimated tokens for the context-usage chip (ARCHITECTURE §4.2).
+    /// Live tokens for the context-usage chip (ARCHITECTURE §4.2).
+    /// Calibrated to the server's actual `prompt_tokens` when a valid anchor
+    /// exists (see `calibratedContextTotal`); otherwise the chars/4 wire
+    /// estimate, including the in-flight reasoning.
     var liveContextTokens: Int {
+        if let calibrated = calibratedContextTotal {
+            return calibrated
+        }
         let systemEstimate = TokenEstimator.estimate(app?.settings.systemPrompt ?? "")
         return ChatLoop.estimateTotalTokens(
             systemPromptTokens: systemEstimate,
@@ -269,12 +292,18 @@ final class ChatViewModel: ObservableObject {
     }
 
     /// Breakdown for the context inspector sheet (ZCode parity).
+    ///
+    /// Calibrated to the model server's actual `prompt_tokens` when a valid
+    /// anchor exists: the real baseline (tokens the model last saw) plus the
+    /// estimated growth since that response. Falls back to the pure chars/4
+    /// estimate when the server doesn't report usage or the anchor is stale
+    /// (new chat / model switch / conversation shrank).
     var contextUsageBreakdown: ContextUsageBreakdown {
         let pct = app?.settings.autoCompactThresholdPercent ?? 70
         let window = liveContextWindow ?? liveContextBudget ?? 32_768
         let budget = liveContextBudget
             ?? ContextBudget.budgetTokens(effectiveContextLength: window, compactThresholdPercent: pct)
-        return ContextUsageBreakdown.build(
+        var breakdown = ContextUsageBreakdown.build(
             systemPrompt: app?.settings.systemPrompt ?? "",
             messages: conversation.messages,
             streamingContent: streamingContent,
@@ -282,6 +311,57 @@ final class ChatViewModel: ObservableObject {
             windowTokens: window,
             budgetTokens: budget,
             compactThresholdPercent: pct)
+        // Anchor the headline total to the server's actual prompt_tokens (the
+        // same number the status-bar meter shows) and rescale the category
+        // rows to match, so the sheet stays consistent with the composer meter.
+        if let calibratedTotal = calibratedContextTotal {
+            breakdown = breakdown.calibrated(to: calibratedTotal)
+        }
+        return breakdown
+    }
+
+    /// Wire-oriented estimate of the current context — what the model will
+    /// actually see: system prompt + stored messages + the in-flight reply
+    /// content. Uses `ChatLoop.estimateTotalTokens` (the same wire model the
+    /// server's `prompt_tokens` reports), so it is directly comparable to the
+    /// real usage. Reasoning is excluded because the wire encoding omits it.
+    private func wireContextEstimate() -> Int {
+        let systemEstimate = TokenEstimator.estimate(app?.settings.systemPrompt ?? "")
+        return ChatLoop.estimateTotalTokens(
+            systemPromptTokens: systemEstimate,
+            messages: conversation.messages)
+            + TokenEstimator.estimate(streamingContent)
+    }
+
+    /// The context total calibrated to the model server's actual
+    /// `prompt_tokens`: the real baseline (tokens the model last saw) plus the
+    /// estimated growth since that response. Returns nil when no valid anchor
+    /// exists — the server doesn't report usage, the conversation switched,
+    /// the model changed, or the conversation shrank (stale anchor). Callers
+    /// fall back to the pure estimate in that case.
+    private var calibratedContextTotal: Int? {
+        guard let promptTokens = usageAnchorPromptTokens,
+              let anchorEstimate = usageAnchorEstimatedTotal,
+              usageAnchorConversationID == conversation.id,
+              usageAnchorModelID == activeThinkingModelID
+        else { return nil }
+        let now = wireContextEstimate()
+        guard now >= anchorEstimate else { return nil }
+        return promptTokens + (now - anchorEstimate)
+    }
+
+    /// Record the server-reported usage as the meter's calibration anchor.
+    /// Captures the request-only wire estimate (no in-flight streaming reply,
+    /// which the server's prompt_tokens does not cover) so the meter adds only
+    /// the estimated growth since this response.
+    private func recordUsageAnchor(promptTokens: Int) {
+        let systemEstimate = TokenEstimator.estimate(app?.settings.systemPrompt ?? "")
+        usageAnchorPromptTokens = promptTokens
+        usageAnchorEstimatedTotal = ChatLoop.estimateTotalTokens(
+            systemPromptTokens: systemEstimate,
+            messages: conversation.messages)
+        usageAnchorConversationID = conversation.id
+        usageAnchorModelID = activeThinkingModelID
     }
 
     /// Model id used for thinking-effort UI + request encoding.
@@ -1444,6 +1524,8 @@ final class ChatViewModel: ObservableObject {
 
         case .contextCompacted(let preview, let dropped):
             handleContextCompacted(preview: preview, dropped: dropped)
+        case .usage(let promptTokens, let completionTokens):
+            recordUsageAnchor(promptTokens: promptTokens)
         }
     }
 
@@ -1749,6 +1831,9 @@ final class ChatViewModel: ObservableObject {
         case .toolAllowlistStripped(_, let summary, _, _):
             // P8: custom agent / subagent tool strip → status line.
             handleInfoStatus(summary)
+
+        case .usage(let promptTokens, let completionTokens):
+            recordUsageAnchor(promptTokens: promptTokens)
         }
     }
 

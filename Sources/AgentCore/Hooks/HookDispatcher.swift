@@ -382,7 +382,20 @@ public enum HookDispatcher {
             phase: logPhase,
             line: "\(eventName) \(payload.prefix(160))"
         )
-        let cwd = worktreeRoot ?? projectRoot ?? dir.deletingLastPathComponent()
+        // Hook cwd: the worktree when it exists on disk (hooks see the
+        // worktree as the project dir). A bound-but-missing worktree (deleted,
+        // or never created) would make Process spawn fail (chdir ENOENT) and
+        // fail-open — silently skipping deny hooks — so fall back to the
+        // project root, then the hooks dir's parent.
+        let cwd: URL
+        if let worktree = worktreeRoot,
+           FileManager.default.fileExists(atPath: worktree.path) {
+            cwd = worktree
+        } else if let project = projectRoot {
+            cwd = project
+        } else {
+            cwd = dir.deletingLastPathComponent()
+        }
         let config = loadConfig(hooksDir: dir)
         let matched = groups(config)
         for group in matched where matcherMatches(group.matcher, toolName: subject) {
@@ -758,6 +771,16 @@ public enum HookDispatcher {
         process.standardOutput = outPipe
         process.standardError = errPipe
 
+        // Wait for exit via terminationHandler (Foundation dispatches it
+        // outside the global thread pool). Set BEFORE run() so a fast-exiting
+        // child can't slip past handler registration. Blocking a
+        // global(qos: .userInitiated) thread on waitUntilExit instead would
+        // starve the pool when many hooks/processes run concurrently — under
+        // load the waiter itself could queue past the timeout and spuriously
+        // fail open a deny hook.
+        let exitSignal = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exitSignal.signal() }
+
         do {
             try process.run()
         } catch {
@@ -796,18 +819,11 @@ public enum HookDispatcher {
             try? inPipe.fileHandleForWriting.close()
         }
 
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global(qos: .userInitiated).async {
-            process.waitUntilExit()
-            group.leave()
-        }
-
-        let waitResult = group.wait(timeout: .now() + timeoutSeconds)
+        let waitResult = exitSignal.wait(timeout: .now() + timeoutSeconds)
         if waitResult == .timedOut {
             process.terminate()
             // Reap
-            _ = group.wait(timeout: .now() + 1)
+            _ = exitSignal.wait(timeout: .now() + 1)
             outPipe.fileHandleForReading.readabilityHandler = nil
             errPipe.fileHandleForReading.readabilityHandler = nil
             return .failed("timed out after \(Int(timeoutSeconds))s")

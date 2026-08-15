@@ -357,6 +357,15 @@ public struct ChatCompletionRequestBody: Encodable, @unchecked Sendable {
         self.stream = stream
     }
 
+    /// `stream_options: {include_usage: true}` — asks the server to append a
+    /// final usage chunk (prompt/completion token counts) to a streaming
+    /// response. OpenAI-standard; only valid with `stream: true`, and safely
+    /// ignored (not an error) by servers that lack the feature.
+    struct StreamOptions: Encodable {
+        let includeUsage: Bool
+        enum CodingKeys: String, CodingKey { case includeUsage = "include_usage" }
+    }
+
     // Custom encoder: standard fields first, then merge extraBody.
     //
     // We use a single DynamicKey-keyed container so arbitrary top-level
@@ -373,6 +382,12 @@ public struct ChatCompletionRequestBody: Encodable, @unchecked Sendable {
         try c.encode(topP, forKey: DynamicKey(stringValue: "top_p"))
         try c.encodeIfPresent(maxTokens, forKey: DynamicKey(stringValue: "max_tokens"))
         try c.encode(stream, forKey: DynamicKey(stringValue: "stream"))
+        // Request per-response usage stats so the context meter can calibrate
+        // to the model's actual token counts instead of the chars/4 estimate.
+        if stream {
+            try c.encode(StreamOptions(includeUsage: true),
+                         forKey: DynamicKey(stringValue: "stream_options"))
+        }
         // Merge thinking/reasoning params from extraBody into the JSON.
         for (key, value) in extraBody {
             if let s = value as? String {

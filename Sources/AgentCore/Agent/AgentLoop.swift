@@ -681,9 +681,13 @@ public actor AgentLoop {
                         streamAccumulator.ingestToolCallDelta(
                             index: index, id: id, name: name, argumentsAppend: argsAppend)
                     case .usage(let promptTokens, let completionTokens):
-                        // Calibrate context meter / diagnostics (was ignored).
-                        await events(.info(
-                            "usage prompt=\(promptTokens) completion=\(completionTokens)"))
+                        // Surface the server's actual token counts so the
+                        // context meter can calibrate to real usage instead of
+                        // the chars/4 estimate. Ignored by the UI when a server
+                        // doesn't report usage (no event is emitted).
+                        await events(.usage(
+                            promptTokens: promptTokens,
+                            completionTokens: completionTokens))
                     case .done(let reason):
                         finishReason = reason
                     }
@@ -1825,4 +1829,10 @@ public enum LoopEvent: Sendable {
     case stepFinished(iteration: Int, summary: String?)
     /// Semantic context compaction replaced older turns with a summary.
     case contextCompacted(summaryPreview: String, droppedMessages: Int)
+    /// Actual token usage reported by the model server for the request that
+    /// just completed (`promptTokens` = tokens the model saw, `completionTokens`
+    /// = tokens it generated). Lets the context meter calibrate to real usage
+    /// instead of the chars/4 estimate. Servers that don't report usage never
+    /// emit this, so the meter falls back to the estimate.
+    case usage(promptTokens: Int, completionTokens: Int)
 }

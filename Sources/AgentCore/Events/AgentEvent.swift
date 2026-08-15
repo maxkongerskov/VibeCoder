@@ -122,6 +122,12 @@ public enum AgentEvent: Sendable {
     /// a short notice (not silent).
     case contextCompacted(summaryPreview: String, droppedMessages: Int)
 
+    /// Actual token usage reported by the model server for the request that
+    /// just completed. The UI uses this to calibrate the context meter to
+    /// real usage instead of the chars/4 estimate. Never emitted by servers
+    /// that don't report usage, so the meter falls back to the estimate.
+    case usage(promptTokens: Int, completionTokens: Int)
+
     /// A file mutation hunk was recorded (hunk tracker).
     case hunkRecorded(hunkID: UUID, path: String)
 
@@ -233,6 +239,9 @@ public enum AgentEvent: Sendable {
 
         case .contextCompacted(let preview, let dropped):
             return [.contextCompacted(summaryPreview: preview, droppedMessages: dropped)]
+
+        case .usage(let promptTokens, let completionTokens):
+            return [.usage(promptTokens: promptTokens, completionTokens: completionTokens)]
 
         }
     }

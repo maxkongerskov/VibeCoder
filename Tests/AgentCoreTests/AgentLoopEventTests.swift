@@ -94,6 +94,7 @@ case .reasoningDelta:               return "reasoningDelta"
     case .stepStarted(let i):          return "stepStarted(\(i))"
     case .stepFinished(let i, let s):  return "stepFinished(\(i),\(s ?? ""))"
     case .contextCompacted(_, let n):  return "contextCompacted(\(n))"
+    case .usage(let p, let c):         return "usage(p=\(p),c=\(c))"
 }
 }
 
@@ -122,6 +123,7 @@ case .reasoningDelta:   return "reasoningDelta"
         case .stepStarted:      return "stepStarted"
         case .stepFinished:     return "stepFinished"
         case .contextCompacted: return "contextCompacted"
+        case .usage:            return "usage"
     }
 }
 }

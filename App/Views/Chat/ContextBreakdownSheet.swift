@@ -102,7 +102,7 @@ private struct ContextBreakdownContent: View {
             summaryTile(
                 title: "Used",
                 value: format(breakdown.totalTokens),
-                subtitle: "estimated"
+                subtitle: breakdown.isCalibrated ? "measured" : "estimated"
             )
             summaryTile(
                 title: "Compact at",
@@ -221,12 +221,21 @@ private struct ContextBreakdownContent: View {
     }
 
     private var footerNote: some View {
-        Text(compact
-            ? "Estimates ~4 chars/token. Threshold: Settings → Context."
-            : "Estimates use ~4 characters per token. Threshold is set in Settings → Context → Auto-compact. Compaction affects the model prompt only — the transcript you see stays full.")
+        Text(footerText)
             .font(.system(size: 10))
             .foregroundStyle(Theme.Palette.tertiary)
             .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var footerText: String {
+        if breakdown.isCalibrated {
+            return compact
+                ? "Calibrated to the model's reported token usage. Threshold: Settings → Context."
+                : "Calibrated to the model's reported token usage; growth since the last response is estimated. Threshold is set in Settings → Context → Auto-compact. Compaction affects the model prompt only — the transcript you see stays full."
+        }
+        return compact
+            ? "Estimates ~4 chars/token. Threshold: Settings → Context."
+            : "Estimates use ~4 characters per token. Threshold is set in Settings → Context → Auto-compact. Compaction affects the model prompt only — the transcript you see stays full."
     }
 
     private func format(_ n: Int) -> String {
