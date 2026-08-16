@@ -80,6 +80,8 @@ public final class MCPCallbackServer: @unchecked Sendable {
     private var continuation: CheckedContinuation<MCPOAuthCallback, Error>?
     private let stateLock = NSLock()
     private var hasReceived = false
+    /// Fast redirect that arrived before `waitForCallback` armed.
+    private var pendingCallback: MCPOAuthCallback?
 
     public init() {}
 
@@ -228,6 +230,13 @@ public final class MCPCallbackServer: @unchecked Sendable {
     public func waitForCallback(timeout: TimeInterval) async throws -> MCPOAuthCallback {
         try await withCheckedThrowingContinuation { cont in
             stateLock.lock()
+            if let buffered = pendingCallback {
+                pendingCallback = nil
+                hasReceived = true
+                stateLock.unlock()
+                cont.resume(returning: buffered)
+                return
+            }
             self.continuation = cont
             stateLock.unlock()
 
@@ -321,14 +330,18 @@ public final class MCPCallbackServer: @unchecked Sendable {
             self.respond(connection: connection, status: 200,
                          body: html)
 
-            // Signal the waiting coordinator.
+            // Signal the waiting coordinator. If waitForCallback has not
+            // armed yet, buffer the result so a fast redirect is not dropped.
             self.stateLock.lock()
+            let parsed = MCPOAuthCallback(code: code, state: state)
             if !self.hasReceived, let cont = self.continuation {
                 self.hasReceived = true
                 self.continuation = nil
                 self.stateLock.unlock()
-                cont.resume(returning: MCPOAuthCallback(
-                    code: code, state: state))
+                cont.resume(returning: parsed)
+            } else if !self.hasReceived {
+                self.pendingCallback = parsed
+                self.stateLock.unlock()
             } else {
                 self.stateLock.unlock()
             }

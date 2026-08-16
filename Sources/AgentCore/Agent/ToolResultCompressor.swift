@@ -45,6 +45,8 @@ public enum ToolResultCompressor {
         let eligibleIndices = eligibleToolMessageIndices(in: working)
         for idx in eligibleIndices {
             let msg = working[idx]
+            // Already micro-cleared — do not re-summarize the marker.
+            if MicroCompactor.isClearedToolResult(msg.content) { continue }
             guard msg.content.count > threshold else { continue }
             let tName = toolName(for: msg, in: working)
             working[idx].content = summarize(result: msg.content, toolName: tName)

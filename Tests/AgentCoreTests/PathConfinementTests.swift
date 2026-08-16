@@ -75,6 +75,30 @@ final class PathConfinementTests: XCTestCase {
 
     // MARK: - Safe Mode off (nil)
 
+    func testFilesystemRootIsNotAUsableWorkspace() {
+        XCTAssertFalse(PathConfinement.isUsableWorkspaceRoot(URL(fileURLWithPath: "/")))
+        XCTAssertNil(PathConfinement.usableWorkspaceRoot(URL(fileURLWithPath: "/")))
+        XCTAssertNil(PathConfinement.usableWorkspaceRoot(nil))
+    }
+
+    func testWorkspaceRootsSkipFilesystemRootCWD() {
+        let ctx = ToolContext(
+            projectRoot: nil,
+            worktreeRoot: nil,
+            conversationID: UUID(),
+            executionMode: .yolo
+        )
+        // ToolContext.workingDirectory is process CWD; even if that is `/`,
+        // confinement must not treat the whole disk as the workspace.
+        let roots = PathConfinement.workspaceRoots(for: ctx)
+        for root in roots {
+            XCTAssertNotEqual(SafeModeConfig.normalizePath(root.path), "/")
+        }
+        if FileManager.default.currentDirectoryPath == "/" {
+            XCTAssertTrue(roots.isEmpty, "CWD `/` must produce zero workspace roots")
+        }
+    }
+
     func testAbsolutePathOutsideProjectDeniedWhenSafeModeOff() async {
         let ctx = context(safeMode: nil, mode: .yolo)
         await assertDenied(

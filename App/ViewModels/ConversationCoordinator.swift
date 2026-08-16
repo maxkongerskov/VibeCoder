@@ -8,13 +8,37 @@
 import Foundation
 import AgentCore
 
+/// Merge a sidebar metadata row with the live `ChatViewModel` transcript
+/// before disk write. The list array is often a pre-turn snapshot; saving
+/// it last-write-wins can drop an in-flight turn on relaunch.
+enum ConversationSaveMerge {
+    static func snapshot(listRow: Conversation, live: Conversation?) -> Conversation {
+        guard var live else { return listRow }
+        live.title = listRow.title
+        live.pinned = listRow.pinned
+        live.archived = listRow.archived
+        live.projectRoot = listRow.projectRoot
+        live.updatedAt = listRow.updatedAt
+        return live
+    }
+}
+
 @MainActor
 final class ConversationCoordinator: ObservableObject {
 
     weak var host: AppViewModel?
 
+    /// Test seam. Production uses `ConversationStore.shared`.
+    var conversationStore: any ConversationStoring = ConversationStore.shared
+
     @Published var conversations: [Conversation] = []
-    @Published var selectedConversationID: UUID?
+    @Published var selectedConversationID: UUID? {
+        // Session-scoped permission grants ("Allow for this session") are
+        // keyed by conversation — keep the coordinator's scope in sync.
+        didSet { host?.shellApprovalCoordinatorService.activeConversationID = selectedConversationID }
+    }
+    /// JSON files `listDirectory()` could not decode. Sidebar banner + Show in Finder.
+    @Published var unloadableConversations: [ConversationLoadFailure] = []
 
     private var chatViewModels: [UUID: ChatViewModel] = [:]
     private var scheduler: SchedulerService?
@@ -46,7 +70,7 @@ final class ConversationCoordinator: ObservableObject {
             convo.projectRoot = URL(fileURLWithPath: (folder as NSString).expandingTildeInPath)
         }
         conversations.insert(convo, at: 0)
-        try? await ConversationStore.shared.save(convo)
+        try? await conversationStore.save(convo)
 
         let prompt = [task.shortPrompt, task.longPrompt]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -74,7 +98,7 @@ final class ConversationCoordinator: ObservableObject {
         convo.modelID = host.selectedModelID
         conversations.insert(convo, at: 0)
         selectedConversationID = convo.id
-        Task { try? await ConversationStore.shared.save(convo) }
+        Task { try? await conversationStore.save(convo) }
     }
 
     @discardableResult
@@ -85,7 +109,7 @@ final class ConversationCoordinator: ObservableObject {
         convo.projectRoot = project.url
         conversations.insert(convo, at: 0)
         selectedConversationID = convo.id
-        Task { try? await ConversationStore.shared.save(convo) }
+        Task { try? await conversationStore.save(convo) }
         return convo.id
     }
 
@@ -95,6 +119,7 @@ final class ConversationCoordinator: ObservableObject {
         }
         conversations.removeAll { $0.id == id }
         chatViewModels.removeValue(forKey: id)
+        host?.shellApprovalCoordinatorService.sessionGrants.clearConversation(id)
         // Prefer next visible (non-archived) task — never land on an archived row
         // that is hidden from the sidebar (C2).
         if selectedConversationID == id {
@@ -104,7 +129,7 @@ final class ConversationCoordinator: ObservableObject {
             // Only jobs owned by this conversation — never kill other chats' work.
             await BackgroundJobManager.shared.cleanup(conversationID: id)
             do {
-                try await ConversationStore.shared.delete(id: id)
+                try await conversationStore.delete(id: id)
             } catch {
                 Diagnostics.error("deleteConversation(\(id)): \(error.localizedDescription)")
             }
@@ -119,8 +144,7 @@ final class ConversationCoordinator: ObservableObject {
         if let vm = chatViewModels[id] {
             vm.conversation.title = trimmed
         }
-        let snapshot = conversations[idx]
-        Task { try? await ConversationStore.shared.save(snapshot) }
+        persistMergedConversation(id: id)
     }
 
     func togglePin(_ id: UUID) {
@@ -129,8 +153,7 @@ final class ConversationCoordinator: ObservableObject {
         if let vm = chatViewModels[id] {
             vm.conversation.pinned = conversations[idx].pinned
         }
-        let snapshot = conversations[idx]
-        Task { try? await ConversationStore.shared.save(snapshot) }
+        persistMergedConversation(id: id)
     }
 
     func archiveConversation(_ id: UUID) {
@@ -142,8 +165,7 @@ final class ConversationCoordinator: ObservableObject {
         if selectedConversationID == id {
             selectedConversationID = conversations.first(where: { !$0.archived })?.id
         }
-        let snapshot = conversations[idx]
-        Task { try? await ConversationStore.shared.save(snapshot) }
+        persistMergedConversation(id: id)
     }
 
     func moveConversationDown(_ id: UUID) {
@@ -165,12 +187,8 @@ final class ConversationCoordinator: ObservableObject {
         if conversations[bIdx].updatedAt <= newAdate {
             conversations[bIdx].updatedAt = newAdate.addingTimeInterval(1)
         }
-        let snapA = conversations[aIdx]
-        let snapB = conversations[bIdx]
-        Task {
-            try? await ConversationStore.shared.save(snapA)
-            try? await ConversationStore.shared.save(snapB)
-        }
+        persistMergedConversation(id: id)
+        persistMergedConversation(id: belowID)
     }
 
     func moveConversationToProject(_ id: UUID, project: Project?) {
@@ -179,8 +197,7 @@ final class ConversationCoordinator: ObservableObject {
         if let vm = chatViewModels[id] {
             vm.conversation.projectRoot = project?.url
         }
-        let snapshot = conversations[idx]
-        Task { try? await ConversationStore.shared.save(snapshot) }
+        persistMergedConversation(id: id)
     }
 
     func sidebarOrderedConversations() -> [Conversation] {
@@ -218,7 +235,7 @@ final class ConversationCoordinator: ObservableObject {
         selectedConversationID = copy.id
         Task {
             do {
-                try await ConversationStore.shared.save(copy)
+                try await conversationStore.save(copy)
             } catch {
                 Diagnostics.error("duplicateConversation save: \(error.localizedDescription)")
             }
@@ -238,15 +255,17 @@ final class ConversationCoordinator: ObservableObject {
             // conversation so Delete All cannot leave orphan workers running.
             for id in ids {
                 await BackgroundJobManager.shared.cleanup(conversationID: id)
-                try? await ConversationStore.shared.delete(id: id)
+                try? await conversationStore.delete(id: id)
             }
         }
     }
 
     func refreshConversations() async {
         do {
-            let list = try await ConversationStore.shared.list()
-            self.conversations = list
+            let listing = try await conversationStore.listDirectory()
+            self.conversations = listing.conversations
+            self.unloadableConversations = listing.unloadable
+            let list = listing.conversations
             let visible = list.filter { !$0.archived }
             // Auto-select first *visible* task only. Selecting an archived
             // conversation left the detail pane on a chat missing from the
@@ -278,14 +297,7 @@ final class ConversationCoordinator: ObservableObject {
             if let vm = chatViewModels[conversations[i].id] {
                 vm.conversation.projectRoot = nil
             }
-            let snapshot = conversations[i]
-            Task {
-                do {
-                    try await ConversationStore.shared.save(snapshot)
-                } catch {
-                    Diagnostics.error("clearProjectBinding save: \(error.localizedDescription)")
-                }
-            }
+            persistMergedConversation(id: conversations[i].id)
         }
     }
 
@@ -301,14 +313,7 @@ final class ConversationCoordinator: ObservableObject {
             if let vm = chatViewModels[conversations[i].id] {
                 vm.conversation.projectRoot = newPath
             }
-            let snapshot = conversations[i]
-            Task {
-                do {
-                    try await ConversationStore.shared.save(snapshot)
-                } catch {
-                    Diagnostics.error("updateProjectBinding save: \(error.localizedDescription)")
-                }
-            }
+            persistMergedConversation(id: conversations[i].id)
         }
     }
 
@@ -331,7 +336,27 @@ final class ConversationCoordinator: ObservableObject {
     }
 
     func saveConversationSnapshot(at index: Int) {
-        let snapshot = conversations[index]
-        Task { try? await ConversationStore.shared.save(snapshot) }
+        persistMergedConversation(id: conversations[index].id)
+    }
+
+    /// Persist list-row metadata + the live VM transcript (if one exists).
+    private func persistMergedConversation(id: UUID) {
+        guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        let merged = ConversationSaveMerge.snapshot(
+            listRow: conversations[idx],
+            live: chatViewModels[id]?.conversation
+        )
+        conversations[idx] = merged
+        if let vm = chatViewModels[id] {
+            vm.conversation = merged
+        }
+        let snapshot = merged
+        Task {
+            do {
+                try await conversationStore.save(snapshot)
+            } catch {
+                Diagnostics.error("persistMergedConversation(\(id)): \(error.localizedDescription)")
+            }
+        }
     }
 }

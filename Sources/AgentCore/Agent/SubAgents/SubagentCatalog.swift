@@ -270,9 +270,18 @@ public enum SubagentCatalog {
         You MUST set subagent_type. Prefer explore for finding files/code; plan for design; \
         general-purpose for multi-step work that may edit files.
 
+        When launching multiple independent subagents, emit multiple `task` tool calls in a \
+        single assistant message so they run concurrently. `run_in_background: true` still works.
+
+        A new task starts fresh — the prompt must be self-contained (include all context the \
+        subagent needs; it does not see the parent transcript).
+
         Default: foreground — waits and returns the subagent's final report. \
         Set run_in_background=true (or background=true) to return task_id immediately; \
         then use get_task_output / wait_tasks / kill_task. Subagents cannot spawn further subagents.
+
+        To resume a completed subagent after send_message, pass resume_agent_id (agent_<uuid>) \
+        instead of starting a new spawn.
         """
     }
 }

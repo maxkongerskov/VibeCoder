@@ -45,6 +45,17 @@
 import Foundation
 import Network
 
+public enum LocalAPIAgentLoopError: Error, LocalizedError, Sendable, Equatable {
+    case missingProjectRoot
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingProjectRoot:
+            return "Agent loop requires a project folder (not filesystem root)."
+        }
+    }
+}
+
 public actor LocalAPIServer {
 
     public static let shared = LocalAPIServer()
@@ -57,6 +68,9 @@ public actor LocalAPIServer {
     /// `/v1/chat/completions` (tool execute + re-prompt). When false,
     /// Xcode-safe proxy with `tools: []`.
     private var agentToolsEnabled: Bool = false
+    /// Required workspace for agent-loop turns. Without a usable root,
+    /// agent-loop requests fail closed (no unattended writes at `/`).
+    private var agentLoopProjectRoot: URL?
 
     /// Hard cap for LocalAPI agent-loop iterations (anti recursion bomb).
     /// Independent of in-app `maxAgentIterations` (which may be 30–100).
@@ -67,12 +81,20 @@ public actor LocalAPIServer {
     public func configure(
         backend: any InferenceBackend,
         settings: AppSettings,
-        agentToolsEnabled: Bool = false
+        agentToolsEnabled: Bool = false,
+        agentLoopProjectRoot: URL? = nil
     ) {
         self.backend = backend
         self.settings = settings
         self.agentToolsEnabled = agentToolsEnabled
+        self.agentLoopProjectRoot = agentLoopProjectRoot
     }
+
+    public func setAgentLoopProjectRoot(_ url: URL?) {
+        agentLoopProjectRoot = url
+    }
+
+    public func currentAgentLoopProjectRoot() -> URL? { agentLoopProjectRoot }
 
     public func isAgentToolsEnabled() -> Bool { agentToolsEnabled }
 
@@ -340,12 +362,23 @@ public actor LocalAPIServer {
         // D1: opt-in multi-step AgentLoop (tool execute + re-prompt).
         // Default remains Xcode-safe proxy with tools: [].
         if policy.runsAgentLoop {
+            guard let root = PathConfinement.usableWorkspaceRoot(agentLoopProjectRoot) else {
+                await Self.writeJSON(
+                    connection,
+                    origin: origin,
+                    body: Self.errorBody(
+                        "Agent loop requires a project folder. Bind a project in the app, then retry.",
+                        type: "invalid_request_error"),
+                    status: 400)
+                return
+            }
             await respondAgentLoop(
                 messages: messages,
                 model: model,
                 backend: backend,
                 connection: connection,
-                origin: origin
+                origin: origin,
+                projectRoot: root
             )
             return
         }
@@ -406,7 +439,8 @@ public actor LocalAPIServer {
         model: ModelDescriptor,
         backend: any InferenceBackend,
         connection: NWConnection,
-        origin: String?
+        origin: String?,
+        projectRoot: URL
     ) async {
         let headerOK = await Self.write(connection,
                          "HTTP/1.1 200 OK\r\n\(Self.cors(origin: origin))Content-Type: text/event-stream\r\nCache-Control: no-cache\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n")
@@ -422,13 +456,15 @@ public actor LocalAPIServer {
         }
 
         let clientGone = ClientGoneFlag()
-        do {
-            _ = try await Self.runAgentLoopTurn(
+        let cancel = LoopCancelHandle()
+        let loopTask = Task {
+            try await Self.runAgentLoopTurn(
                 backend: backend,
                 model: model,
                 messages: messages,
                 settings: settings,
-                maxIterations: Self.agentLoopMaxIterations
+                maxIterations: Self.agentLoopMaxIterations,
+                projectRoot: projectRoot
             ) { event in
                 guard !clientGone.value else { return }
                 switch event {
@@ -439,6 +475,7 @@ public actor LocalAPIServer {
                         id: chatID, created: created, model: modelID)
                     if !(await Self.sendChunked(connection, text: line)) {
                         clientGone.mark()
+                        cancel.cancel()
                     }
                 case .error(let description):
                     let errLine = "data: \(Self.errorBody(description, type: "agent_error"))\n\n"
@@ -447,15 +484,27 @@ public actor LocalAPIServer {
                     break
                 }
             }
+        }
+        cancel.task = loopTask
+        do {
+            _ = try await loopTask.value
             if !clientGone.value {
                 _ = await Self.sendChunked(connection, text: "data: [DONE]\n\n")
                 _ = await Self.write(connection, "0\r\n\r\n")
             }
+        } catch is CancellationError {
+            // Client gone — AgentLoop already checked Task.isCancelled.
         } catch {
             let errLine = "data: \(Self.errorBody(error.localizedDescription, type: "agent_error"))\n\n"
             _ = await Self.sendChunked(connection, text: errLine)
             _ = await Self.write(connection, "0\r\n\r\n")
         }
+    }
+
+    /// Shared cancel token so a failed SSE write can stop the agent Task.
+    final class LoopCancelHandle: @unchecked Sendable {
+        var task: Task<Conversation, Error>?
+        func cancel() { task?.cancel() }
     }
 
     // MARK: - Agent loop (testable without NWConnection)
@@ -478,6 +527,14 @@ public actor LocalAPIServer {
     /// Drive one bounded AgentLoop turn for LocalAPI. Pure of HTTP —
     /// unit tests inject a scripted backend + assert tool round-trips.
     @discardableResult
+    /// Fail closed: no project, or filesystem root (`/`), is not a workspace.
+    public static func requireUsableProjectRoot(_ url: URL?) throws -> URL {
+        guard let root = PathConfinement.usableWorkspaceRoot(url) else {
+            throw LocalAPIAgentLoopError.missingProjectRoot
+        }
+        return root
+    }
+
     public static func runAgentLoopTurn(
         backend: any InferenceBackend,
         model: ModelDescriptor,
@@ -487,16 +544,20 @@ public actor LocalAPIServer {
         projectRoot: URL? = nil,
         events: @escaping @Sendable (LoopEvent) async -> Void = { _ in }
     ) async throws -> Conversation {
+        let root = try requireUsableProjectRoot(projectRoot)
         await ToolRegistry.shared.registerBuiltins()
         let cap = max(1, min(maxIterations, agentLoopMaxIterations))
         let (history, userMessage) = splitHistoryAndUser(messages)
         var convo = Conversation(
             title: "local-api",
             modelID: model.id,
-            projectRoot: projectRoot
+            projectRoot: root
         )
         convo.messages = history
 
+        // Auto (edit): file mutations stay inside `root` via PathConfinement.
+        // Shell / MCP still `.ask` and hard-deny without a coordinator.
+        // Never Full/yolo — a loopback client must not inherit process CWD.
         let config = AgentLoop.Configuration(
             maxIterations: cap,
             stallWindow: 3,
@@ -507,7 +568,8 @@ public actor LocalAPIServer {
             // LocalAPI must not open nested MCP / Xcode bridges by default
             // (keeps the opt-in path bounded and predictable).
             xcodeMCPEnabled: false,
-            mcpServers: []
+            mcpServers: [],
+            executionMode: .edit
         )
         let loop = AgentLoop(backend: backend, model: model, config: config)
         let prompt = userMessage.isEmpty ? "(empty user message)" : userMessage

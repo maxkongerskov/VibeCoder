@@ -38,7 +38,7 @@ Carry these forward without rebuilding from scratch:
 | 9 | **No native diff view.** Tool results render as expandable cards with raw text. Cursor's whole UX is the diff. | **`PatchReviewSheet`** — syntax-highlighted side-by-side diff, accept/reject per hunk, applies via `apply_patch` tool. Mandatory review in Safe Mode; opt-in elsewhere. |
 | 10 | **No LSP / semantic search.** All code search is grep. | **SourceKit-LSP for Swift** (built-in to Xcode toolchain) + generic LSP for other languages via a `language-servers/` registry. Adds `find_definition`, `find_references`, `workspace_symbol`, `hover` tools. Falls back to grep when no LSP available. |
 | 11 | **Sub-agents under-utilized.** `SubAgentRunner` exists but the system prompt doesn't guide toward it. No memory inheritance. | **First-class `dispatch_task` tool.** Sub-agents inherit MEMORY.md + skills + worktree (read-only by default). System prompt explicitly teaches: "for parallel investigations of >2 unrelated questions, dispatch sub-agents instead of serializing." Sub-agent results return as a single tool result message. |
-| 12 | **Inbound `LocalAPIServer` uses raw `NWListener`**, writes logs to `~/Desktop/`. | **`LocalAPIServer` built on Swift NIO** (production-grade), logs to `~/Library/Logs/AgentOS-NewDay/`, supports streaming SSE, handles `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` (NEW — proxied to whichever backend supports embeddings). |
+| 12 | **Inbound `LocalAPIServer` uses raw `NWListener`**, writes logs to `~/Desktop/`. | **`LocalAPIServer` built on Swift NIO** (production-grade), logs to `~/Library/Logs/AgentOS-NewDay/`, supports streaming SSE, handles `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` (NEW — proxied to whichever backend supports embeddings). *(Not shipped as written: the package has zero dependencies — `LocalAPIServer` stays on Network.framework `NWListener`, loopback-only.)* |
 | 13 | **No CLI.** Power users have to live inside the app. | **`agentos` CLI binary**, same agent core. `agentos run "fix the linker error"`, `agentos models list`, `agentos serve` (run the LocalAPIServer headless). Great for CI, SSH sessions, scripts. |
 
 ## 3. Architecture
@@ -146,6 +146,8 @@ loop:
 ```
 
 The two structural additions vs. the original: (a) tiered compaction with auxiliary summarization, (b) automatic BuildGuard verification rather than a nudge.
+
+> **Shipped reality (amended 2026-08-15):** compaction is a single-cut **full-replace** (`FullReplaceCompactor` — keep recent 6 turns verbatim, one extractive summary carrier message, elide fallback when still over budget; an optional `HistorySummarizing` hook exists for LLM summaries). The tiered 10 / 11–30 / 31+ scheme above remains the future target, not the shipped behavior.
 
 ## 6. Tool protocol
 

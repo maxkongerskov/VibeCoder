@@ -157,6 +157,57 @@ final class LocalAPIAgentLoopTests: XCTestCase {
             "must not exceed LocalAPI hard iteration cap")
     }
 
+    func testAgentLoopTurnRejectsMissingProjectRoot() async {
+        let backend = ScriptedBackend(turns: [[.contentDelta("x"), .done(finishReason: "stop")]])
+        let model = ModelDescriptor(
+            id: "scripted", displayName: "scripted", backend: .custom, supportsTools: true)
+        do {
+            _ = try await LocalAPIServer.runAgentLoopTurn(
+                backend: backend,
+                model: model,
+                messages: [ChatMessage(role: .user, content: "hi")],
+                projectRoot: nil
+            )
+            XCTFail("expected missingProjectRoot")
+        } catch let error as LocalAPIAgentLoopError {
+            XCTAssertEqual(error, .missingProjectRoot)
+        } catch {
+            XCTFail("unexpected error \(error)")
+        }
+        XCTAssertEqual(backend.requestCount, 0, "must not call the model without a workspace")
+    }
+
+    func testAgentLoopTurnRejectsFilesystemRoot() async {
+        let backend = ScriptedBackend(turns: [[.contentDelta("x"), .done(finishReason: "stop")]])
+        let model = ModelDescriptor(
+            id: "scripted", displayName: "scripted", backend: .custom, supportsTools: true)
+        do {
+            _ = try await LocalAPIServer.runAgentLoopTurn(
+                backend: backend,
+                model: model,
+                messages: [ChatMessage(role: .user, content: "hi")],
+                projectRoot: URL(fileURLWithPath: "/")
+            )
+            XCTFail("expected missingProjectRoot for /")
+        } catch let error as LocalAPIAgentLoopError {
+            XCTAssertEqual(error, .missingProjectRoot)
+        } catch {
+            XCTFail("unexpected error \(error)")
+        }
+        XCTAssertEqual(backend.requestCount, 0)
+    }
+
+    func testRequireUsableProjectRootAcceptsTempDir() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("localapi-ok-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let resolved = try LocalAPIServer.requireUsableProjectRoot(root)
+        XCTAssertEqual(
+            SafeModeConfig.normalizePath(resolved.path),
+            SafeModeConfig.normalizePath(root.path))
+    }
+
     func testDefaultConfigureDoesNotEnableAgentLoop() async {
         let backend = ScriptedBackend(turns: [])
         let server = LocalAPIServer()

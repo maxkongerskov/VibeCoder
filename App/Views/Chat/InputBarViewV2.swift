@@ -160,7 +160,7 @@ struct InputBarViewV2: View {
     private var webSearchBinding: Binding<Bool> {
         Binding(
             get: { app.settings.toolEnabled["web_search"] ?? true },
-            set: { newValue in app.updateSettings { $0.toolEnabled["web_search"] = newValue } }
+            set: { newValue in app.persistSettings { $0.toolEnabled["web_search"] = newValue } }
         )
     }
 
@@ -169,7 +169,7 @@ struct InputBarViewV2: View {
     private var chatModeBinding: Binding<Bool> {
         Binding(
             get: { app.settings.rawMode },
-            set: { on in app.updateSettings { $0.rawMode = on } }
+            set: { on in app.persistSettings { $0.rawMode = on } }
         )
     }
 
@@ -335,6 +335,30 @@ struct InputBarViewV2: View {
         }
     }
 
+    /// Posts `compactConversationRequested`; ChatViewModel runs `/compact`.
+    private var compressHistoryButton: some View {
+        Button {
+            NotificationCenter.default.post(
+                name: .compactConversationRequested,
+                object: app.selectedConversationID
+            )
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: "arrow.down.right.and.arrow.up.left")
+                    .font(.system(size: 10, weight: .medium))
+                Text("Compress")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundStyle(Theme.Palette.secondary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Compress history (/compact)")
+        .accessibilityLabel("Compress")
+    }
+
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -388,12 +412,14 @@ struct InputBarViewV2: View {
         // BuildCode outer dimensions; VibeCoder toolbar stays fully featured:
         // + · mode · web · bare/no-harness · context | thinking · model · send/cancel
         VStack(alignment: .leading, spacing: 10) {
+            ComposerQueueBar()
+
             if showSlashMenu {
                 slashCommandMenu
             }
 
             TextField(
-                isRunning ? "Keep typing to queue a follow-up…" : "Ask for follow-up changes",
+                isRunning ? "Keep typing to queue…" : "Ask for follow-up changes",
                 text: $text,
                 axis: .vertical
             )
@@ -488,6 +514,7 @@ struct InputBarViewV2: View {
 
                 if showContextMeter {
                     contextMeterPill
+                    compressHistoryButton
                 }
 
                 Spacer(minLength: 8)
@@ -777,8 +804,7 @@ private struct ChatAgentModeToggle: View {
 
 /// Trailing control:
 /// - Idle: Send (arrow) when draft non-empty
-/// - Running: Stop always; if draft non-empty also show Send as **interjection**
-///   (mid-turn nudge via InterjectionBuffer). Return key already interjects.
+/// - Running: Stop always (Esc / red square); draft Send **queues** a follow-up.
 private struct SendStopButton: View {
     let isRunning: Bool
     let canSend: Bool
@@ -811,8 +837,8 @@ private struct SendStopButton: View {
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .help("Send interjection — applied on the next agent step")
-                    .accessibilityLabel("Send interjection")
+                    .help("Queue message")
+                    .accessibilityLabel("Queue message")
                 }
             }
         } else {

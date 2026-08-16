@@ -12,13 +12,16 @@ import AgentCore
 // MARK: - Tabs
 
 private enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
-    case agent, connection, model, mcp, tools, context, memory, general, privacy, advanced, about
+    case agent, skills, subagents, hooks, connection, model, mcp, tools, context, memory, general, privacy, advanced, about
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .agent:      return "Agent"
+        case .skills:     return "Skills"
+        case .subagents:  return "Subagents"
+        case .hooks:      return "Hooks"
         case .connection: return "Connection"
         case .model:      return "Model & Backend"
         case .mcp:        return "MCP Servers"
@@ -35,6 +38,9 @@ private enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     var icon: String {
         switch self {
         case .agent:      return "text.bubble.fill"
+        case .skills:     return "sparkles"
+        case .subagents:  return "person.2"
+        case .hooks:      return "bolt.horizontal.circle"
         case .connection: return "network"
         case .model:      return "cpu"
         case .mcp:        return "server.rack"
@@ -51,6 +57,9 @@ private enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     var subtitle: String {
         switch self {
         case .agent:      return "Instructions & behavior"
+        case .skills:     return "Discover & enable"
+        case .subagents:  return "Profiles & tools"
+        case .hooks:      return "Lifecycle events"
         case .connection: return "Local servers & APIs"
         case .model:      return "Providers & sampling"
         case .mcp:        return "External tools"
@@ -74,7 +83,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
 
     var group: Group {
         switch self {
-        case .agent:                return .agent
+        case .agent, .skills, .subagents, .hooks: return .agent
         case .connection, .model, .mcp: return .models
         case .tools, .context, .memory: return .workspace
         case .general, .privacy, .advanced, .about: return .system
@@ -84,6 +93,13 @@ private enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
     static func tabs(in group: Group) -> [SettingsTab] {
         allCases.filter { $0.group == group }
     }
+}
+
+/// Deep-link / test IDs matching private `SettingsTab.rawValue`.
+enum SettingsManagersTabID {
+    static let skills = SettingsTab.skills.rawValue
+    static let subagents = SettingsTab.subagents.rawValue
+    static var allRawValues: [String] { SettingsTab.allCases.map(\.rawValue) }
 }
 
 // MARK: - Settings shell
@@ -354,6 +370,9 @@ struct SettingsViewV2: View {
     private var detailContent: some View {
         switch selectedTab {
         case .agent:      AgentInstructionsSettingsView(settings: $settings)
+        case .skills:     SkillsSettingsView()
+        case .subagents:  SubagentsSettingsView()
+        case .hooks:      HooksSettingsView()
         case .general:    GeneralSettingsView(settings: $settings)
         case .connection: ConnectionSettingsView(settings: $settings)
         case .model:      ModelBackendSettingsView(settings: $settings)

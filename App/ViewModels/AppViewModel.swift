@@ -99,7 +99,7 @@ final class AppViewModel: ObservableObject {
     // user-facing source of truth (the chip in the input card). It
     // drives `safeModeOn` so the permissions sheet / fingerprint glow
     // stay consistent. `headlessModeOn` is orthogonal.
-    @Published var executionMode: ExecutionMode = .yolo {
+    @Published var executionMode: ExecutionMode = .build {
         didSet {
             let want = executionMode.enablesSafeMode
             if safeModeOn != want { safeModeOn = want }
@@ -109,7 +109,8 @@ final class AppViewModel: ObservableObject {
     /// Legacy binary Safe Mode flag — kept for the permissions sheet.
     /// Prefer `executionMode` as the source of truth. Writing this from
     /// the sheet syncs back to a matching mode when not in Plan.
-    @Published var safeModeOn: Bool = false {
+    /// Default matches `.build` (Ask) — first-run is not Full/YOLO.
+    @Published var safeModeOn: Bool = true {
         didSet {
             // Plan is first-class read-only: never eject Plan → YOLO when
             // the user toggles the legacy Safe Mode switch (Wave C fix).
@@ -314,6 +315,10 @@ final class AppViewModel: ObservableObject {
     func sidebarOrderedConversations() -> [Conversation] {
         conversationsCoordinator.sidebarOrderedConversations()
     }
+
+    var unloadableConversations: [ConversationLoadFailure] {
+        conversationsCoordinator.unloadableConversations
+    }
     func duplicateConversation(_ id: UUID) { conversationsCoordinator.duplicateConversation(id) }
     func deleteAllConversations() { conversationsCoordinator.deleteAllConversations() }
     func refreshConversations() async { await conversationsCoordinator.refreshConversations() }
@@ -429,17 +434,27 @@ final class AppViewModel: ObservableObject {
 
     // MARK: - Settings
 
-    /// Persist allow-list edits without refreshing backends or toggling servers.
-    /// Writes only via `settings` didSet (single SettingsStore.replace) — do not
-    /// call replace again here (C2: double-persist race with didSet).
-    private func persistSettings(_ change: (inout AppSettings) -> Void) {
+    /// Persist allow-list / connection-field edits without refreshing backends
+    /// or toggling servers. Host/port/API-key typing must use this path.
+    /// Writes only via `settings` didSet (single SettingsStore.replace).
+    func persistSettings(_ change: (inout AppSettings) -> Void) {
         change(&settings)
     }
+
+    /// Count of `applySettingsSideEffects` calls (tests). Production unused.
+    internal private(set) var settingsSideEffectCount = 0
 
     /// Mutate settings and run side effects (model refresh / local API / Xcode MCP).
     /// Persistence is owned solely by `settings.didSet`.
     func updateSettings(_ change: (inout AppSettings) -> Void) {
         change(&settings)
+        applySettingsSideEffects()
+    }
+
+    /// Re-apply live connection side effects from the current `settings`
+    /// snapshot (Test / Use this backend / commit). Does not mutate fields.
+    func applySettingsSideEffects() {
+        settingsSideEffectCount += 1
         let snap = settings
         // PC2: keep SafeBash seatbelt env in sync with Settings preference.
         snap.shellSeatbeltPreference.applyToProcessEnvironment()

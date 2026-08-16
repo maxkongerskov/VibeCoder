@@ -39,7 +39,7 @@ public struct CreatePlanTool: Tool {
         }
         let plan = Plan.make(goal: goal, todoTexts: todos)
         await PlanStore.shared.setPlan(
-            plan, for: context.conversationID, workingDirectory: context.workingDirectory)
+            plan, for: context.conversationID, workingDirectory: context.usableWorkspaceRoot)
         return ToolResult(content: "Created plan.\n\(plan.renderedChecklist())")
     }
 }
@@ -77,7 +77,7 @@ public struct UpdateTodoTool: Tool {
             return ToolResult(content: "Error: unknown status '\(statusRaw)'. Use one of: \(valid).", isError: true)
         }
         let convo = context.conversationID
-        let cwd = context.workingDirectory
+        let cwd = context.usableWorkspaceRoot
         // Wave C: rehydrate from disk/transcript before failing "no plan yet".
         guard let current = await PlanStore.shared.plan(for: convo, workingDirectory: cwd) else {
             return ToolResult(content: "Error: no plan yet — call create_plan first.", isError: true)
@@ -131,7 +131,7 @@ public struct RevisePlanTool: Tool {
         guard let revised = await PlanStore.shared.revise(
             for: context.conversationID,
             addingTexts: add, removingIDs: remove, goal: goal,
-            workingDirectory: context.workingDirectory
+            workingDirectory: context.usableWorkspaceRoot
         ) else {
             return ToolResult(content: "Error: no plan yet — call create_plan first.", isError: true)
         }

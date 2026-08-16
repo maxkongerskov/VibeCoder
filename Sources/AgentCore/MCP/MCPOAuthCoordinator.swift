@@ -326,13 +326,11 @@ public final class MCPOAuthCoordinator: @unchecked Sendable {
                     "Invalid authorization URL: \(config.authorizationURL)")
             }
 
-            // Open the system browser.
+            // Arm the waiter *before* opening the browser so a fast
+            // cached-consent redirect cannot land before continuation exists.
+            async let callbackTask = callbackServer.waitForCallback(timeout: 300)
             await self.openInBrowser(url: authURL)
-
-            // Wait for the callback (5-minute timeout — user might be
-            // completing a multi-step consent flow).
-            let callback = try await callbackServer.waitForCallback(
-                timeout: 300)
+            let callback = try await callbackTask
 
             // Validate state (CSRF protection).
             guard callback.state == state else {

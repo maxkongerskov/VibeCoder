@@ -37,6 +37,7 @@ final class ConversationListViewModel: ObservableObject {
 
     @Published var conversations: [Conversation] = []
     @Published var selectedConversationID: UUID?
+    @Published var unloadableConversations: [ConversationLoadFailure] = []
 
     var selectedConversation: Conversation? {
         conversations.first { $0.id == selectedConversationID }
@@ -70,10 +71,11 @@ final class ConversationListViewModel: ObservableObject {
     /// because `ConversationStore` is an actor.
     func load() async {
         do {
-            let list = try await store.list()
-            self.conversations = list
+            let listing = try await store.listDirectory()
+            self.conversations = listing.conversations
+            self.unloadableConversations = listing.unloadable
             if selectedConversationID == nil {
-                selectedConversationID = list.first?.id
+                selectedConversationID = listing.conversations.first?.id
             }
         } catch {
             Diagnostics.error("ConversationListViewModel.load: \(error.localizedDescription)")

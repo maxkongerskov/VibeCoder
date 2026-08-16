@@ -49,6 +49,7 @@ struct ProjectsView: View {
 
     // ── Sheet / search ──────────────────────────────────────────────────
     @State private var showNewSheet: Bool = false
+
     @State private var searchQuery: String = ""
 
     // ── Per-tile menu state ─────────────────────────────────────────────
@@ -72,6 +73,10 @@ struct ProjectsView: View {
             // before its initial async refresh completed, or the folder
             // changed since the VM was instantiated.
             await vm.refresh()
+        }
+        // Palette "New Project" can't reach this @State directly — it posts.
+        .onReceive(NotificationCenter.default.publisher(for: .newProjectSheetRequested)) { _ in
+            showNewSheet = true
         }
         .sheet(isPresented: $showNewSheet) {
             NewProjectSheet(isPresented: $showNewSheet) { request in

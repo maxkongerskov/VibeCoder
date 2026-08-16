@@ -53,16 +53,20 @@ final class PatchReviewCoordinator: ObservableObject {
     /// the sheet's resolve callback doesn't need to thread it through
     /// SwiftUI state.
     private var pendingContinuation: CheckedContinuation<PatchDecision, Never>?
+    /// FIFO when a second mutate arrives while a sheet is already open.
+    private var queue: [([PatchPreview], CheckedContinuation<PatchDecision, Never>)] = []
 
     // MARK: - Reviewer entry point
 
     /// Called by AgentCore (off-main, via the `PatchReviewer` wrapper).
-    /// Publishes the batch, suspends until the sheet resolves it. If
-    /// a previous review is somehow still open, we auto-reject the new
-    /// one rather than queue (queuing would block the agent loop on
-    /// stale UI state).
+    /// Publishes the batch, suspends until the sheet resolves it.
+    /// Concurrent reviews queue (same as shell approval) — never silent-reject.
     func review(_ previews: [PatchPreview]) async -> PatchDecision {
-        guard pendingBatch == nil else { return .rejectAll }
+        if pendingBatch != nil {
+            return await withCheckedContinuation { (cont: CheckedContinuation<PatchDecision, Never>) in
+                self.queue.append((previews, cont))
+            }
+        }
         return await withCheckedContinuation { (cont: CheckedContinuation<PatchDecision, Never>) in
             self.pendingContinuation = cont
             self.pendingBatch = PatchReviewBatch(previews: previews)
@@ -78,12 +82,27 @@ final class PatchReviewCoordinator: ObservableObject {
         self.pendingContinuation = nil
         self.pendingBatch = nil
         cont.resume(returning: decision)
+        if !queue.isEmpty {
+            let next = queue.removeFirst()
+            Task { @MainActor in
+                self.pendingContinuation = next.1
+                self.pendingBatch = PatchReviewBatch(previews: next.0)
+            }
+        }
     }
 
     /// Fail-closed on sheet dismiss / cancel without an explicit decision.
     func rejectIfStillPending() {
-        guard pendingContinuation != nil else { return }
-        resolve(.rejectAll)
+        let rest = queue
+        queue.removeAll()
+        if let cont = pendingContinuation {
+            pendingContinuation = nil
+            pendingBatch = nil
+            cont.resume(returning: .rejectAll)
+        }
+        for item in rest {
+            item.1.resume(returning: .rejectAll)
+        }
     }
 
     // MARK: - Sendable bridge

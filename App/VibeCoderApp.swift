@@ -5,6 +5,7 @@
 //
 
 import SwiftUI
+import AppKit
 import AgentCore
 
 @main
@@ -39,6 +40,9 @@ struct VibeCoderApp: App {
             }
             .frame(minWidth: 960, minHeight: 620)
             .background(Theme.Palette.canvas)
+            .onReceive(NotificationCenter.default.publisher(for: .openWorkspaceRequested)) { _ in
+                openWorkspace()
+            }
             .task {
                 // RENDER-CRITICAL PATH FIRST. Never block first paint on
                 // network (refreshModels / backend probes live in boot()).
@@ -64,13 +68,73 @@ struct VibeCoderApp: App {
                     NotificationCenter.default.post(name: .newConversationRequested, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: [.command])
+
+                Button("Open Workspace…") {
+                    NotificationCenter.default.post(name: .openWorkspaceRequested, object: nil)
+                }
+                .keyboardShortcut("o", modifiers: [.command])
             }
-            CommandMenu("View") {
+            // Replaces the unused Save group so ⌘W is Close Window, not Save.
+            // DEBUG View → Worktree Review keeps ⌘⇧W.
+            CommandGroup(replacing: .saveItem) {
+                Button("Close Window") {
+                    NSApp.keyWindow?.performClose(nil)
+                }
+                .keyboardShortcut("w", modifiers: [.command])
+            }
+            CommandGroup(after: .appSettings) {
+                Button("Settings…") {
+                    NotificationCenter.default.post(name: .settingsRequested, object: nil)
+                }
+                .keyboardShortcut(",", modifiers: [.command])
+            }
+            // ⌘F belongs on Edit (system Find group). A View-menu button with
+            // the same shortcut is swallowed by AppKit and never appears.
+            CommandGroup(after: .pasteboard) {
+                Button("Find in Task") {
+                    NotificationCenter.default.post(name: .findInTaskRequested, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: [.command])
+            }
+            // Merge into the system View menu. CommandMenu("View") used to
+            // create a second View menu next to Show Tab Bar / Full Screen.
+            CommandGroup(after: .sidebar) {
                 Button("Command Palette") {
                     NotificationCenter.default.post(name: .commandPaletteRequested, object: nil)
                 }
                 .keyboardShortcut("k", modifiers: [.command])
 
+                Button("Stop Agent") {
+                    NotificationCenter.default.post(name: .cancelAgentRequested, object: nil)
+                }
+                .keyboardShortcut(".", modifiers: [.command])
+
+                Button("Toggle Sidebar") {
+                    NotificationCenter.default.post(name: .toggleSidebarRequested, object: nil)
+                }
+                .keyboardShortcut("b", modifiers: [.command])
+
+                Button("Toggle Side Pane") {
+                    NotificationCenter.default.post(name: .toggleInspectorRequested, object: nil)
+                }
+                .keyboardShortcut("b", modifiers: [.command, .option])
+
+                Button("Toggle Terminal") {
+                    NotificationCenter.default.post(name: .toggleTerminalRequested, object: nil)
+                }
+                .keyboardShortcut("j", modifiers: [.command])
+
+                Button("Previous Task") {
+                    NotificationCenter.default.post(name: .previousTaskRequested, object: nil)
+                }
+                .keyboardShortcut("[", modifiers: [.command, .shift])
+
+                Button("Next Task") {
+                    NotificationCenter.default.post(name: .nextTaskRequested, object: nil)
+                }
+                .keyboardShortcut("]", modifiers: [.command, .shift])
+
+                #if DEBUG
                 Divider()
 
                 Button("Show Patch Review (debug)") {
@@ -87,6 +151,35 @@ struct VibeCoderApp: App {
                     NotificationCenter.default.post(name: .showTasksListDebug, object: nil)
                 }
                 .keyboardShortcut("t", modifiers: [.command, .shift])
+                #endif
+            }
+            CommandGroup(after: .help) {
+                Button("About VibeCoder") {
+                    NotificationCenter.default.post(name: .settingsRequested, object: "about")
+                }
+            }
+        }
+    }
+
+    /// Directory picker, then silent `ProjectsService` register + `openedProject`.
+    /// Sheet fallback if the folder cannot be bound.
+    private func openWorkspace() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.canCreateDirectories = false
+        panel.prompt = "Open"
+        panel.message = "Choose a folder to open as a workspace."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task { @MainActor in
+            let service = ProjectsService()
+            switch await service.register(existingFolder: url) {
+            case .success(let project):
+                app.openedProject = project
+            case .failure:
+                NotificationCenter.default.post(name: .newProjectSheetRequested, object: url)
             }
         }
     }

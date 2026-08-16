@@ -195,7 +195,7 @@ public struct Conversation: Codable, Identifiable, Sendable {
     }
 }
 
-public struct ChatMessage: Codable, Identifiable, Sendable {
+public struct ChatMessage: Codable, Identifiable, Sendable, Equatable {
     public let id: UUID
     public let role: Role
     public var content: String
@@ -216,7 +216,7 @@ public struct ChatMessage: Codable, Identifiable, Sendable {
     /// Encoded on the wire as OpenAI-style `image_url` content parts.
     public var images: [ChatImagePayload]
 
-    public enum Role: String, Codable, Sendable {
+    public enum Role: String, Codable, Sendable, Equatable {
         case system, user, assistant, tool
     }
 
@@ -290,7 +290,7 @@ extension Array where Element == ChatMessage {
     }
 }
 
-public struct ToolCallInvocation: Codable, Identifiable, Sendable {
+public struct ToolCallInvocation: Codable, Identifiable, Sendable, Equatable {
     public let id: String              // stable across streaming chunks
     public let name: String
     public let arguments: String       // JSON string as the model emitted it

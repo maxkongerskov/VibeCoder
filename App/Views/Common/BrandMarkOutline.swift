@@ -30,6 +30,9 @@ struct BrandMarkOutline: View {
 struct EmptyChatBrandHero: View {
     var title: String? = nil
     var subtitle: String? = nil
+    var detected: [LoopbackDetectHit] = []
+    var onUseDetected: ((LoopbackDetectTarget) -> Void)? = nil
+    var onOpenSettings: (() -> Void)? = nil
 
     var body: some View {
         VStack(spacing: Theme.Spacing.m) {
@@ -47,6 +50,54 @@ struct EmptyChatBrandHero: View {
                     .foregroundStyle(Theme.Palette.secondary)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 360)
+            }
+
+            let ready = detected.filter { $0.verdict == .modelsReady }
+            let busy = detected.filter { $0.verdict == .busyNotCompat }
+            if !ready.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Detected on this Mac")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.Palette.tertiary)
+                    ForEach(ready) { hit in
+                        Button {
+                            onUseDetected?(hit.target)
+                        } label: {
+                            HStack {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 7))
+                                    .foregroundStyle(.green)
+                                Text(hit.target.label)
+                                    .font(.system(size: 13, weight: .medium))
+                                Spacer()
+                                Text(":\(hit.target.port)")
+                                    .font(.system(size: 11, design: .monospaced))
+                                    .foregroundStyle(Theme.Palette.tertiary)
+                                Text("Use")
+                                    .font(.system(size: 11, weight: .semibold))
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Theme.Palette.subtle, in: RoundedRectangle(cornerRadius: 8))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .frame(maxWidth: 360)
+            }
+            if !busy.isEmpty {
+                Text(busy.map { "\($0.target.label) :\($0.target.port) is in use, not a model server" }
+                    .joined(separator: "\n"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Palette.tertiary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+            }
+            if ready.isEmpty, onOpenSettings != nil {
+                Button("Open Connection settings") {
+                    onOpenSettings?()
+                }
+                .font(.system(size: 12, weight: .medium))
             }
         }
         .frame(maxWidth: .infinity)

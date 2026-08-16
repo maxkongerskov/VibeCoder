@@ -126,6 +126,11 @@ public actor OpenAICompatibleClient {
                     // bleeds across retries (decoder is line-stateless today,
                     // but this keeps the contract explicit).
                     let decoder = SSEStreamDecoder()
+                    var finishReason: String?
+                    var promptTokens: Int?
+                    var completionTokens: Int?
+                    var accumulatedContent = ""
+
                     do {
                         let url = config.baseURL.appendingPathComponent("chat/completions")
                         var req = URLRequest(url: url)
@@ -173,9 +178,23 @@ public actor OpenAICompatibleClient {
                                             "non-SSE chat.completion produced no chunks")
                                     }
                                     for c in mapped {
+                                        Self.accumulateModelIO(
+                                            c,
+                                            finishReason: &finishReason,
+                                            promptTokens: &promptTokens,
+                                            completionTokens: &completionTokens,
+                                            content: &accumulatedContent)
                                         continuation.yield(c)
                                         emittedToConsumer = true
                                     }
+                                    self.recordSettledModelIO(
+                                        streamID: streamID,
+                                        body: body,
+                                        finishReason: finishReason,
+                                        promptTokens: promptTokens,
+                                        completionTokens: completionTokens,
+                                        accumulatedContent: accumulatedContent,
+                                        recordError: nil)
                                     continuation.finish()
                                     return
                                 } catch let error as BackendError {
@@ -197,10 +216,25 @@ public actor OpenAICompatibleClient {
                                 // Still emit a terminal done if the stream never
                                 // sent finish_reason (some servers only send [DONE]).
                                 if !emittedDoneChunk {
-                                    continuation.yield(.done(finishReason: "stop"))
+                                    let terminal = ChatChunk.done(finishReason: "stop")
+                                    Self.accumulateModelIO(
+                                        terminal,
+                                        finishReason: &finishReason,
+                                        promptTokens: &promptTokens,
+                                        completionTokens: &completionTokens,
+                                        content: &accumulatedContent)
+                                    continuation.yield(terminal)
                                     emittedToConsumer = true
                                     emittedDoneChunk = true
                                 }
+                                self.recordSettledModelIO(
+                                    streamID: streamID,
+                                    body: body,
+                                    finishReason: finishReason,
+                                    promptTokens: promptTokens,
+                                    completionTokens: completionTokens,
+                                    accumulatedContent: accumulatedContent,
+                                    recordError: nil)
                                 continuation.finish()
                                 return
                             case .data(let data):
@@ -215,6 +249,12 @@ public actor OpenAICompatibleClient {
                                 }
                                 for c in chunkMapper.map(chunk) {
                                     if case .done = c { emittedDoneChunk = true }
+                                    Self.accumulateModelIO(
+                                        c,
+                                        finishReason: &finishReason,
+                                        promptTokens: &promptTokens,
+                                        completionTokens: &completionTokens,
+                                        content: &accumulatedContent)
                                     continuation.yield(c)
                                     emittedToConsumer = true
                                 }
@@ -224,10 +264,26 @@ public actor OpenAICompatibleClient {
                         }
                         // Stream completed without an explicit [DONE] —
                         // finish normally (some servers omit the terminator).
+                        self.recordSettledModelIO(
+                            streamID: streamID,
+                            body: body,
+                            finishReason: finishReason,
+                            promptTokens: promptTokens,
+                            completionTokens: completionTokens,
+                            accumulatedContent: accumulatedContent,
+                            recordError: nil)
                         continuation.finish()
                         return
 
                     } catch let error as BackendError {
+                        self.recordSettledModelIO(
+                            streamID: streamID,
+                            body: body,
+                            finishReason: finishReason,
+                            promptTokens: promptTokens,
+                            completionTokens: completionTokens,
+                            accumulatedContent: accumulatedContent,
+                            recordError: error.localizedDescription)
                         if emittedToConsumer {
                             // Never retry after partial delivery (C1 O1).
                             if case .cancelled = error {
@@ -268,6 +324,14 @@ public actor OpenAICompatibleClient {
                     } catch {
                         // Non-BackendError exceptions (e.g. URLSession
                         // internal errors) — treat as transport failures.
+                        self.recordSettledModelIO(
+                            streamID: streamID,
+                            body: body,
+                            finishReason: finishReason,
+                            promptTokens: promptTokens,
+                            completionTokens: completionTokens,
+                            accumulatedContent: accumulatedContent,
+                            recordError: error.localizedDescription)
                         if emittedToConsumer {
                             continuation.finish(throwing: BackendError.transport(error.localizedDescription))
                             return
@@ -308,6 +372,57 @@ public actor OpenAICompatibleClient {
 
     public func cancel(streamID: UUID) {
         inflight.removeValue(forKey: streamID)?.cancel()
+    }
+
+    /// Opt-in JSONL row after one HTTP attempt settles. Must not throw.
+    private func recordSettledModelIO(
+        streamID: UUID,
+        body: ChatCompletionRequestBody,
+        finishReason: String?,
+        promptTokens: Int?,
+        completionTokens: Int?,
+        accumulatedContent: String,
+        recordError: String?
+    ) {
+        if ModelIORecorder.isEnabled {
+            var authHeaders: [String: String] = [:]
+            if let token = config.bearerToken, !token.isEmpty {
+                authHeaders["Authorization"] = "Bearer \(token)"
+            }
+            ModelIORecorder.record(
+                sessionId: streamID.uuidString,
+                request: ModelIORecord.Request(body: body, headers: authHeaders),
+                response: ModelIORecord.Response(
+                    finishReason: finishReason,
+                    usage: ModelIORecord.Usage(
+                        promptTokens: promptTokens,
+                        completionTokens: completionTokens
+                    ),
+                    responseText: accumulatedContent,
+                    error: recordError
+                )
+            )
+        }
+    }
+
+    private static func accumulateModelIO(
+        _ chunk: ChatChunk,
+        finishReason: inout String?,
+        promptTokens: inout Int?,
+        completionTokens: inout Int?,
+        content: inout String
+    ) {
+        switch chunk {
+        case .contentDelta(let text):
+            content += text
+        case .done(let reason):
+            finishReason = reason
+        case .usage(let prompt, let completion):
+            promptTokens = prompt
+            completionTokens = completion
+        case .reasoningDelta, .toolCallDelta:
+            break
+        }
     }
 
     // MARK: - Mapping

@@ -13,8 +13,9 @@
 //  Events:
 //    Tool: PreToolUse / PostToolUse
 //    Lifecycle (v2): SessionStart, UserPromptSubmit, Stop, Notification
+//    Parsed (ZCode; loop may not fire yet): PermissionRequest, PostToolUseFailure
 //
-//  Nested (Claude/Grok-compatible keys):
+//  Nested (Claude/Grok/ZCode-compatible keys):
 //    {
 //      "hooks": {
 //        "PreToolUse":  [{ "matcher": "run_shell", "hooks": [{ "type": "command", "command": "block.sh" }] }],
@@ -22,7 +23,9 @@
 //        "SessionStart": [{ "hooks": [{ "type": "command", "command": "setup.sh" }] }],
 //        "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "guard.sh" }] }],
 //        "Stop": [{ "hooks": [{ "type": "command", "command": "notify.sh" }] }],
-//        "Notification": [{ "matcher": "idle_prompt", "hooks": [{ "type": "command", "command": "n.sh" }] }]
+//        "Notification": [{ "matcher": "idle_prompt", "hooks": [{ "type": "command", "command": "n.sh" }] }],
+//        "PermissionRequest": [{ "matcher": "run_shell", "hooks": [{ "type": "command", "command": "ask.sh" }] }],
+//        "PostToolUseFailure": [{ "hooks": [{ "type": "command", "command": "fail.sh" }] }]
 //      }
 //    }
 //
@@ -35,9 +38,13 @@
 //           VIBECODER_HOOK_EVENT, VIBECODER_HOOK_TOOL, VIBECODER_HOOK_NAME
 //    - exit 0 + empty stdout → allow (no decision)
 //    - exit 2 → deny (stderr/stdout as reason) — blocks tool or turn when wired
-//    - stdout JSON: { "decision": "allow"|"deny", "reason": "..." }
-//      or Claude-style hookSpecificOutput.permissionDecision
+//    - stdout JSON: { "decision": "allow"|"deny"|"block"|"approve", "reason": "..." }
+//      or Claude-style hookSpecificOutput.permissionDecision (allow|ask|deny)
+//      Stop: { "continue": true, "additionalContext"|"additional_context": "..." }
+//      PreToolUse: { "updatedInput"|"updated_input": {…}|"{…}", "permissionDecision": "allow"|"ask"|"deny" }
+//    - decision: block / exit 2 → deny (no Stop continuation)
 //    - spawn/timeout/parse failures → fail-open (allow) + log
+//    - AgentLoop must call stopDetailed / preToolDetailed (see docs/parity-wip/hooks.md)
 //
 
 import Foundation
@@ -97,35 +104,145 @@ public struct HookDecision: Sendable, Equatable {
     }
 }
 
-// MARK: - Config models (internal)
+/// Stop-hook structured result. `continue: true` + non-empty additionalContext
+/// forces another model step; AgentLoop must honor at most
+/// `HookDispatcher.maxStopContinuations` times.
+public struct StopHookResult: Sendable, Equatable {
+    public var allow: Bool
+    public var shouldContinue: Bool
+    public var additionalContext: String?
+    public var message: String?
 
-struct HookHandlerSpec: Equatable {
-    var type: String
-    var command: String
-    /// Timeout in seconds (default 5).
-    var timeoutSeconds: TimeInterval
-    var name: String
+    public init(
+        allow: Bool,
+        shouldContinue: Bool = false,
+        additionalContext: String? = nil,
+        message: String? = nil
+    ) {
+        self.allow = allow
+        self.shouldContinue = shouldContinue
+        self.additionalContext = additionalContext
+        self.message = message
+    }
+
+    public static let allow = StopHookResult(
+        allow: true, shouldContinue: false, additionalContext: nil, message: nil)
+
+    public func asHookDecision() -> HookDecision {
+        if allow {
+            if let message, !message.isEmpty { return .allowWithMessage(message) }
+            return .allow
+        }
+        return .deny(message ?? "Denied by hook")
+    }
 }
 
-struct HookMatcherGroup: Equatable {
-    /// Tool-name matcher: empty/`*` = all; `a|b` exact alternatives; else unanchored regex.
-    var matcher: String?
-    var handlers: [HookHandlerSpec]
-}
+/// PreToolUse structured result. `updatedInput` rewrites tool args;
+/// `permissionDecision` is `allow` | `ask` | `deny`.
+public struct PreToolHookResult: Sendable, Equatable {
+    public var allow: Bool
+    public var permissionDecision: String?
+    public var updatedInputJSON: String?
+    public var additionalContext: String?
+    public var message: String?
 
-struct HookConfigFile: Equatable {
-    var pre: [HookMatcherGroup]
-    var post: [HookMatcherGroup]
-    /// v2 lifecycle (Claude/Grok nested keys).
-    var sessionStart: [HookMatcherGroup]
-    var userPromptSubmit: [HookMatcherGroup]
-    var stop: [HookMatcherGroup]
-    var notification: [HookMatcherGroup]
+    public init(
+        allow: Bool,
+        permissionDecision: String? = nil,
+        updatedInputJSON: String? = nil,
+        additionalContext: String? = nil,
+        message: String? = nil
+    ) {
+        self.allow = allow
+        self.permissionDecision = permissionDecision
+        self.updatedInputJSON = updatedInputJSON
+        self.additionalContext = additionalContext
+        self.message = message
+    }
 
-    static let empty = HookConfigFile(
-        pre: [], post: [],
-        sessionStart: [], userPromptSubmit: [], stop: [], notification: []
+    public static let allow = PreToolHookResult(
+        allow: true,
+        permissionDecision: nil,
+        updatedInputJSON: nil,
+        additionalContext: nil,
+        message: nil
     )
+
+    public func asHookDecision() -> HookDecision {
+        if allow {
+            if let message, !message.isEmpty { return .allowWithMessage(message) }
+            return .allow
+        }
+        return .deny(message ?? "Denied by hook")
+    }
+}
+
+// MARK: - Config models
+
+public struct HookHandlerSpec: Equatable, Sendable {
+    public var type: String
+    public var command: String
+    /// Timeout in seconds (default 5).
+    public var timeoutSeconds: TimeInterval
+    public var name: String
+
+    public init(
+        type: String = "command",
+        command: String,
+        timeoutSeconds: TimeInterval = 5,
+        name: String = "command-0"
+    ) {
+        self.type = type
+        self.command = command
+        self.timeoutSeconds = timeoutSeconds
+        self.name = name
+    }
+}
+
+public struct HookMatcherGroup: Equatable, Sendable {
+    /// Tool-name matcher: empty/`*` = all; `a|b` exact alternatives; else unanchored regex.
+    public var matcher: String?
+    public var handlers: [HookHandlerSpec]
+
+    public init(matcher: String? = nil, handlers: [HookHandlerSpec]) {
+        self.matcher = matcher
+        self.handlers = handlers
+    }
+}
+
+public struct HookConfigFile: Equatable, Sendable {
+    public var pre: [HookMatcherGroup]
+    public var post: [HookMatcherGroup]
+    /// v2 lifecycle (Claude/Grok nested keys).
+    public var sessionStart: [HookMatcherGroup]
+    public var userPromptSubmit: [HookMatcherGroup]
+    public var stop: [HookMatcherGroup]
+    public var notification: [HookMatcherGroup]
+    /// ZCode events — parsed so config.json can declare them without crashing.
+    public var permissionRequest: [HookMatcherGroup]
+    public var postToolUseFailure: [HookMatcherGroup]
+
+    public init(
+        pre: [HookMatcherGroup] = [],
+        post: [HookMatcherGroup] = [],
+        sessionStart: [HookMatcherGroup] = [],
+        userPromptSubmit: [HookMatcherGroup] = [],
+        stop: [HookMatcherGroup] = [],
+        notification: [HookMatcherGroup] = [],
+        permissionRequest: [HookMatcherGroup] = [],
+        postToolUseFailure: [HookMatcherGroup] = []
+    ) {
+        self.pre = pre
+        self.post = post
+        self.sessionStart = sessionStart
+        self.userPromptSubmit = userPromptSubmit
+        self.stop = stop
+        self.notification = notification
+        self.permissionRequest = permissionRequest
+        self.postToolUseFailure = postToolUseFailure
+    }
+
+    public static let empty = HookConfigFile()
 }
 
 // MARK: - Dispatcher
@@ -137,6 +254,17 @@ public enum HookDispatcher {
     public static let denyExitCode = 2
     /// Max stdout/stderr bytes retained for decision parsing.
     public static let maxCaptureBytes = 64 * 1024
+    /// ZCode `KNi`: AgentLoop must honor Stop `continue` at most this many times.
+    public static let maxStopContinuations = 3
+
+    public static let eventSessionStart = "SessionStart"
+    public static let eventUserPromptSubmit = "UserPromptSubmit"
+    public static let eventPreToolUse = "PreToolUse"
+    public static let eventPermissionRequest = "PermissionRequest"
+    public static let eventPostToolUse = "PostToolUse"
+    public static let eventPostToolUseFailure = "PostToolUseFailure"
+    public static let eventStop = "Stop"
+    public static let eventNotification = "Notification"
 
     // MARK: Discovery
 
@@ -179,19 +307,40 @@ public enum HookDispatcher {
     // MARK: Pre / Post
 
     /// Pre-tool: deny-tools.txt then matching command runners. First deny wins.
+    /// Wraps `preToolDetailed` — deny still deny, allow still allow.
     public static func preTool(
         toolName: String,
         argumentsSummary: String,
         projectRoot: URL?,
         worktreeRoot: URL? = nil
     ) -> HookDecision {
+        preToolDetailed(
+            toolName: toolName,
+            argumentsSummary: argumentsSummary,
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot
+        ).asHookDecision()
+    }
+
+    /// Pre-tool with ZCode fields: `updatedInput`, `permissionDecision` (allow|ask|deny),
+    /// `additionalContext`. First deny / `permissionDecision: deny` / exit 2 wins.
+    public static func preToolDetailed(
+        toolName: String,
+        argumentsSummary: String,
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> PreToolHookResult {
         guard let dir = hooksDir(projectRoot: projectRoot, worktreeRoot: worktreeRoot) else {
             return .allow
         }
 
         if let deny = denyToolsDecision(toolName: toolName, hooksDir: dir) {
             appendLog(hooksDir: dir, phase: "pre", line: "deny-tools \(toolName)")
-            return deny
+            return PreToolHookResult(
+                allow: false,
+                permissionDecision: "deny",
+                message: deny.message
+            )
         }
 
         appendLog(
@@ -202,27 +351,46 @@ public enum HookDispatcher {
 
         let cwd = worktreeRoot ?? projectRoot ?? dir.deletingLastPathComponent()
         let config = loadConfig(hooksDir: dir)
+        var merged = PreToolHookResult.allow
+        var sawAsk = false
         for group in config.pre where matcherMatches(group.matcher, toolName: toolName) {
             for handler in group.handlers {
-                let decision = runHandler(
+                let result = runPreToolHandler(
                     handler,
-                    eventName: "PreToolUse",
                     toolName: toolName,
                     payload: argumentsSummary,
                     hooksDir: dir,
                     cwd: cwd
                 )
-                if !decision.allow {
+                if !result.allow {
                     appendLog(
                         hooksDir: dir,
                         phase: "pre",
-                        line: "command-deny \(handler.name) \(toolName): \(decision.message ?? "")"
+                        line: "command-deny \(handler.name) \(toolName): \(result.message ?? "")"
                     )
-                    return decision
+                    return result
+                }
+                if result.permissionDecision?.lowercased() == "ask" {
+                    sawAsk = true
+                }
+                if let json = result.updatedInputJSON, !json.isEmpty {
+                    merged.updatedInputJSON = json
+                }
+                merged.additionalContext = mergeContext(
+                    merged.additionalContext, result.additionalContext)
+                if let msg = result.message, !msg.isEmpty {
+                    merged.message = msg
+                }
+                if let pd = result.permissionDecision, !pd.isEmpty,
+                   pd.lowercased() != "ask" {
+                    merged.permissionDecision = pd
                 }
             }
         }
-        return .allow
+        if sawAsk {
+            merged.permissionDecision = "ask"
+        }
+        return merged
     }
 
     /// Post-tool: observability log + command runners. Explicit deny can flag the result.
@@ -320,24 +488,93 @@ public enum HookDispatcher {
 
     /// Agent turn ended (completed, cancelled, cap, error reason string).
     /// Deny is recorded but typically non-blocking after the turn has finished.
+    /// Wraps `stopDetailed` — deny still deny, allow still allow (drops `continue`).
     @discardableResult
     public static func stop(
         reason: String,
         projectRoot: URL?,
         worktreeRoot: URL? = nil
     ) -> HookDecision {
-        runLifecycle(
-            eventName: "Stop",
-            groups: { $0.stop },
-            payload: reason,
-            subject: reason,
+        stopDetailed(
+            reason: reason,
             projectRoot: projectRoot,
-            worktreeRoot: worktreeRoot,
-            logPhase: "stop",
-            extraEnvelope: [
-                "reason": String(reason.prefix(2_000))
-            ]
+            worktreeRoot: worktreeRoot
+        ).asHookDecision()
+    }
+
+    /// Stop with ZCode `continue` + `additionalContext`. AgentLoop must call this
+    /// (not `stop`) when deciding whether to force another model step.
+    public static func stopDetailed(
+        reason: String,
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> StopHookResult {
+        guard let dir = hooksDir(projectRoot: projectRoot, worktreeRoot: worktreeRoot) else {
+            return .allow
+        }
+        appendLog(
+            hooksDir: dir,
+            phase: "stop",
+            line: "\(eventStop) \(reason.prefix(160))"
         )
+        let cwd = lifecycleCWD(projectRoot: projectRoot, worktreeRoot: worktreeRoot, hooksDir: dir)
+        let config = loadConfig(hooksDir: dir)
+        var merged = StopHookResult.allow
+        for group in config.stop where matcherMatches(group.matcher, toolName: reason) {
+            for handler in group.handlers {
+                let result = runStopHandler(
+                    handler,
+                    payload: reason,
+                    hooksDir: dir,
+                    cwd: cwd,
+                    extraEnvelope: [
+                        "reason": String(reason.prefix(2_000))
+                    ]
+                )
+                if !result.allow {
+                    appendLog(
+                        hooksDir: dir,
+                        phase: "stop",
+                        line: "command-deny \(handler.name) \(eventStop): \(result.message ?? "")"
+                    )
+                    return result
+                }
+                if result.shouldContinue {
+                    merged.shouldContinue = true
+                }
+                merged.additionalContext = mergeContext(
+                    merged.additionalContext, result.additionalContext)
+                if let msg = result.message, !msg.isEmpty {
+                    merged.message = msg
+                }
+            }
+        }
+        return merged
+    }
+
+    /// ZCode `shouldContinueAfterStopHooks`: `continue: true` AND non-empty
+    /// additionalContext AND `continuationCount < maxStopContinuations`.
+    public static func shouldContinueAfterStop(
+        _ result: StopHookResult,
+        continuationCount: Int
+    ) -> Bool {
+        guard result.allow, result.shouldContinue else { return false }
+        guard continuationCount < maxStopContinuations else { return false }
+        let ctx = result.additionalContext?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return !ctx.isEmpty
+    }
+
+    /// Format injected hook context (ZCode `hook_context` body).
+    public static func formatHookAdditionalContext(_ texts: [String]) -> String {
+        let cleaned = texts
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        guard !cleaned.isEmpty else { return "" }
+        if cleaned.count == 1 {
+            return "[Hook additional context]\n\(cleaned[0])"
+        }
+        let numbered = cleaned.enumerated().map { "#\($0.offset + 1)\n\($0.element)" }
+        return (["[Hook additional context]"] + numbered).joined(separator: "\n")
     }
 
     /// Optional notification hook (matcher against notification type).
@@ -349,7 +586,7 @@ public enum HookDispatcher {
         worktreeRoot: URL? = nil
     ) -> HookDecision {
         runLifecycle(
-            eventName: "Notification",
+            eventName: eventNotification,
             groups: { $0.notification },
             payload: message.isEmpty ? type : "\(type): \(message)",
             subject: type,
@@ -359,6 +596,51 @@ public enum HookDispatcher {
             extraEnvelope: [
                 "notification_type": type,
                 "message": String(message.prefix(2_000))
+            ]
+        )
+    }
+
+    /// ZCode PermissionRequest — parsed and runnable; AgentLoop may not fire yet.
+    @discardableResult
+    public static func permissionRequest(
+        toolName: String,
+        payload: String,
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> HookDecision {
+        runLifecycle(
+            eventName: eventPermissionRequest,
+            groups: { $0.permissionRequest },
+            payload: payload,
+            subject: toolName,
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot,
+            logPhase: "permission_request",
+            extraEnvelope: [
+                "tool_name": toolName
+            ]
+        )
+    }
+
+    /// ZCode PostToolUseFailure — parsed and runnable; AgentLoop may not fire yet.
+    @discardableResult
+    public static func postToolUseFailure(
+        toolName: String,
+        errorSummary: String,
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> HookDecision {
+        runLifecycle(
+            eventName: eventPostToolUseFailure,
+            groups: { $0.postToolUseFailure },
+            payload: errorSummary,
+            subject: toolName,
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot,
+            logPhase: "post_tool_use_failure",
+            extraEnvelope: [
+                "tool_name": toolName,
+                "error": String(errorSummary.prefix(2_000))
             ]
         )
     }
@@ -382,20 +664,7 @@ public enum HookDispatcher {
             phase: logPhase,
             line: "\(eventName) \(payload.prefix(160))"
         )
-        // Hook cwd: the worktree when it exists on disk (hooks see the
-        // worktree as the project dir). A bound-but-missing worktree (deleted,
-        // or never created) would make Process spawn fail (chdir ENOENT) and
-        // fail-open — silently skipping deny hooks — so fall back to the
-        // project root, then the hooks dir's parent.
-        let cwd: URL
-        if let worktree = worktreeRoot,
-           FileManager.default.fileExists(atPath: worktree.path) {
-            cwd = worktree
-        } else if let project = projectRoot {
-            cwd = project
-        } else {
-            cwd = dir.deletingLastPathComponent()
-        }
+        let cwd = lifecycleCWD(projectRoot: projectRoot, worktreeRoot: worktreeRoot, hooksDir: dir)
         let config = loadConfig(hooksDir: dir)
         let matched = groups(config)
         for group in matched where matcherMatches(group.matcher, toolName: subject) {
@@ -420,6 +689,28 @@ public enum HookDispatcher {
             }
         }
         return .allow
+    }
+
+    /// Hook cwd: worktree when it exists on disk; else project root; else hooks parent.
+    /// A bound-but-missing worktree would make Process chdir fail (ENOENT) and
+    /// fail-open — silently skipping deny hooks.
+    static func lifecycleCWD(projectRoot: URL?, worktreeRoot: URL?, hooksDir: URL) -> URL {
+        if let worktree = worktreeRoot,
+           FileManager.default.fileExists(atPath: worktree.path) {
+            return worktree
+        }
+        if let project = projectRoot {
+            return project
+        }
+        return hooksDir.deletingLastPathComponent()
+    }
+
+    static func mergeContext(_ existing: String?, _ incoming: String?) -> String? {
+        let next = incoming?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !next.isEmpty else { return existing }
+        let prev = existing?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if prev.isEmpty { return next }
+        return prev + "\n" + next
     }
 
     // MARK: deny-tools.txt
@@ -448,7 +739,7 @@ public enum HookDispatcher {
 
     // MARK: Config load / parse
 
-    static func loadConfig(hooksDir: URL) -> HookConfigFile {
+    public static func loadConfig(hooksDir: URL) -> HookConfigFile {
         guard let url = configURL(hooksDir: hooksDir),
               let data = try? Data(contentsOf: url),
               let obj = try? JSONSerialization.jsonObject(with: data)
@@ -478,7 +769,15 @@ public enum HookDispatcher {
                         ?? hooks["beforeSubmitPrompt"]),
                 stop: parseMatcherGroups(hooks["Stop"] ?? hooks["stop"]),
                 notification: parseMatcherGroups(
-                    hooks["Notification"] ?? hooks["notification"])
+                    hooks["Notification"] ?? hooks["notification"]),
+                permissionRequest: parseMatcherGroups(
+                    hooks["PermissionRequest"]
+                        ?? hooks["permission_request"]
+                        ?? hooks["permissionRequest"]),
+                postToolUseFailure: parseMatcherGroups(
+                    hooks["PostToolUseFailure"]
+                        ?? hooks["post_tool_use_failure"]
+                        ?? hooks["postToolUseFailure"])
             )
         }
 
@@ -494,7 +793,15 @@ public enum HookDispatcher {
                     ?? root["userPromptSubmit"]
                     ?? root["beforeSubmitPrompt"]),
             stop: parseMatcherGroups(root["stop"] ?? root["Stop"]),
-            notification: parseMatcherGroups(root["notification"] ?? root["Notification"])
+            notification: parseMatcherGroups(root["notification"] ?? root["Notification"]),
+            permissionRequest: parseMatcherGroups(
+                root["permission_request"]
+                    ?? root["PermissionRequest"]
+                    ?? root["permissionRequest"]),
+            postToolUseFailure: parseMatcherGroups(
+                root["post_tool_use_failure"]
+                    ?? root["PostToolUseFailure"]
+                    ?? root["postToolUseFailure"])
         )
     }
 
@@ -567,6 +874,70 @@ public enum HookDispatcher {
         )
     }
 
+    // MARK: Config encode (settings store — additive, unused by dispatch)
+
+    /// Nested `{ "hooks": { "PreToolUse": [...], ... } }` matching `parseConfigJSON`.
+    public static func encodeConfigObject(_ config: HookConfigFile) -> [String: Any] {
+        var hooks: [String: Any] = [:]
+        func put(_ event: String, _ groups: [HookMatcherGroup]) {
+            let encoded = encodeMatcherGroups(groups)
+            guard !encoded.isEmpty else { return }
+            hooks[event] = encoded
+        }
+        put(eventPreToolUse, config.pre)
+        put(eventPostToolUse, config.post)
+        put(eventSessionStart, config.sessionStart)
+        put(eventUserPromptSubmit, config.userPromptSubmit)
+        put(eventStop, config.stop)
+        put(eventNotification, config.notification)
+        put(eventPermissionRequest, config.permissionRequest)
+        put(eventPostToolUseFailure, config.postToolUseFailure)
+        return ["hooks": hooks]
+    }
+
+    static func encodeMatcherGroups(_ groups: [HookMatcherGroup]) -> [[String: Any]] {
+        groups.compactMap { group in
+            let handlers = group.handlers.compactMap { encodeHandler($0) }
+            guard !handlers.isEmpty else { return nil }
+            var d: [String: Any] = ["hooks": handlers]
+            if let matcher = group.matcher?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !matcher.isEmpty {
+                d["matcher"] = matcher
+            }
+            return d
+        }
+    }
+
+    static func encodeHandler(_ handler: HookHandlerSpec) -> [String: Any]? {
+        let command = handler.command.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !command.isEmpty else { return nil }
+        var h: [String: Any] = [
+            "type": handler.type.isEmpty ? "command" : handler.type,
+            "command": command,
+            "name": handler.name,
+        ]
+        let t = handler.timeoutSeconds
+        if t == t.rounded() {
+            h["timeout"] = Int(t)
+        } else {
+            h["timeout"] = t
+        }
+        return h
+    }
+
+    public static func writeConfig(_ config: HookConfigFile, to url: URL) throws {
+        let obj = encodeConfigObject(config)
+        let data = try JSONSerialization.data(
+            withJSONObject: obj,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try data.write(to: url, options: .atomic)
+    }
+
     // MARK: Matcher
 
     /// Match tool names. Empty / `*` / absent → all. Pipe list → exact. Else regex unanchored.
@@ -601,6 +972,54 @@ public enum HookDispatcher {
 
     // MARK: Command runner
 
+    static func phaseLabel(for eventName: String) -> String {
+        switch eventName {
+        case eventPreToolUse: return "pre"
+        case eventPostToolUse: return "post"
+        default: return eventName
+        }
+    }
+
+    static func executeHandler(
+        _ handler: HookHandlerSpec,
+        eventName: String,
+        toolName: String,
+        payload: String,
+        hooksDir: URL,
+        cwd: URL,
+        extraEnvelope: [String: Any] = [:]
+    ) -> CommandRunResult {
+        guard handler.type == "command" else { return .failed("unsupported type") }
+
+        let phase = phaseLabel(for: eventName)
+        var envelope: [String: Any] = [
+            "tool_name": toolName,
+            "hook_event_name": eventName,
+            "phase": phase,
+            "payload": String(payload.prefix(8_000)),
+            "arguments_summary": eventName == eventPreToolUse ? String(payload.prefix(8_000)) : "",
+            "result_summary": eventName == eventPostToolUse ? String(payload.prefix(8_000)) : "",
+            "cwd": cwd.path,
+        ]
+        for (k, v) in extraEnvelope {
+            envelope[k] = v
+        }
+        guard let stdinData = try? JSONSerialization.data(withJSONObject: envelope) else {
+            return .failed("envelope encode failed")
+        }
+
+        return runCommand(
+            handler.command,
+            hooksDir: hooksDir,
+            cwd: cwd,
+            stdin: stdinData,
+            timeoutSeconds: handler.timeoutSeconds,
+            eventName: eventName,
+            toolName: toolName,
+            hookName: handler.name
+        )
+    }
+
     static func runHandler(
         _ handler: HookHandlerSpec,
         eventName: String,
@@ -611,44 +1030,18 @@ public enum HookDispatcher {
         extraEnvelope: [String: Any] = [:]
     ) -> HookDecision {
         guard handler.type == "command" else { return .allow }
-
-        let phaseLabel: String
-        switch eventName {
-        case "PreToolUse": phaseLabel = "pre"
-        case "PostToolUse": phaseLabel = "post"
-        default: phaseLabel = eventName
-        }
-
-        var envelope: [String: Any] = [
-            "tool_name": toolName,
-            "hook_event_name": eventName,
-            "phase": phaseLabel,
-            "payload": String(payload.prefix(8_000)),
-            "arguments_summary": eventName == "PreToolUse" ? String(payload.prefix(8_000)) : "",
-            "result_summary": eventName == "PostToolUse" ? String(payload.prefix(8_000)) : "",
-            "cwd": cwd.path,
-        ]
-        for (k, v) in extraEnvelope {
-            envelope[k] = v
-        }
-        guard let stdinData = try? JSONSerialization.data(withJSONObject: envelope) else {
-            return .allow
-        }
-
-        let result = runCommand(
-            handler.command,
-            hooksDir: hooksDir,
-            cwd: cwd,
-            stdin: stdinData,
-            timeoutSeconds: handler.timeoutSeconds,
+        let phase = phaseLabel(for: eventName)
+        switch executeHandler(
+            handler,
             eventName: eventName,
             toolName: toolName,
-            hookName: handler.name
-        )
-
-        switch result {
+            payload: payload,
+            hooksDir: hooksDir,
+            cwd: cwd,
+            extraEnvelope: extraEnvelope
+        ) {
         case .failed(let err):
-            appendLog(hooksDir: hooksDir, phase: phaseLabel, line: "command-fail \(handler.name): \(err)")
+            appendLog(hooksDir: hooksDir, phase: phase, line: "command-fail \(handler.name): \(err)")
             return .allow // fail-open
         case .completed(let exitCode, let stdout, let stderr):
             return interpretCommandOutput(
@@ -657,6 +1050,66 @@ public enum HookDispatcher {
                 stderr: stderr,
                 hookName: handler.name,
                 toolName: toolName.isEmpty ? eventName : toolName
+            )
+        }
+    }
+
+    static func runPreToolHandler(
+        _ handler: HookHandlerSpec,
+        toolName: String,
+        payload: String,
+        hooksDir: URL,
+        cwd: URL
+    ) -> PreToolHookResult {
+        guard handler.type == "command" else { return .allow }
+        switch executeHandler(
+            handler,
+            eventName: eventPreToolUse,
+            toolName: toolName,
+            payload: payload,
+            hooksDir: hooksDir,
+            cwd: cwd
+        ) {
+        case .failed(let err):
+            appendLog(hooksDir: hooksDir, phase: "pre", line: "command-fail \(handler.name): \(err)")
+            return .allow
+        case .completed(let exitCode, let stdout, let stderr):
+            return interpretPreToolOutput(
+                exitCode: exitCode,
+                stdout: stdout,
+                stderr: stderr,
+                hookName: handler.name,
+                toolName: toolName
+            )
+        }
+    }
+
+    static func runStopHandler(
+        _ handler: HookHandlerSpec,
+        payload: String,
+        hooksDir: URL,
+        cwd: URL,
+        extraEnvelope: [String: Any]
+    ) -> StopHookResult {
+        guard handler.type == "command" else { return .allow }
+        switch executeHandler(
+            handler,
+            eventName: eventStop,
+            toolName: "",
+            payload: payload,
+            hooksDir: hooksDir,
+            cwd: cwd,
+            extraEnvelope: extraEnvelope
+        ) {
+        case .failed(let err):
+            appendLog(hooksDir: hooksDir, phase: "stop", line: "command-fail \(handler.name): \(err)")
+            return .allow
+        case .completed(let exitCode, let stdout, let stderr):
+            return interpretStopOutput(
+                exitCode: exitCode,
+                stdout: stdout,
+                stderr: stderr,
+                hookName: handler.name
             )
         }
     }
@@ -941,6 +1394,263 @@ public enum HookDispatcher {
         }
 
         return nil
+    }
+
+    // MARK: Structured parse (ZCode Stop / PreToolUse)
+
+    /// Extract a JSON object from pure JSON or a blob with leading/trailing noise.
+    static func extractJSONObject(from text: String) -> [String: Any]? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        func object(from jsonText: String) -> [String: Any]? {
+            guard let data = jsonText.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+            return obj
+        }
+
+        if let direct = object(from: trimmed) { return direct }
+        if let start = trimmed.firstIndex(of: "{"),
+           let end = trimmed.lastIndex(of: "}"),
+           start < end,
+           let embedded = object(from: String(trimmed[start...end])) {
+            return embedded
+        }
+        return nil
+    }
+
+    static func hookStringField(_ obj: [String: Any], keys: [String]) -> String? {
+        for key in keys {
+            if let s = obj[key] as? String {
+                let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !t.isEmpty { return t }
+            }
+        }
+        return nil
+    }
+
+    static func hookContinueFlag(_ obj: [String: Any]) -> Bool {
+        if let b = obj["continue"] as? Bool { return b }
+        if let n = obj["continue"] as? NSNumber { return n.boolValue }
+        if let s = obj["continue"] as? String {
+            switch s.lowercased() {
+            case "true", "1", "yes": return true
+            default: return false
+            }
+        }
+        return false
+    }
+
+    static func hookAdditionalContext(from obj: [String: Any]) -> String? {
+        if let top = hookStringField(obj, keys: ["additionalContext", "additional_context"]) {
+            return top
+        }
+        if let specific = obj["hookSpecificOutput"] as? [String: Any] {
+            return hookStringField(specific, keys: ["additionalContext", "additional_context"])
+        }
+        return nil
+    }
+
+    static func hookPermissionDecision(from obj: [String: Any]) -> String? {
+        let raw: String?
+        if let top = hookStringField(obj, keys: ["permissionDecision", "permission_decision"]) {
+            raw = top
+        } else if let specific = obj["hookSpecificOutput"] as? [String: Any] {
+            raw = hookStringField(specific, keys: ["permissionDecision", "permission_decision"])
+        } else {
+            raw = nil
+        }
+        guard let raw else { return nil }
+        switch raw.lowercased() {
+        case "allow", "approve": return "allow"
+        case "ask": return "ask"
+        case "deny", "block": return "deny"
+        default: return raw.lowercased()
+        }
+    }
+
+    static func hookReason(from obj: [String: Any]) -> String? {
+        if let top = hookStringField(
+            obj, keys: ["reason", "message", "permissionDecisionReason", "stopReason"]
+        ) {
+            return top
+        }
+        if let specific = obj["hookSpecificOutput"] as? [String: Any] {
+            return hookStringField(
+                specific, keys: ["permissionDecisionReason", "reason", "message"])
+        }
+        return nil
+    }
+
+    /// `updatedInput` / `updated_input`: object or JSON string, top-level or hookSpecificOutput.
+    static func hookUpdatedInputJSON(from obj: [String: Any]) -> String? {
+        if let top = encodeUpdatedInput(obj["updatedInput"] ?? obj["updated_input"]) {
+            return top
+        }
+        if let specific = obj["hookSpecificOutput"] as? [String: Any] {
+            return encodeUpdatedInput(specific["updatedInput"] ?? specific["updated_input"])
+        }
+        return nil
+    }
+
+    static func encodeUpdatedInput(_ value: Any?) -> String? {
+        guard let value else { return nil }
+        if let s = value as? String {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? nil : t
+        }
+        if JSONSerialization.isValidJSONObject(value),
+           let data = try? JSONSerialization.data(withJSONObject: value),
+           let s = String(data: data, encoding: .utf8) {
+            return s
+        }
+        return nil
+    }
+
+    static func hookDecisionIsDeny(_ obj: [String: Any]) -> Bool {
+        if let decision = obj["decision"] as? String {
+            let d = decision.lowercased()
+            if d == "deny" || d == "block" { return true }
+        }
+        return hookPermissionDecision(from: obj) == "deny"
+    }
+
+    /// Parse Stop stdout JSON (`continue` + `additionalContext` / `additional_context`).
+    static func parseStopHookJSON(_ text: String) -> StopHookResult? {
+        guard let obj = extractJSONObject(from: text) else { return nil }
+        let ctx = hookAdditionalContext(from: obj)
+        let reason = hookReason(from: obj)
+        if hookDecisionIsDeny(obj) {
+            return StopHookResult(
+                allow: false,
+                shouldContinue: false,
+                additionalContext: ctx,
+                message: reason ?? "Denied by hook"
+            )
+        }
+        return StopHookResult(
+            allow: true,
+            shouldContinue: hookContinueFlag(obj),
+            additionalContext: ctx,
+            message: reason
+        )
+    }
+
+    /// Parse PreToolUse stdout JSON (`updatedInput`, `permissionDecision` allow|ask|deny).
+    static func parsePreToolHookJSON(_ text: String) -> PreToolHookResult? {
+        guard let obj = extractJSONObject(from: text) else { return nil }
+        let pd = hookPermissionDecision(from: obj)
+        let ctx = hookAdditionalContext(from: obj)
+        let updated = hookUpdatedInputJSON(from: obj)
+        let reason = hookReason(from: obj)
+        if hookDecisionIsDeny(obj) {
+            return PreToolHookResult(
+                allow: false,
+                permissionDecision: "deny",
+                updatedInputJSON: updated,
+                additionalContext: ctx,
+                message: reason ?? "Denied by hook"
+            )
+        }
+        return PreToolHookResult(
+            allow: true,
+            permissionDecision: pd,
+            updatedInputJSON: updated,
+            additionalContext: ctx,
+            message: reason
+        )
+    }
+
+    static func interpretStopOutput(
+        exitCode: Int,
+        stdout: String,
+        stderr: String,
+        hookName: String
+    ) -> StopHookResult {
+        if exitCode == denyExitCode {
+            let parsed = parseStopHookJSON(stdout) ?? parseStopHookJSON(stderr)
+            let reason = parsed?.message
+                ?? firstNonEmpty(stdout, stderr).map { stripJSONNoise($0) }
+                ?? "Denied by hook \(hookName) (exit \(denyExitCode))"
+            return StopHookResult(
+                allow: false,
+                shouldContinue: false,
+                additionalContext: parsed?.additionalContext,
+                message: reason + " [hook:\(hookName) tool:\(eventStop)]"
+            )
+        }
+        if let parsed = parseStopHookJSON(stdout) ?? parseStopHookJSON(stderr) {
+            if !parsed.allow {
+                return StopHookResult(
+                    allow: false,
+                    shouldContinue: false,
+                    additionalContext: parsed.additionalContext,
+                    message: (parsed.message ?? "Denied by hook")
+                        + " [hook:\(hookName) tool:\(eventStop)]"
+                )
+            }
+            return parsed
+        }
+        if exitCode != 0 {
+            let msg = firstNonEmpty(stderr, stdout)
+            if let msg, !msg.isEmpty {
+                return StopHookResult(
+                    allow: true,
+                    shouldContinue: false,
+                    additionalContext: nil,
+                    message: "hook \(hookName) exit \(exitCode): \(msg.prefix(200))"
+                )
+            }
+            return .allow
+        }
+        return .allow
+    }
+
+    static func interpretPreToolOutput(
+        exitCode: Int,
+        stdout: String,
+        stderr: String,
+        hookName: String,
+        toolName: String
+    ) -> PreToolHookResult {
+        if exitCode == denyExitCode {
+            let parsed = parsePreToolHookJSON(stdout) ?? parsePreToolHookJSON(stderr)
+            let reason = parsed?.message
+                ?? firstNonEmpty(stdout, stderr).map { stripJSONNoise($0) }
+                ?? "Denied by hook \(hookName) (exit \(denyExitCode))"
+            return PreToolHookResult(
+                allow: false,
+                permissionDecision: "deny",
+                updatedInputJSON: parsed?.updatedInputJSON,
+                additionalContext: parsed?.additionalContext,
+                message: reason + " [hook:\(hookName) tool:\(toolName)]"
+            )
+        }
+        if let parsed = parsePreToolHookJSON(stdout) ?? parsePreToolHookJSON(stderr) {
+            if !parsed.allow {
+                return PreToolHookResult(
+                    allow: false,
+                    permissionDecision: "deny",
+                    updatedInputJSON: parsed.updatedInputJSON,
+                    additionalContext: parsed.additionalContext,
+                    message: (parsed.message ?? "Denied by hook")
+                        + " [hook:\(hookName) tool:\(toolName)]"
+                )
+            }
+            return parsed
+        }
+        if exitCode != 0 {
+            let msg = firstNonEmpty(stderr, stdout)
+            if let msg, !msg.isEmpty {
+                return PreToolHookResult(
+                    allow: true,
+                    message: "hook \(hookName) exit \(exitCode): \(msg.prefix(200))"
+                )
+            }
+            return .allow
+        }
+        return .allow
     }
 
     // MARK: Logging

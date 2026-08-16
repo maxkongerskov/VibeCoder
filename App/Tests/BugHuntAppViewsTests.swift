@@ -5,6 +5,7 @@
 //
 
 import XCTest
+import Network
 import AgentCore
 @testable import VibeCoderApp
 
@@ -76,6 +77,37 @@ final class BugHuntAppViewsTests: XCTestCase {
         XCTAssertEqual(plan?.goal, "Ship v2")
         XCTAssertEqual(plan?.todos.map(\.text), ["Design", "Implement", "Write docs"])
         XCTAssertFalse(plan?.todos.contains(where: { $0.text == "Verify" }) ?? true)
+    }
+
+    // MARK: - P0-1 /export routing never rebroadcasts
+
+    func testExportRoutingNeverImpliesRebroadcast() {
+        let id = UUID()
+        let chatVisible = ExportConversationRouting.decide(
+            noteObject: id,
+            selectedConversationID: id,
+            chatTabVisible: true
+        )
+        XCTAssertEqual(chatVisible.selectConversationID, id)
+        XCTAssertFalse(chatVisible.switchToChatTab)
+
+        let otherTab = ExportConversationRouting.decide(
+            noteObject: id,
+            selectedConversationID: nil,
+            chatTabVisible: false
+        )
+        XCTAssertEqual(otherTab.selectConversationID, id)
+        XCTAssertTrue(otherTab.switchToChatTab)
+    }
+
+    func testExportRoutingFallsBackToSelectedConversation() {
+        let selected = UUID()
+        let decision = ExportConversationRouting.decide(
+            noteObject: nil,
+            selectedConversationID: selected,
+            chatTabVisible: true
+        )
+        XCTAssertEqual(decision.selectConversationID, selected)
     }
 
     // MARK: - apply_patch inline card: +++ / --- content lines
@@ -387,4 +419,116 @@ final class BugHuntAppViewsTests: XCTestCase {
         XCTAssertEqual(url?.path, "/v1")
     }
 
+    func testDefaultDetectTargetsCoverLocalServers() {
+        let ids = Set(LoopbackDetectTarget.defaults.map(\.backend))
+        XCTAssertTrue(ids.contains(.lmStudio))
+        XCTAssertTrue(ids.contains(.ollama))
+        XCTAssertTrue(ids.contains(.omlx))
+    }
+
+    func testClassifyRequiresModelsJSONNotBareTCP() {
+        XCTAssertEqual(LoopbackServerProbe.classify(status: 200, body: Data("{}".utf8)), .busyNotCompat)
+        let list = #"{"object":"list","data":[]}"#.data(using: .utf8)
+        XCTAssertEqual(LoopbackServerProbe.classify(status: 200, body: list), .modelsReady)
+        XCTAssertEqual(LoopbackServerProbe.classify(status: 401, body: nil), .modelsReady)
+        XCTAssertEqual(LoopbackServerProbe.classify(status: 403, body: Data()), .modelsReady)
+        XCTAssertEqual(LoopbackServerProbe.classify(status: 404, body: Data("<html>".utf8)), .busyNotCompat)
+    }
+
+    func testTCPOpenWithoutHTTPIsNotModelsReady() {
+        // Minimal repro: accept TCP and never speak HTTP.
+        let listener: NWListener
+        do {
+            listener = try NWListener(using: .tcp, on: .any)
+        } catch {
+            return XCTFail("listen: \(error)")
+        }
+        let ready = expectation(description: "listen")
+        var port = 0
+        listener.stateUpdateHandler = { state in
+            if case .ready = state, let p = listener.port {
+                port = Int(p.rawValue)
+                ready.fulfill()
+            }
+        }
+        listener.newConnectionHandler = { conn in
+            conn.start(queue: .global(qos: .utility))
+            // Intentionally never write an HTTP response.
+        }
+        listener.start(queue: .global(qos: .utility))
+        defer { listener.cancel() }
+        wait(for: [ready], timeout: 2)
+        guard let url = LoopbackServerProbe.modelsURL(host: "127.0.0.1", port: port) else {
+            return XCTFail("url")
+        }
+        let verdict = LoopbackServerProbe.probe(url: url, timeout: 0.6)
+        XCTAssertNotEqual(verdict, .modelsReady, "TCP-only must not look like a model server")
+    }
+
+    func testHTTPModelsListIsDetected() {
+        let listener: NWListener
+        do {
+            listener = try NWListener(using: .tcp, on: .any)
+        } catch {
+            return XCTFail("listen: \(error)")
+        }
+        let ready = expectation(description: "listen")
+        var port = 0
+        listener.stateUpdateHandler = { state in
+            if case .ready = state, let p = listener.port {
+                port = Int(p.rawValue)
+                ready.fulfill()
+            }
+        }
+        let body = #"{"object":"list","data":[{"id":"m"}]}"#
+        listener.newConnectionHandler = { conn in
+            conn.start(queue: .global(qos: .utility))
+            conn.receive(minimumIncompleteLength: 1, maximumLength: 4096) { _, _, _, _ in
+                let payload = Data(body.utf8)
+                let resp = """
+                HTTP/1.1 200 OK\r
+                Content-Type: application/json\r
+                Content-Length: \(payload.count)\r
+                Connection: close\r
+                \r
+                \(body)
+                """
+                conn.send(content: Data(resp.utf8), completion: .contentProcessed { _ in
+                    conn.cancel()
+                })
+            }
+        }
+        listener.start(queue: .global(qos: .utility))
+        defer { listener.cancel() }
+        wait(for: [ready], timeout: 2)
+        guard let url = LoopbackServerProbe.modelsURL(host: "127.0.0.1", port: port) else {
+            return XCTFail("url")
+        }
+        XCTAssertEqual(LoopbackServerProbe.probe(url: url, timeout: 1.2), .modelsReady)
+    }
+}
+
+@MainActor
+final class PatchReviewQueueTests: XCTestCase {
+    func testPatchReviewQueuesSecondBatch() async {
+        let coord = PatchReviewCoordinator()
+        let p1 = [PatchPreview(
+            path: "A.swift", originalContent: "a", updatedContent: "b", hunks: [])]
+        let p2 = [PatchPreview(
+            path: "B.swift", originalContent: "c", updatedContent: "d", hunks: [])]
+
+        async let first = coord.review(p1)
+        await Task.yield()
+        async let second = coord.review(p2)
+        await Task.yield()
+        XCTAssertNotNil(coord.pendingBatch)
+        coord.resolve(.acceptAll)
+        let d1 = await first
+        XCTAssertEqual(d1, .acceptAll)
+        await Task.yield()
+        XCTAssertNotNil(coord.pendingBatch)
+        coord.resolve(.rejectAll)
+        let d2 = await second
+        XCTAssertEqual(d2, .rejectAll)
+    }
 }

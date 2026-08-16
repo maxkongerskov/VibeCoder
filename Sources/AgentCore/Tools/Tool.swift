@@ -49,8 +49,8 @@ public enum ToolAvailability: Sendable, Codable {
         switch raw {
         case "core": self = .core
         case "deferred": self = .deferred
-        case "platformGated": self = .core   // can't restore the closure
-        default: self = .core
+        case "platformGated": self = .deferred   // can't restore the closure — fail closed (hidden) rather than silently .core
+        default: self = .deferred
         }
     }
 }
@@ -139,13 +139,25 @@ public struct ToolArguments: @unchecked Sendable {
         return v
     }
     public func stringOptional(_ key: String) -> String? { raw[key] as? String }
+    /// Integer access. Accepts JSON ints and integral/fractional doubles
+    /// (truncating toward zero). Doubles whose truncated value cannot be
+    /// represented as `Int` (e.g. a model emitting `1e20`) throw /
+    /// return nil instead of trapping `Int(Double)` — same crash class
+    /// already fixed in `MCPStdioClient` and `ArgumentCoercer`.
     public func int(_ key: String) throws -> Int {
         if let v = raw[key] as? Int { return v }
-        if let v = raw[key] as? Double { return Int(v) }
-        throw ToolError.invalidArguments("Missing integer '\(key)'")
+        if let v = raw[key] as? Double, v.isFinite,
+           v >= Double(Int.min), v < Double(Int.max) {
+            return Int(v)
+        }
+        throw ToolError.invalidArguments(
+            "Missing or unrepresentable integer '\(key)': \(String(describing: raw[key]).prefix(40))")
     }
     public func intOptional(_ key: String) -> Int? {
-        raw[key] as? Int ?? (raw[key] as? Double).map { Int($0) }
+        if let v = raw[key] as? Int { return v }
+        guard let v = raw[key] as? Double, v.isFinite,
+              v >= Double(Int.min), v < Double(Int.max) else { return nil }
+        return Int(v)
     }
     public func bool(_ key: String, default defaultValue: Bool = false) -> Bool {
         if let b = raw[key] as? Bool { return b }
@@ -208,9 +220,17 @@ public struct ToolContext: Sendable {
     public let preToolHookDenials: [PreToolHookDenial]?
     /// When true, plan mode has been exited/approved for this turn.
     public let planModeExited: Bool
+    /// Tools the user disabled in Settings — subagents must honor this too.
+    public let disabledToolNames: Set<String>
 
     public var workingDirectory: URL {
         worktreeRoot ?? projectRoot ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    }
+
+    /// Project/worktree root safe for durable writes and project-tier config.
+    /// Nil when unbound or when the only fallback would be filesystem root.
+    public var usableWorkspaceRoot: URL? {
+        PathConfinement.usableWorkspaceRoot(worktree: worktreeRoot, project: projectRoot)
     }
 
     public init(projectRoot: URL?, worktreeRoot: URL? = nil,
@@ -228,7 +248,8 @@ public struct ToolContext: Sendable {
                 sessionReadPaths: Set<String> = [],
                 sessionPlanFileURL: URL? = nil,
                 preToolHookDenials: [PreToolHookDenial]? = nil,
-                planModeExited: Bool = false) {
+                planModeExited: Bool = false,
+                disabledToolNames: Set<String> = []) {
         self.projectRoot = projectRoot
         self.worktreeRoot = worktreeRoot
         self.safeMode = safeMode
@@ -244,13 +265,19 @@ public struct ToolContext: Sendable {
         self.executionMode = planModeExited && executionMode == .plan ? .edit : executionMode
         self.authorization = authorization
         self.sessionReadPaths = sessionReadPaths
-        self.sessionPlanFileURL = sessionPlanFileURL
-            ?? ToolAuthorization.sessionPlanURL(
-                workingDirectory: worktreeRoot ?? projectRoot
-                    ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
-                conversationID: conversationID)
+        if let sessionPlanFileURL {
+            self.sessionPlanFileURL = sessionPlanFileURL
+        } else if let root = PathConfinement.usableWorkspaceRoot(
+            worktree: worktreeRoot, project: projectRoot
+        ) {
+            self.sessionPlanFileURL = ToolAuthorization.sessionPlanURL(
+                workingDirectory: root, conversationID: conversationID)
+        } else {
+            self.sessionPlanFileURL = nil
+        }
         self.preToolHookDenials = preToolHookDenials
         self.planModeExited = planModeExited
+        self.disabledToolNames = disabledToolNames
     }
 }
 

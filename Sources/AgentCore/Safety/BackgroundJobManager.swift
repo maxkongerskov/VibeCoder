@@ -44,11 +44,14 @@ public struct BackgroundJobSnapshot: Sendable, Equatable {
     /// Owning conversation — used for scoped cleanup so deleting one
     /// chat does not kill jobs belonging to another.
     public let conversationID: UUID?
+    /// Child Conversation messages (subagents). Heartbeat `output` is not a thread.
+    public let transcript: [ChatMessage]
 
     public init(id: UUID, kind: BackgroundJobKind, status: BackgroundJobStatus,
                 command: String, output: String, exitCode: Int32?,
                 startedAt: Date, finishedAt: Date?,
-                conversationID: UUID? = nil) {
+                conversationID: UUID? = nil,
+                transcript: [ChatMessage] = []) {
         self.id = id
         self.kind = kind
         self.status = status
@@ -58,6 +61,29 @@ public struct BackgroundJobSnapshot: Sendable, Equatable {
         self.startedAt = startedAt
         self.finishedAt = finishedAt
         self.conversationID = conversationID
+        self.transcript = transcript
+    }
+
+    public func replacing(
+        status: BackgroundJobStatus? = nil,
+        output: String? = nil,
+        exitCode: Int32? = nil,
+        finishedAt: Date? = nil,
+        conversationID: UUID? = nil,
+        transcript: [ChatMessage]? = nil
+    ) -> BackgroundJobSnapshot {
+        BackgroundJobSnapshot(
+            id: id,
+            kind: kind,
+            status: status ?? self.status,
+            command: command,
+            output: output ?? self.output,
+            exitCode: exitCode ?? self.exitCode,
+            startedAt: startedAt,
+            finishedAt: finishedAt ?? self.finishedAt,
+            conversationID: conversationID ?? self.conversationID,
+            transcript: transcript ?? self.transcript
+        )
     }
 }
 
@@ -292,14 +318,12 @@ public actor BackgroundJobManager {
                     || (priorTrim.hasSuffix("[killed]") && priorTrim.count < 64)
                 if needsSummary {
                     let merged = output.hasSuffix("[killed]") ? output : (output + "\n[killed]")
-                    job.snapshot = BackgroundJobSnapshot(
-                        id: id, kind: .subagent, status: .killed,
-                        command: job.snapshot.command,
+                    job.snapshot = job.snapshot.replacing(
+                        status: .killed,
                         output: merged,
                         exitCode: -9,
-                        startedAt: job.snapshot.startedAt,
-                        finishedAt: job.snapshot.finishedAt ?? Date(),
-                        conversationID: job.snapshot.conversationID)
+                        finishedAt: job.snapshot.finishedAt ?? Date()
+                    )
                     jobs[id] = job
                     // Do not re-publish kill wake (already published by kill()).
                 }
@@ -308,29 +332,26 @@ public actor BackgroundJobManager {
         }
         let convo = job.snapshot.conversationID
         if job.cancelled {
-            job.snapshot = BackgroundJobSnapshot(
-                id: id, kind: .subagent, status: .killed,
-                command: job.snapshot.command,
+            job.snapshot = job.snapshot.replacing(
+                status: .killed,
                 output: output + "\n[killed]",
                 exitCode: -9,
-                startedAt: job.snapshot.startedAt,
                 finishedAt: Date(),
-                conversationID: convo)
+                conversationID: convo
+            )
             jobs[id] = job
             // kill() already published when it set cancelled; if complete
             // ran without kill race, still publish once.
             publishCompletion(job.snapshot)
             return
         }
-        job.snapshot = BackgroundJobSnapshot(
-            id: id, kind: .subagent,
+        job.snapshot = job.snapshot.replacing(
             status: failed ? .failed : .completed,
-            command: job.snapshot.command,
             output: output,
             exitCode: failed ? 1 : 0,
-            startedAt: job.snapshot.startedAt,
             finishedAt: Date(),
-            conversationID: convo)
+            conversationID: convo
+        )
         jobs[id] = job
         publishCompletion(job.snapshot)
     }
@@ -352,15 +373,16 @@ public actor BackgroundJobManager {
             .map { liveSnapshot($0) }
     }
 
+    public func listSubagents() -> [BackgroundJobSnapshot] {
+        jobs.values.map { liveSnapshot($0) }.filter { $0.kind == .subagent }
+    }
+
     private func liveSnapshot(_ job: Job) -> BackgroundJobSnapshot {
         let s = job.snapshot
         guard s.status == .running, let box = job.box else { return s }
         let live = currentOutput(box)
         guard !live.isEmpty else { return s }
-        return BackgroundJobSnapshot(
-            id: s.id, kind: s.kind, status: s.status, command: s.command,
-            output: live, exitCode: s.exitCode, startedAt: s.startedAt,
-            finishedAt: s.finishedAt, conversationID: s.conversationID)
+        return s.replacing(output: live)
     }
 
     public func wait(id: UUID, timeoutMs: Int) async -> BackgroundJobSnapshot? {
@@ -405,12 +427,20 @@ public actor BackgroundJobManager {
     public func updateSubagentOutput(id: UUID, output: String) {
         guard var job = jobs[id], job.snapshot.status == .running,
               job.snapshot.kind == .subagent else { return }
-        let s = job.snapshot
-        job.snapshot = BackgroundJobSnapshot(
-            id: s.id, kind: .subagent, status: .running, command: s.command,
-            output: output, exitCode: nil, startedAt: s.startedAt,
-            finishedAt: nil, conversationID: s.conversationID)
+        job.snapshot = job.snapshot.replacing(output: output)
         jobs[id] = job
+    }
+
+    /// Live child transcript for the inspector Thread (not the heartbeat `output`).
+    public func updateSubagentTranscript(id: UUID, messages: [ChatMessage]) {
+        guard var job = jobs[id], job.snapshot.kind == .subagent else { return }
+        job.snapshot = job.snapshot.replacing(transcript: messages)
+        jobs[id] = job
+    }
+
+    public func threadItems(for id: UUID) -> [SubagentThreadItem] {
+        guard let job = jobs[id] else { return [] }
+        return SubagentThreadBuilder.items(from: job.snapshot.transcript)
     }
 
     @discardableResult
@@ -423,14 +453,12 @@ public actor BackgroundJobManager {
         }
         job.waiter?.cancel()
         let out = currentOutput(job.box)
-        job.snapshot = BackgroundJobSnapshot(
-            id: id, kind: job.snapshot.kind, status: .killed,
-            command: job.snapshot.command,
+        job.snapshot = job.snapshot.replacing(
+            status: .killed,
             output: out + "\n[killed]",
             exitCode: -9,
-            startedAt: job.snapshot.startedAt,
-            finishedAt: Date(),
-            conversationID: job.snapshot.conversationID)
+            finishedAt: Date()
+        )
         job.box = nil
         jobs[id] = job
         publishCompletion(job.snapshot)
@@ -461,7 +489,22 @@ public actor BackgroundJobManager {
     }
 
     public func removeFinished() {
-        jobs = jobs.filter { $0.value.snapshot.status == .running }
+        // Keep finished *subagent* jobs so the inspector thread stays
+        // addressable after the parent turn ends. Cap the archive.
+        let running = jobs.filter { $0.value.snapshot.status == .running }
+        var finishedSubs = jobs.filter {
+            $0.value.snapshot.status != .running && $0.value.snapshot.kind == .subagent
+        }.sorted {
+            ($0.value.snapshot.finishedAt ?? .distantPast)
+                > ($1.value.snapshot.finishedAt ?? .distantPast)
+        }
+        if finishedSubs.count > 40 {
+            finishedSubs = Array(finishedSubs.prefix(40))
+        }
+        var next: [UUID: Job] = [:]
+        for (id, job) in running { next[id] = job }
+        for (id, job) in finishedSubs { next[id] = job }
+        jobs = next
     }
 
 

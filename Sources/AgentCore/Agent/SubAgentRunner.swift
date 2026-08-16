@@ -171,6 +171,12 @@ public enum SubAgentRunner {
         /// Qwen thinking, etc.). nil = model default. Critical for
         /// orchestrator planning UI parity with single-model agent mode.
         thinking: ThinkingRequestConfig? = nil,
+        /// Markdown-profile spawn overrides (maxTurns, permissionMode,
+        /// thoughtLevel, model). Background is applied by TaskTool.
+        profileSettings: AgentProfileSettings = .empty,
+        /// Mailbox id (`agent_<uuid>`). When set: markRunning, drain
+        /// coordinator messages each iteration, markCompleted, remember spawn.
+        mailboxAgentId: String? = nil,
         onStream: (@Sendable (StreamEvent) async -> Void)? = nil
     ) async -> RunResult {
 
@@ -180,6 +186,23 @@ public enum SubAgentRunner {
         }
         guard !model.id.isEmpty else {
             return errorResult(message: "Error: no model is currently selected — sub-agent cannot run.")
+        }
+
+        let applied = applyProfileSettings(
+            profileSettings,
+            defaultMaxIterations: maxIterations,
+            parentBackground: nil,
+            parentExecutionMode: executionMode,
+            parentModel: model,
+            parentThinking: thinking
+        )
+        let childModel = applied.model
+        let childExecutionMode = applied.executionMode
+        let childMaxIterations = applied.maxIterations
+        let childThinking = applied.thinking
+        let mailboxId = mailboxAgentId.flatMap { raw -> String? in
+            let id = AgentMailbox.normalizeAgentId(raw)
+            return id.isEmpty ? nil : id
         }
 
         // Resolve the allow-list, then scrub against the live registry so
@@ -195,6 +218,8 @@ public enum SubAgentRunner {
             if let allowedTools, !allowedTools.isEmpty { return allowedTools }
             return safeDefault
         }()
+        // Parent Settings → Tools disable list is already subtracted by
+        // TaskTool; keep the intersection here as defense in depth.
         let scrubReport = AgentToolAllowlist.applyReport(
             requested: requested,
             known: known,
@@ -203,6 +228,30 @@ public enum SubAgentRunner {
         // P8: log + parent-visible strip surface (status queue / AgentEvent).
         await AgentToolAllowlist.surfaceStrip(scrubReport, context: "SubAgentRunner")
         let allowed = scrubReport.allowed
+
+        if let mailboxId {
+            await AgentMailbox.shared.markRunning(mailboxId)
+            await SpawnRegistry.shared.save(SpawnHandle(
+                agentId: mailboxId,
+                systemPromptOverride: systemPromptOverride,
+                allowedTools: allowed,
+                backend: backend,
+                model: childModel,
+                projectRoot: projectRoot,
+                worktreeRoot: worktreeRoot,
+                safeMode: safeMode,
+                executionMode: childExecutionMode,
+                patchReviewer: patchReviewer,
+                shellApprovalCoordinator: shellApprovalCoordinator,
+                authorization: authorization,
+                maxIterations: childMaxIterations,
+                stallWindow: stallWindow,
+                enableStallPolicy: enableStallPolicy,
+                sampling: sampling,
+                parentConversationID: parentConversationID,
+                thinking: childThinking
+            ))
+        }
 
         // Tool schemas the model sees this run — only the allowed
         // subset, including deferred tools (the sub-agent doesn't go
@@ -226,9 +275,10 @@ public enum SubAgentRunner {
                 systemPrompt += "\n\n" + block
             }
         }
-        var convo = Conversation(title: "[subagent]", modelID: model.id)
+        var convo = Conversation(title: "[subagent]", modelID: childModel.id)
         convo.messages.append(.init(role: .system, content: systemPrompt))
         convo.messages.append(.init(role: .user, content: trimmedPrompt))
+        await publishThread(jobID: jobID, convo)
 
         // Use parent conversation ID when available so nested background
         // shells / checkpoints / kill ownership stay under the parent chat.
@@ -241,9 +291,9 @@ public enum SubAgentRunner {
             shellApprovalCoordinator: shellApprovalCoordinator,
             conversationID: parentConversationID ?? convo.id,
             inferenceBackend: backend,
-            model: model,
+            model: childModel,
             subagentDepth: 1,  // children cannot nest further
-            executionMode: executionMode,
+            executionMode: childExecutionMode,
             authorization: authorization
         )
 
@@ -255,7 +305,7 @@ public enum SubAgentRunner {
         var stallReason: String? = nil
         var recentToolSignatures: [String] = []
 
-        while iterations < maxIterations {
+        while iterations < childMaxIterations {
             if await isCancelled(jobID: jobID) {
                 wasCancelled = true
                 break
@@ -266,50 +316,79 @@ public enum SubAgentRunner {
                 await onStream(.iterationStarted(iterations))
             }
 
+            if let mailboxId {
+                let note = await drainAndFormatCoordinatorMessages(agentId: mailboxId)
+                if !note.isEmpty {
+                    convo.messages.append(.init(role: .user, content: note))
+                    await publishThread(jobID: jobID, convo)
+                }
+            }
+
             // Wire-only compaction: full transcript stays in `convo.messages`
             // for diagnostics; only the request is slimmed (S6b / C-SUBCOMPACT).
             let wireMessages = SubAgentWireCompaction.wireMessages(
                 from: convo.messages,
-                model: model,
+                model: childModel,
                 contextBudgetTokens: contextBudgetTokens)
 
             // Stream one model turn into a single assistant message.
             let request = ChatRequest(
-                model: model,
+                model: childModel,
                 messages: wireMessages,
                 tools: tools,
                 sampling: sampling,
-                thinking: thinking
+                thinking: childThinking
             )
 
             var assistantContent = ""
+            var reasoningText = ""
             // Same normalize seam as AgentLoop: name fragments merge/concat,
             // empty args become "{}", inline JSON tool calls dispatch.
             var streamAccumulator = ResponseNormalizer.Accumulator()
+            var lastDraftPublish: Date?
             do {
                 for try await chunk in backend.stream(request: request) {
                     if await isCancelled(jobID: jobID) {
                         wasCancelled = true
                         break
                     }
+                    var shouldPublishDraft = false
                     switch chunk {
                     case .reasoningDelta(let s):
                         // Forward thinking tokens for chat UI parity
                         // (single-model PendingAssistantBubble reasoning).
-                        if !s.isEmpty, let onStream {
-                            await onStream(.reasoningDelta(s))
+                        if !s.isEmpty {
+                            reasoningText += s
+                            shouldPublishDraft = true
+                            if let onStream {
+                                await onStream(.reasoningDelta(s))
+                            }
                         }
                     case .contentDelta(let s):
                         assistantContent += s
                         streamAccumulator.ingestContentDelta(s)
-                        if !s.isEmpty, let onStream {
-                            await onStream(.contentDelta(s))
+                        if !s.isEmpty {
+                            shouldPublishDraft = true
+                            if let onStream {
+                                await onStream(.contentDelta(s))
+                            }
                         }
                     case .toolCallDelta(let index, let id, let name, let argsAppend):
                         streamAccumulator.ingestToolCallDelta(
                             index: index, id: id, name: name, argumentsAppend: argsAppend)
+                        shouldPublishDraft = true
                     case .usage, .done:
                         continue
+                    }
+                    if shouldPublishDraft {
+                        await publishDraftThreadIfDue(
+                            jobID: jobID,
+                            convo: convo,
+                            reasoning: reasoningText,
+                            content: assistantContent,
+                            accumulator: streamAccumulator,
+                            lastPublish: &lastDraftPublish
+                        )
                     }
                 }
             } catch is CancellationError {
@@ -321,7 +400,7 @@ public enum SubAgentRunner {
                     trace: trace,
                     parentConversationID: parentConversationID,
                     turn: iterations,
-                    modelID: model.id,
+                    modelID: childModel.id,
                     systemPrompt: systemPrompt,
                     messagesCount: convo.messages.count,
                     allowed: allowed,
@@ -330,14 +409,23 @@ public enum SubAgentRunner {
                     error: error.localizedDescription,
                     iterationStart: iterationStart
                 )
-                return errorResult(message: "Sub-agent failed: \(error.localizedDescription)", scrubReport: scrubReport)
+                return await finishMailbox(
+                    agentId: mailboxId,
+                    result: errorResult(
+                        message: "Sub-agent failed: \(error.localizedDescription)",
+                        scrubReport: scrubReport))
             }
 
             // Mid-stream cancel: keep prose only; DROP partial tool_calls
             // (AgentLoop parity — truncated JSON would only mislead).
             if wasCancelled {
                 if !assistantContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    convo.messages.append(.init(role: .assistant, content: assistantContent))
+                    convo.messages.append(.init(
+                        role: .assistant,
+                        content: assistantContent,
+                        reasoningContent: reasoningText.isEmpty ? nil : reasoningText
+                    ))
+                    await publishThread(jobID: jobID, convo)
                 }
                 lastTextReply = "Sub-agent cancelled."
                 break
@@ -350,16 +438,20 @@ public enum SubAgentRunner {
                     : call.id
                 return ToolCallInvocation(id: cid, name: call.name, arguments: call.arguments)
             }
-            let assistantMsg = ChatMessage(role: .assistant,
-                                           content: normalized.content,
-                                           toolCalls: invocations)
+            let assistantMsg = ChatMessage(
+                role: .assistant,
+                content: normalized.content,
+                reasoningContent: reasoningText.isEmpty ? nil : reasoningText,
+                toolCalls: invocations
+            )
             convo.messages.append(assistantMsg)
+            await publishThread(jobID: jobID, convo)
 
             await recordTrace(
                 trace: trace,
                 parentConversationID: parentConversationID,
                 turn: iterations,
-                modelID: model.id,
+                modelID: childModel.id,
                 systemPrompt: systemPrompt,
                 messagesCount: convo.messages.count,
                 allowed: allowed,
@@ -394,6 +486,7 @@ public enum SubAgentRunner {
                     ) {
                         let halt = "stalled — \(reason)"
                         closeToolCalls(invocations, reason: halt, convo: &convo)
+                        await publishThread(jobID: jobID, convo)
                         stallReason = halt
                         lastTextReply = "Sub-agent halted: \(halt)"
                         break
@@ -412,6 +505,7 @@ public enum SubAgentRunner {
                         remaining,
                         reason: "Cancelled by user before execution.",
                         convo: &convo)
+                    await publishThread(jobID: jobID, convo)
                     lastTextReply = "Sub-agent cancelled."
                     break
                 }
@@ -456,6 +550,7 @@ public enum SubAgentRunner {
                         }
                         convo.messages.append(.init(
                             role: .tool, content: result.content, toolCallID: inv.id))
+                        await publishThread(jobID: jobID, convo)
                         if await isCancelled(jobID: jobID) {
                             wasCancelled = true
                             let remaining = Array(invocations[dispatchIndex...])
@@ -464,6 +559,7 @@ public enum SubAgentRunner {
                                     remaining,
                                     reason: "Cancelled by user before execution.",
                                     convo: &convo)
+                                await publishThread(jobID: jobID, convo)
                             }
                             lastTextReply = "Sub-agent cancelled."
                             break
@@ -498,6 +594,7 @@ public enum SubAgentRunner {
                                 role: .tool, content: result.content, toolCallID: inv.id))
                         }
                     }
+                    await publishThread(jobID: jobID, convo)
                     continue
                 }
 
@@ -541,6 +638,7 @@ public enum SubAgentRunner {
                 convo.messages.append(.init(role: .tool,
                                             content: result.content,
                                             toolCallID: inv.id))
+                await publishThread(jobID: jobID, convo)
                 if wasCancelled {
                     let remaining = Array(invocations[dispatchIndex...])
                     if !remaining.isEmpty {
@@ -548,6 +646,7 @@ public enum SubAgentRunner {
                             remaining,
                             reason: "Cancelled by user before execution.",
                             convo: &convo)
+                        await publishThread(jobID: jobID, convo)
                     }
                     lastTextReply = "Sub-agent cancelled."
                     break
@@ -569,7 +668,7 @@ public enum SubAgentRunner {
         // (No open tool_calls here — each iteration either finished
         // dispatch or closed remaining on cancel/stall.)
         if !wasCancelled, stallReason == nil,
-           iterations >= maxIterations, lastTextReply.isEmpty {
+           iterations >= childMaxIterations, lastTextReply.isEmpty {
             hitCap = true
         }
 
@@ -579,18 +678,64 @@ public enum SubAgentRunner {
         } else if !lastTextReply.isEmpty {
             finalText = lastTextReply
         } else if hitCap {
-            finalText = "Sub-agent hit the iteration cap (\(maxIterations)) without converging on a final answer."
+            finalText = "Sub-agent hit the iteration cap (\(childMaxIterations)) without converging on a final answer."
         } else {
             finalText = "Sub-agent finished without producing a final response."
         }
 
-        return RunResult(finalText: finalText,
-                         transcript: convo,
-                         iterations: iterations,
-                         hitCap: hitCap,
-                         wasCancelled: wasCancelled,
-                         stallReason: stallReason,
-                         scrubReport: scrubReport)
+        await publishThread(jobID: jobID, convo)
+        return await finishMailbox(
+            agentId: mailboxId,
+            result: RunResult(finalText: finalText,
+                              transcript: convo,
+                              iterations: iterations,
+                              hitCap: hitCap,
+                              wasCancelled: wasCancelled,
+                              stallReason: stallReason,
+                              scrubReport: scrubReport))
+    }
+
+    /// Push the live child transcript so the inspector can render a thread.
+    private static func publishThread(jobID: UUID?, _ convo: Conversation) async {
+        guard let jobID else { return }
+        await SubagentThreadStore.shared.publish(jobID: jobID, messages: convo.messages)
+        await BackgroundJobManager.shared.updateSubagentTranscript(
+            id: jobID, messages: convo.messages)
+    }
+
+    /// Throttled in-flight snapshot: thought / prose / emerging tools.
+    private static func publishDraftThreadIfDue(
+        jobID: UUID?,
+        convo: Conversation,
+        reasoning: String,
+        content: String,
+        accumulator: ResponseNormalizer.Accumulator,
+        lastPublish: inout Date?
+    ) async {
+        guard jobID != nil else { return }
+        let now = Date()
+        if let last = lastPublish, now.timeIntervalSince(last) < 0.12 { return }
+        lastPublish = now
+        var draftCalls: [ToolCallInvocation] = []
+        draftCalls.reserveCapacity(accumulator.order.count)
+        for index in accumulator.order {
+            guard let partial = accumulator.buckets[index] else { continue }
+            let name = partial.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            draftCalls.append(ToolCallInvocation(
+                id: partial.id.isEmpty ? "draft_\(index)" : partial.id,
+                name: name,
+                arguments: partial.arguments.isEmpty ? "{}" : partial.arguments
+            ))
+        }
+        var draft = convo
+        draft.messages = SubagentThreadBuilder.draftTranscript(
+            committed: convo.messages,
+            reasoning: reasoning,
+            content: content,
+            toolCalls: draftCalls
+        )
+        await publishThread(jobID: jobID, draft)
     }
 
     // MARK: - Cancel + pairing helpers
@@ -743,6 +888,256 @@ public enum SubAgentRunner {
                          iterations: 0, hitCap: false,
                          wasCancelled: false, stallReason: nil,
                          scrubReport: scrubReport)
+    }
+
+    // MARK: - Profile + mailbox
+
+    /// Resolved spawn knobs after applying `AgentProfileSettings`.
+    public struct ProfileApplication: Sendable {
+        public let maxIterations: Int
+        public let executionMode: ExecutionMode?
+        public let runInBackground: Bool
+        public let model: ModelDescriptor
+        public let thinking: ThinkingRequestConfig?
+    }
+
+    /// Apply markdown-profile overrides onto parent/default spawn knobs.
+    /// `maxTurns` tightens the iteration cap. `permissionMode` becomes the
+    /// child's `executionMode`. `background == true` is used only when the
+    /// parent did not set `run_in_background` / `background`.
+    /// Model id is remapped onto the parent's backend (no new backend).
+    public static func applyProfileSettings(
+        _ settings: AgentProfileSettings,
+        defaultMaxIterations: Int,
+        parentBackground: Bool?,
+        parentExecutionMode: ExecutionMode?,
+        parentModel: ModelDescriptor,
+        parentThinking: ThinkingRequestConfig? = nil
+    ) -> ProfileApplication {
+        var maxIter = max(1, defaultMaxIterations)
+        if let cap = settings.maxTurns, cap > 0 {
+            maxIter = min(maxIter, cap)
+        }
+        let mode = settings.permissionMode ?? parentExecutionMode
+        let runInBackground = parentBackground ?? (settings.background == true)
+        let childModel = resolveProfileModel(settings.model, parent: parentModel)
+        let thinking = resolveProfileThinking(
+            settings.thoughtLevel, model: childModel, parent: parentThinking)
+        return ProfileApplication(
+            maxIterations: maxIter,
+            executionMode: mode,
+            runInBackground: runInBackground,
+            model: childModel,
+            thinking: thinking
+        )
+    }
+
+    /// Same backend as parent; skip when the id is empty.
+    static func resolveProfileModel(_ raw: String?, parent: ModelDescriptor) -> ModelDescriptor {
+        guard let raw = AgentProfileSettings.nonEmpty(raw) else { return parent }
+        return ModelDescriptor(
+            id: raw,
+            displayName: raw,
+            backend: parent.backend,
+            supportsTools: parent.supportsTools,
+            contextLength: parent.contextLength,
+            parameterCountB: parent.parameterCountB,
+            isLoaded: parent.isLoaded
+        )
+    }
+
+    static func resolveProfileThinking(
+        _ thoughtLevel: String?,
+        model: ModelDescriptor,
+        parent: ThinkingRequestConfig?
+    ) -> ThinkingRequestConfig? {
+        guard let raw = AgentProfileSettings.nonEmpty(thoughtLevel),
+              let effort = parseThoughtEffort(raw),
+              let capability = ThinkingModelScanner.detect(modelId: model.id)
+        else { return parent }
+        return ThinkingRequestConfig(capability: capability, effort: capability.clamp(effort))
+    }
+
+    static func parseThoughtEffort(_ raw: String) -> ThinkingEffort? {
+        let token = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch token {
+        case "off", "none": return .off
+        case "low": return .low
+        case "medium", "med": return .medium
+        case "high": return .high
+        case "max", "xhigh": return .max
+        default: return ThinkingEffort(rawValue: token)
+        }
+    }
+
+    /// Prefix each drained inbox item for the child transcript.
+    public static func formatCoordinatorMessages(_ messages: [AgentMailbox.Message]) -> String {
+        messages.compactMap { msg -> String? in
+            let body = msg.message.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !body.isEmpty {
+                return "Message from coordinator: \(body)"
+            }
+            let summary = msg.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !summary.isEmpty {
+                return "Message from coordinator: \(summary)"
+            }
+            return nil
+        }.joined(separator: "\n\n")
+    }
+
+    public static func drainAndFormatCoordinatorMessages(
+        agentId: String,
+        mailbox: AgentMailbox = .shared
+    ) async -> String {
+        let msgs = await mailbox.drain(agentId: agentId)
+        return formatCoordinatorMessages(msgs)
+    }
+
+    public struct ResumeOutcome: Sendable {
+        public let resumed: Bool
+        public let agentId: String
+        public let jobID: UUID?
+        public let prompt: String
+        public let message: String
+    }
+
+    /// Consume a mailbox resume request and, if set, start a background
+    /// job with drained coordinator text as the prompt.
+    public static func resumeIfRequested(agentId: String) async -> ResumeOutcome {
+        let id = AgentMailbox.normalizeAgentId(agentId)
+        guard !id.isEmpty else {
+            return ResumeOutcome(
+                resumed: false, agentId: id, jobID: nil, prompt: "",
+                message: "resume_agent_id is empty.")
+        }
+        let requested = await AgentMailbox.shared.consumeResumeRequest(agentId: id)
+        let drained = await AgentMailbox.shared.drain(agentId: id)
+        let prompt = formatCoordinatorMessages(drained)
+        guard requested else {
+            return ResumeOutcome(
+                resumed: false, agentId: id, jobID: nil, prompt: prompt,
+                message: "No resume requested for \(id).")
+        }
+        guard let handle = await SpawnRegistry.shared.handle(for: id) else {
+            return ResumeOutcome(
+                resumed: false, agentId: id, jobID: nil, prompt: prompt,
+                message: "Cannot resume \(id): no spawn record in this process.")
+        }
+        let effectivePrompt = prompt.isEmpty
+            ? "Message from coordinator: Please continue."
+            : prompt
+        await AgentMailbox.shared.markRunning(id)
+        let jobID = UUID()
+        do {
+            _ = try await BackgroundJobManager.shared.registerSubagent(
+                id: jobID,
+                description: "resume: \(id)",
+                conversationID: handle.parentConversationID)
+        } catch {
+            await AgentMailbox.shared.markCompleted(id)
+            return ResumeOutcome(
+                resumed: false, agentId: id, jobID: nil, prompt: effectivePrompt,
+                message: "Failed to register resume job: \(error.localizedDescription)")
+        }
+        let captured = handle
+        await BackgroundJobManager.shared.attachSubagentWork(id: jobID) {
+            let result = await SubAgentRunner.run(
+                prompt: effectivePrompt,
+                systemPromptOverride: captured.systemPromptOverride,
+                allowedTools: captured.allowedTools,
+                backend: captured.backend,
+                model: captured.model,
+                registry: ToolRegistry.shared,
+                projectRoot: captured.projectRoot,
+                worktreeRoot: captured.worktreeRoot,
+                safeMode: captured.safeMode,
+                executionMode: captured.executionMode,
+                patchReviewer: captured.patchReviewer,
+                shellApprovalCoordinator: captured.shellApprovalCoordinator,
+                authorization: captured.authorization,
+                maxIterations: captured.maxIterations,
+                stallWindow: captured.stallWindow,
+                enableStallPolicy: captured.enableStallPolicy,
+                sampling: captured.sampling,
+                parentConversationID: captured.parentConversationID,
+                jobID: jobID,
+                thinking: captured.thinking,
+                mailboxAgentId: captured.agentId
+            )
+            let summary = String(result.finalText.prefix(2_000))
+            let failed = result.wasCancelled
+                || result.hitCap
+                || result.stallReason != nil
+                || summary.hasPrefix("Error:")
+                || summary.hasPrefix("Sub-agent failed")
+            await BackgroundJobManager.shared.completeSubagent(
+                id: jobID, output: summary, failed: failed)
+        }
+        return ResumeOutcome(
+            resumed: true, agentId: id, jobID: jobID, prompt: effectivePrompt,
+            message: "Background resume started for \(id).")
+    }
+
+    static func resetSpawnRegistryForTests() async {
+        await SpawnRegistry.shared.reset()
+    }
+
+    private static func finishMailbox(agentId: String?, result: RunResult) async -> RunResult {
+        if let agentId {
+            await AgentMailbox.shared.markCompleted(agentId)
+        }
+        return result
+    }
+
+    struct SpawnHandle: Sendable {
+        let agentId: String
+        let systemPromptOverride: String?
+        let allowedTools: Set<String>
+        let backend: InferenceBackend
+        let model: ModelDescriptor
+        let projectRoot: URL?
+        let worktreeRoot: URL?
+        let safeMode: SafeModeConfig?
+        let executionMode: ExecutionMode?
+        let patchReviewer: PatchReviewer?
+        let shellApprovalCoordinator: ShellApprovalCoordinator?
+        let authorization: AuthorizationConfig
+        let maxIterations: Int
+        let stallWindow: Int
+        let enableStallPolicy: Bool
+        let sampling: SamplingParams
+        let parentConversationID: UUID?
+        let thinking: ThinkingRequestConfig?
+    }
+
+    actor SpawnRegistry {
+        static let shared = SpawnRegistry()
+        private var handles: [String: SpawnHandle] = [:]
+        private var order: [String] = []
+        private let maxHandles = 64
+
+        func save(_ handle: SpawnHandle) {
+            let id = handle.agentId
+            if handles[id] == nil {
+                order.append(id)
+            }
+            handles[id] = handle
+            while order.count > maxHandles {
+                let old = order.removeFirst()
+                if old != id {
+                    handles.removeValue(forKey: old)
+                }
+            }
+        }
+
+        func handle(for agentId: String) -> SpawnHandle? {
+            handles[AgentMailbox.normalizeAgentId(agentId)]
+        }
+
+        func reset() {
+            handles.removeAll()
+            order.removeAll()
+        }
     }
 
 }

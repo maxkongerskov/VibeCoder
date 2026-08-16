@@ -25,6 +25,10 @@ struct AgentSystemPromptComposer {
         var cachedAgentsMd: String?
         /// Skills index (name + short description). Full bodies via `load_skill`.
         var cachedSkillsIndex: String?
+        /// Frozen git-status snapshot for this conversation. Non-empty is
+        /// injected as-is; empty string omits the block. `nil` captures
+        /// once from the conversation cwd (cached per conversation id).
+        var gitStatusSnapshot: String? = nil
     }
 
     static func orchestratorBriefBlock(_ brief: String?) -> String? {
@@ -89,6 +93,7 @@ struct AgentSystemPromptComposer {
           • Tool calls > explanation. Concise.
         """)
         parts.append(ChatLoop.currentDateNotice())
+        parts.append(ZCodeBehaviorPrompt.agentModeSections)
         if input.config.headlessMode {
             parts.append(ChatLoop.headlessPrologue)
         }
@@ -129,6 +134,9 @@ struct AgentSystemPromptComposer {
                 parts.append("Working directory: \(root.path)")
             }
         }
+        if let snap = resolvedGitStatusSnapshot(input) {
+            parts.append(snap)
+        }
         if let mode = input.config.executionMode {
             parts.append(mode.systemPromptSummary)
         }
@@ -167,5 +175,18 @@ struct AgentSystemPromptComposer {
         systemPromptTokens += input.nudges.reduce(0) { $0 + TokenEstimator.estimate($1) }
         let prompt = parts.joined(separator: "\n\n")
         return (prompt, systemPromptTokens)
+    }
+
+    /// Explicit non-empty string wins; empty string suppresses; nil captures.
+    private static func resolvedGitStatusSnapshot(_ input: Input) -> String? {
+        if let provided = input.gitStatusSnapshot {
+            let trimmed = provided.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : provided
+        }
+        let cwd = input.conversation.worktreeRootURL ?? input.conversation.projectRoot
+        guard let cwd else { return nil }
+        return GitStatusSnapshot.cachedCapture(
+            conversationID: input.conversation.id,
+            workingDirectory: cwd)
     }
 }

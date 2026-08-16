@@ -272,13 +272,13 @@ private struct LMStudioPanel: View {
                         placeholder: "127.0.0.1",
                         value: Binding(
                             get: { settings.lmStudioHost },
-                            set: { v in app.updateSettings { $0.lmStudioHost = v } }
+                            set: { v in app.persistSettings { $0.lmStudioHost = v } }
                         ))
 
                 PortRow(label: "Port",
                         intValue: Binding(
                             get: { settings.lmStudioPort },
-                            set: { v in app.updateSettings { $0.lmStudioPort = v } }
+                            set: { v in app.persistSettings { $0.lmStudioPort = v } }
                         ),
                         textBuffer: $portText)
 
@@ -291,7 +291,7 @@ private struct LMStudioPanel: View {
                         .frame(width: 80, alignment: .leading)
                     SecureField("Optional", text: Binding(
                         get: { settings.lmStudioAPIKey },
-                        set: { v in app.updateSettings { $0.lmStudioAPIKey = v } }
+                        set: { v in app.persistSettings { $0.lmStudioAPIKey = v } }
                     ))
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
@@ -314,7 +314,10 @@ private struct LMStudioPanel: View {
     }
 
     private func testLMStudio() async {
-        await MainActor.run { testState = .testing }
+        await MainActor.run {
+            testState = .testing
+            app.applySettingsSideEffects()
+        }
         let host = settings.lmStudioHost
         let port = settings.lmStudioPort
         let key = settings.lmStudioAPIKey.isEmpty ? nil : settings.lmStudioAPIKey
@@ -369,13 +372,13 @@ private struct EXOPanel: View {
                         placeholder: "127.0.0.1",
                         value: Binding(
                             get: { settings.exoHost },
-                            set: { v in app.updateSettings { $0.exoHost = v } }
+                            set: { v in app.persistSettings { $0.exoHost = v } }
                         ))
 
                 PortRow(label: "Port",
                         intValue: Binding(
                             get: { settings.exoPort },
-                            set: { v in app.updateSettings { $0.exoPort = v } }
+                            set: { v in app.persistSettings { $0.exoPort = v } }
                         ),
                         textBuffer: $portText)
 
@@ -395,7 +398,7 @@ private struct EXOPanel: View {
                     TextField("e.g. mlx-community/gpt-oss-20b-MXFP4-Q8",
                               text: Binding(
                                 get: { settings.exoModelID },
-                                set: { v in app.updateSettings { $0.exoModelID = v } }
+                                set: { v in app.persistSettings { $0.exoModelID = v } }
                               ))
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
@@ -560,13 +563,13 @@ private struct OMLXPanel: View {
                         placeholder: "127.0.0.1",
                         value: Binding(
                             get: { settings.omlxHost },
-                            set: { v in app.updateSettings { $0.omlxHost = v } }
+                            set: { v in app.persistSettings { $0.omlxHost = v } }
                         ))
 
                 PortRow(label: "Port",
                         intValue: Binding(
                             get: { settings.omlxPort },
-                            set: { v in app.updateSettings { $0.omlxPort = v } }
+                            set: { v in app.persistSettings { $0.omlxPort = v } }
                         ),
                         textBuffer: $portText)
 
@@ -580,7 +583,7 @@ private struct OMLXPanel: View {
                     SecureField("Optional — from OMLX_API_KEY env",
                                 text: Binding(
                                     get: { settings.omlxAPIKey },
-                                    set: { v in app.updateSettings { $0.omlxAPIKey = v } }
+                                    set: { v in app.persistSettings { $0.omlxAPIKey = v } }
                                 ))
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
@@ -595,7 +598,10 @@ private struct OMLXPanel: View {
     }
 
     private func testOMLX() async {
-        await MainActor.run { testState = .testing }
+        await MainActor.run {
+            testState = .testing
+            app.applySettingsSideEffects()
+        }
         let host = settings.omlxHost
         let port = settings.omlxPort
         let key = settings.omlxAPIKey.isEmpty ? nil : settings.omlxAPIKey
@@ -641,13 +647,13 @@ private struct OllamaPanel: View {
                         placeholder: "127.0.0.1",
                         value: Binding(
                             get: { settings.ollamaHost },
-                            set: { v in app.updateSettings { $0.ollamaHost = v } }
+                            set: { v in app.persistSettings { $0.ollamaHost = v } }
                         ))
 
                 PortRow(label: "Port",
                         intValue: Binding(
                             get: { settings.ollamaPort },
-                            set: { v in app.updateSettings { $0.ollamaPort = v } }
+                            set: { v in app.persistSettings { $0.ollamaPort = v } }
                         ),
                         textBuffer: $portText)
 
@@ -685,7 +691,10 @@ private struct OllamaPanel: View {
     }
 
     private func testOllama() async {
-        await MainActor.run { testState = .testing }
+        await MainActor.run {
+            testState = .testing
+            app.applySettingsSideEffects()
+        }
         let host = settings.ollamaHost
         let port = settings.ollamaPort
         do {
@@ -730,13 +739,13 @@ private struct UnslothStudioPanel: View {
                         placeholder: "127.0.0.1",
                         value: Binding(
                             get: { settings.unslothHost },
-                            set: { v in app.updateSettings { $0.unslothHost = v } }
+                            set: { v in app.persistSettings { $0.unslothHost = v } }
                         ))
 
                 PortRow(label: "Port",
                         intValue: Binding(
                             get: { settings.unslothPort },
-                            set: { v in app.updateSettings { $0.unslothPort = v } }
+                            set: { v in app.persistSettings { $0.unslothPort = v } }
                         ),
                         textBuffer: $portText)
 
@@ -750,7 +759,7 @@ private struct UnslothStudioPanel: View {
                     SecureField("Optional — auto-reads local Studio agent key",
                                 text: Binding(
                                     get: { settings.unslothAPIKey },
-                                    set: { v in app.updateSettings { $0.unslothAPIKey = v } }
+                                    set: { v in app.persistSettings { $0.unslothAPIKey = v } }
                                 ))
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
@@ -778,7 +787,10 @@ private struct UnslothStudioPanel: View {
     }
 
     private func testUnsloth() async {
-        await MainActor.run { testState = .testing }
+        await MainActor.run {
+            testState = .testing
+            app.applySettingsSideEffects()
+        }
         let host = settings.unslothHost
         let port = settings.unslothPort
         let key = settings.unslothAPIKey.isEmpty ? nil : settings.unslothAPIKey
@@ -844,7 +856,7 @@ private struct CustomEndpointPanel: View {
 
                     SecureField("Optional", text: Binding(
                         get: { settings.customAPIKey },
-                        set: { v in app.updateSettings { $0.customAPIKey = v } }
+                        set: { v in app.persistSettings { $0.customAPIKey = v } }
                     ))
                     .textFieldStyle(.roundedBorder)
                     .autocorrectionDisabled()
@@ -864,12 +876,15 @@ private struct CustomEndpointPanel: View {
             let trimmed = newEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
             // Persist as typed; normalize on test / activate so partial edits
             // don't thrash settings while the user is still typing.
-            app.updateSettings { $0.customEndpoint = trimmed }
+            app.persistSettings { $0.customEndpoint = trimmed }
         }
     }
 
     private func testCustom() async {
-        await MainActor.run { testState = .testing }
+        await MainActor.run {
+            testState = .testing
+            app.applySettingsSideEffects()
+        }
         let raw = endpointText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let baseURL = ConnectionSettingsView.normalizedEndpointURL(from: raw) else {
             await MainActor.run {
@@ -1057,7 +1072,7 @@ private struct LocalAPIServerSection: View {
                         .frame(width: 80, alignment: .leading)
                     Stepper(value: Binding(
                         get: { settings.localAPIPort },
-                        set: { v in app.updateSettings { $0.localAPIPort = v } }
+                        set: { v in app.persistSettings { $0.localAPIPort = v } }
                     ), in: 1024...65535, step: 1) {
                         Text("\(settings.localAPIPort)")
                             .font(.system(size: 12, design: .monospaced))
@@ -1209,6 +1224,7 @@ private struct HostRow: View {
     let label: String
     let placeholder: String
     @Binding var value: String
+    @EnvironmentObject var app: AppViewModel
 
     var body: some View {
         HStack {
@@ -1219,6 +1235,7 @@ private struct HostRow: View {
             TextField(placeholder, text: $value)
                 .textFieldStyle(.roundedBorder)
                 .autocorrectionDisabled()
+                .onSubmit { app.applySettingsSideEffects() }
         }
     }
 }
@@ -1230,6 +1247,7 @@ private struct PortRow: View {
     let label: String
     @Binding var intValue: Int
     @Binding var textBuffer: String
+    @EnvironmentObject var app: AppViewModel
 
     var body: some View {
         HStack {
@@ -1241,7 +1259,10 @@ private struct PortRow: View {
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 80)
                 .autocorrectionDisabled()
-                .onSubmit { commit() }
+                .onSubmit {
+                    commit()
+                    app.applySettingsSideEffects()
+                }
                 .onChange(of: textBuffer) { _, _ in commit() }
             Spacer()
         }

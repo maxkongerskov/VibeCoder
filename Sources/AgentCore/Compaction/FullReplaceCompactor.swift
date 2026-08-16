@@ -16,6 +16,113 @@ public struct FullReplaceResult: Sendable {
 
 public enum FullReplaceCompactor {
 
+    /// ZCode `yke` continuation framing injected as the carrier user message.
+    public static let continuationPreamble =
+        "This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier portion of the conversation."
+
+    /// Numbered headings matching ZCode `dxi` (extractive + LLM).
+    public static let nineSectionHeadings: [String] = [
+        "Primary Request and Intent",
+        "Key Technical Concepts",
+        "Files and Code Sections",
+        "Errors and fixes",
+        "Problem Solving",
+        "All user messages",
+        "Pending Tasks",
+        "Current Work",
+        "Optional Next Step",
+    ]
+
+    /// Full ZCode compact-prompt instructions for an optional LLM summarizer.
+    public static let nineSectionInstructions: String = """
+    CRITICAL: Respond with TEXT ONLY. Do NOT call any tools.
+
+    - Do NOT use Read, Bash, Grep, Glob, Edit, Write, or ANY other tool.
+    - You already have all the context you need in the conversation above.
+    - Tool calls will be REJECTED and will waste your only turn — you will fail the task.
+    - Your entire response must be plain text: an <analysis> block followed by a <summary> block.
+
+    Your task is to create a detailed summary of the conversation so far, paying close attention to the user's explicit requests and your previous actions.
+    This summary should be thorough in capturing technical details, code patterns, and architectural decisions that would be essential for continuing development work without losing context.
+
+    Before providing your final summary, wrap your analysis in <analysis> tags to organize your thoughts and ensure you've covered all necessary points. In your analysis process:
+
+    1. Chronologically analyze each message and section of the conversation. For each section thoroughly identify:
+       - The user's explicit requests and intents
+       - Your approach to addressing the user's requests
+       - Key decisions, technical concepts and code patterns
+       - Specific details like file names, full code snippets, function signatures, file edits
+       - Errors that you ran into and how you fixed them
+       - Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
+       - Note any security-relevant instructions or constraints the user stated. These MUST be preserved verbatim in the summary so they continue to apply after compaction.
+    2. Double-check for technical accuracy and completeness, addressing each required element thoroughly.
+
+    Your summary should include the following sections:
+
+    1. Primary Request and Intent: Capture all of the user's explicit requests and intents in detail
+    2. Key Technical Concepts: List all important technical concepts, technologies, and frameworks discussed.
+    3. Files and Code Sections: Enumerate specific files and code sections examined, modified, or created. Pay special attention to the most recent messages and include full code snippets where applicable and include a summary of why this file read or edit is important.
+    4. Errors and fixes: List all errors that you ran into, and how you fixed them. Pay special attention to specific user feedback that you received, especially if the user told you to do something differently.
+    5. Problem Solving: Document problems solved and any ongoing troubleshooting efforts.
+    6. All user messages: List ALL user messages that are not tool results. These are critical for understanding the users' feedback and changing intent. Preserve any security-relevant instructions or constraints verbatim so they remain in effect after compaction.
+    7. Pending Tasks: Outline any pending tasks that you have explicitly been asked to work on.
+    8. Current Work: Describe in detail precisely what was being worked on immediately before this summary request, paying special attention to the most recent messages from both user and assistant. Include file names and code snippets where applicable.
+    9. Optional Next Step: List the next step that you will take that is related to the most recent work you were doing. IMPORTANT: ensure that this step is DIRECTLY in line with the user's most recent explicit requests, and the task you were working on immediately before this summary request. If your last task was concluded, then only list next steps if they are explicitly in line with the users request. Do not start on tangential requests or really old requests that were already completed without confirming with the user first.
+                           If there is a next step, include direct quotes from the most recent conversation showing exactly what task you were working on and where you left off. This should be verbatim to ensure there's no drift in task interpretation.
+
+    REMINDER: Do NOT call any tools. Respond with plain text only — an <analysis> block followed by a <summary> block. Tool calls will be rejected and you will fail the task.
+    """
+
+    /// Strip ZCode `<analysis>` and unwrap `<summary>` (no-op on extractive text).
+    public static func formatCompactSummary(_ raw: String) -> String {
+        var t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return "" }
+        if let analysis = t.range(
+            of: #"<analysis>[\s\S]*?</analysis>"#,
+            options: .regularExpression
+        ) {
+            t.removeSubrange(analysis)
+        }
+        if let match = t.range(
+            of: #"<summary>([\s\S]*?)</summary>"#,
+            options: .regularExpression
+        ) {
+            let inner = t[match]
+            let stripped = inner
+                .replacingOccurrences(of: "<summary>", with: "")
+                .replacingOccurrences(of: "</summary>", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            t.replaceSubrange(match, with: "Summary:\n\(stripped)")
+        }
+        while t.contains("\n\n\n") {
+            t = t.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        }
+        return t.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Model-facing carrier body: continuation preamble + formatted summary.
+    public static func wrapContinuation(
+        summary: String,
+        recentMessagesPreserved: Bool = true
+    ) -> String {
+        var body = continuationPreamble + "\n\n" + formatCompactSummary(summary)
+        if recentMessagesPreserved {
+            body += "\n\nRecent messages are preserved verbatim."
+        }
+        return body
+    }
+
+    public static func makeContinuationCarrier(
+        summary: String,
+        recentMessagesPreserved: Bool = true
+    ) -> ChatMessage {
+        ChatMessage(
+            role: .user,
+            content: wrapContinuation(
+                summary: summary,
+                recentMessagesPreserved: recentMessagesPreserved))
+    }
+
     /// When estimated tokens meet/exceed `budget * thresholdFraction`, compact.
     ///
     /// Default **1.0** (Wave C2): fire when over the configured budget.
@@ -62,20 +169,19 @@ public enum FullReplaceCompactor {
                 messages: messages, summary: "", droppedCount: 0, durableNote: "")
         }
         let recent = Array(messages.suffix(messages.count - cut))
-        let hint = "Preserve decisions, file paths, failures, and current goal."
+        let hint = nineSectionInstructions
         let summary: String
         if let summarizer {
             // Fail open to extractive — never leave the loop without a summary
             // when we already decided to drop older turns.
-            summary = (try? await summarizer.summarize(messages: older, systemHint: hint))
-                ?? ExtractiveHistorySummarizer().forceSyncSummary(older, hint: hint)
+            let raw = (try? await summarizer.summarize(messages: older, systemHint: hint))
+                ?? ExtractiveHistorySummarizer.buildNineSectionSummary(messages: older)
+            summary = formatCompactSummary(raw)
         } else {
-            summary = ExtractiveHistorySummarizer().forceSyncSummary(older, hint: hint)
+            summary = ExtractiveHistorySummarizer.buildNineSectionSummary(messages: older)
         }
         let durable = Self.extractDurableNote(from: summary, older: older)
-        let carrier = ChatMessage(
-            role: .user,
-            content: "[context compaction — full replace of older turns]\n" + summary)
+        let carrier = makeContinuationCarrier(summary: summary)
         var out = [carrier] + recent
         // If still over budget, elide
         if budgetTokens > 0 {
@@ -102,6 +208,18 @@ public enum FullReplaceCompactor {
         return re.firstMatch(in: s, range: range) != nil
     }
 
+    private static func isNineSectionBoundary(_ trimmed: String) -> Bool {
+        let l = trimmed.lowercased()
+        if l.hasPrefix("1.") || l.hasPrefix("2.") || l.hasPrefix("3.")
+            || l.hasPrefix("4.") || l.hasPrefix("5.") || l.hasPrefix("6.")
+            || l.hasPrefix("7.") || l.hasPrefix("8.") || l.hasPrefix("9.") {
+            return nineSectionHeadings.contains { l.contains($0.lowercased()) }
+        }
+        return nineSectionHeadings.contains { heading in
+            l == heading.lowercased() || l.hasPrefix(heading.lowercased() + ":")
+        }
+    }
+
     public static func extractDurableNote(from summary: String, older: [ChatMessage]) -> String {
         var lines: [String] = []
         // Prefer body lines under a "decisions:" section (extractive summarizer format)
@@ -113,11 +231,17 @@ public enum FullReplaceCompactor {
                 inDecisions = true
                 continue
             }
+            if l.contains("key technical concepts") {
+                inDecisions = true
+                continue
+            }
             if inDecisions {
                 if trimmed.isEmpty { inDecisions = false; continue }
                 if trimmed.hasPrefix("open_todos") || trimmed.hasPrefix("files_touched")
                     || trimmed.hasPrefix("failing_") || trimmed.hasPrefix("note:")
-                    || trimmed.hasPrefix("current_goal") {
+                    || trimmed.hasPrefix("current_goal")
+                    || trimmed.hasPrefix("pending_tasks")
+                    || isNineSectionBoundary(trimmed) {
                     inDecisions = false
                     continue
                 }
@@ -164,5 +288,5 @@ public enum FullReplaceCompactor {
     }
 }
 
-// forceSyncSummary lives on ExtractiveHistorySummarizer in SemanticCompactor.swift
-// (shared extractive body so FullReplace `files_touched` cannot go dead again).
+// Extractive 9-section + legacy `forceSyncSummary` live on
+// ExtractiveHistorySummarizer (shared fact mining with SemanticCompactor).

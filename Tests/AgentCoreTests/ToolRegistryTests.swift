@@ -28,6 +28,11 @@ final class ToolRegistryTests: XCTestCase {
             "memory", "memory_search", "memory_get", "find_symbol",
             "load_skill", "revise_plan",
             "git_status", "git_diff", "git_commit", "create_pull_request",
+            // ZCode-parity wave-2 registrations:
+            "read_session_context",
+            "cron_create", "cron_list", "cron_update", "cron_delete",
+            "send_message",
+            "enter_plan_mode", "exit_plan_mode",
         ] {
             XCTAssertTrue(names.contains(required), "Missing built-in tool: \(required)")
         }

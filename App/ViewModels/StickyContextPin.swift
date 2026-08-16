@@ -1,8 +1,9 @@
 //
 //  StickyContextPin.swift
 //
-//  Session-scoped @-context pins that re-inject on every user turn until
-//  the user removes them (S1). Distinct from one-shot `pendingAttachments`.
+//  Session-scoped context pins that re-inject on every user turn until
+//  the user removes them. Distinct from one-shot `pendingAttachments`.
+//  Kinds: file / folder / symbol / skill / session.
 //
 
 import Foundation
@@ -14,14 +15,16 @@ struct StickyContextPin: Identifiable, Equatable, Sendable, Codable {
         case file
         case folder
         case symbol
+        case skill
+        case session
     }
 
     let id: UUID
     let kind: Kind
-    /// Absolute path (file or folder).
+    /// File/folder: absolute path. Skill: name or SKILL.md path. Session: UUID string.
     let path: String
     let displayName: String
-    /// For symbols: symbol name for the agent prefix.
+    /// Symbol name, or skill description used when `byName` misses.
     let symbolName: String?
     let byteSize: Int?
 
@@ -45,6 +48,8 @@ struct StickyContextPin: Identifiable, Equatable, Sendable, Codable {
         case .file: k = .file
         case .folder: k = .folder
         case .symbol: k = .symbol
+        case .skill: k = .skill
+        case .session: k = .session
         }
         self.init(
             kind: k,
@@ -83,6 +88,8 @@ struct StickyContextPin: Identifiable, Equatable, Sendable, Codable {
         case .file: return "doc.text"
         case .folder: return "folder.fill"
         case .symbol: return "function"
+        case .skill: return "sparkles"
+        case .session: return "bubble.left.and.bubble.right"
         }
     }
 
@@ -96,7 +103,7 @@ struct StickyContextPin: Identifiable, Equatable, Sendable, Codable {
 
 enum StickyContextCompose {
     /// Merge sticky pins + one-shot attachments into formatter attachments
-    /// (files/symbols only — folders expanded as text separately).
+    /// (files/symbols only — folders, skills, and sessions are header text).
     static func fileAttachments(
         pins: [StickyContextPin],
         pending: [ContextAttachment]
@@ -121,7 +128,7 @@ enum StickyContextCompose {
         return out
     }
 
-    /// Text prefix for folder pins + symbol labels (before file bodies).
+    /// Text prefix for folder pins + symbol labels + skill/session refs.
     static func pinHeaderText(
         pins: [StickyContextPin],
         fileManager: FileManager = .default
@@ -138,6 +145,12 @@ enum StickyContextCompose {
             case .symbol:
                 let sym = pin.symbolName ?? pin.displayName
                 lines.append("- @symbol \(sym) in \(pin.path)")
+            case .skill:
+                lines.append(contentsOf: skillHeaderLines(pin))
+            case .session:
+                let uuid = pin.path
+                lines.append("- #session \(pin.displayName) (\(uuid))")
+                lines.append("  Use read_session_context with sessionId=\"\(uuid)\" query=\"handoff from this session\" strategy=\"handoff\".")
             }
         }
         return lines.joined(separator: "\n") + "\n\n"
@@ -157,5 +170,40 @@ enum StickyContextCompose {
             out.append("  … (\(sorted.count - maxEntries) more)")
         }
         return out
+    }
+
+    /// Resolve a skill pin to an envelope, or a `$skill name` + description fallback.
+    static func skillHeaderLines(_ pin: StickyContextPin) -> [String] {
+        let name = pin.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallbackName = name.isEmpty ? pin.path : name
+        if let skill = resolvedSkill(for: pin) {
+            var lines = ["- $skill \(skill.name)"]
+            let envelope = SkillDiscovery.formatSkillMessage(skill)
+            if !envelope.isEmpty {
+                lines.append(envelope)
+            }
+            return lines
+        }
+        var lines = ["- $skill \(fallbackName)"]
+        if let desc = pin.symbolName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !desc.isEmpty {
+            lines.append("  \(desc)")
+        }
+        return lines
+    }
+
+    static func resolvedSkill(for pin: StickyContextPin) -> DiscoveredSkill? {
+        let name = pin.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lookup = name.isEmpty ? pin.path : name
+        if !lookup.contains("/"),
+           let hit = SkillDiscovery.byName(lookup, projectRoot: nil) {
+            return hit
+        }
+        let rawPath = pin.path
+        guard rawPath.contains("/") || rawPath.hasPrefix("~") else { return nil }
+        let expanded = (rawPath as NSString).expandingTildeInPath
+        let url = URL(fileURLWithPath: expanded)
+        guard let parsed = SkillDiscovery.parse(file: url) else { return nil }
+        return SkillDiscovery.ensureBody(parsed)
     }
 }

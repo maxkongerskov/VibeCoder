@@ -19,6 +19,7 @@
 //    ├──────────────────────┤
 //    │ TASKS ▾               │
 //    │ + New Task            │  ← under Tasks disclosure (with nav)
+//    │  Search tasks…        │  ← title + preview filter
 //    │  ▸ task rows…         │
 //    ├──────────────────────┤
 //    │ 🗑 Delete all         │
@@ -52,6 +53,8 @@ struct ZCodeSidebar: View {
     /// Conversations to render in the task tree. Injected by RootView
     /// from AppViewModel so we show real data, never mock.
     var conversations: [Conversation] = []
+    /// Corrupt / unreadable conversation JSON files from `listDirectory()`.
+    var unloadableConversations: [ConversationLoadFailure] = []
     /// Callbacks — same semantics as the old SidebarShell, so RootView
     /// wiring changes minimally.
     var onShowSettings: () -> Void = {}
@@ -85,6 +88,16 @@ struct ZCodeSidebar: View {
     @AppStorage("sidebarPinnedCollapsed") private var pinnedCollapsed: Bool = false
     @State private var pendingRenameID: UUID? = nil
     @State private var showDeleteAllAlert = false
+    @State private var taskSearchQuery: String = ""
+
+    /// Conversations shown in the task tree after applying the search field.
+    private var visibleConversations: [Conversation] {
+        Self.filteredConversations(
+            conversations,
+            query: taskSearchQuery,
+            cleanModelChrome: cleanModelChrome
+        )
+    }
 
     private var primaryNav: [SidebarTab] {
         SidebarTab.sidebarTabs
@@ -138,6 +151,16 @@ struct ZCodeSidebar: View {
                 .padding(.horizontal, 6)
                 .padding(.bottom, 4)
 
+                taskSearchField
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 6)
+
+                if !unloadableConversations.isEmpty {
+                    unloadableBanner
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
+                }
+
                 if !recentsCollapsed {
                     if conversations.isEmpty {
                         VStack(spacing: 8) {
@@ -148,9 +171,17 @@ struct ZCodeSidebar: View {
                                 .padding(.vertical, 16)
                         }
                         Spacer(minLength: 0)
+                    } else if visibleConversations.isEmpty {
+                        Text("No matching tasks")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.Palette.tertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .accessibilityIdentifier("sidebar-no-matching-tasks")
+                        Spacer(minLength: 0)
                     } else {
-                        let pinned = conversations.filter { $0.pinned }
-                        let unpinned = conversations.filter { !$0.pinned }
+                        let pinned = visibleConversations.filter { $0.pinned }
+                        let unpinned = visibleConversations.filter { !$0.pinned }
                         ScrollView(.vertical, showsIndicators: false) {
                             LazyVStack(spacing: 2) {
                                 if !pinned.isEmpty {
@@ -219,6 +250,85 @@ struct ZCodeSidebar: View {
             .background(Theme.Palette.subtle)
         }
         .background(Theme.Palette.subtle)
+        .onChange(of: taskSearchQuery) { _, newValue in
+            if !newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                recentsCollapsed = false
+            }
+        }
+    }
+
+    /// Compact in-sidebar filter. Placeholder matches ZCode `searchTasksPlaceholder`.
+    private var taskSearchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.Palette.tertiary)
+            TextField("Search tasks…", text: $taskSearchQuery)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.Palette.primary)
+                .onExitCommand { taskSearchQuery = "" }
+            if !taskSearchQuery.isEmpty {
+                Button {
+                    taskSearchQuery = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.Palette.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Clear search")
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Theme.Palette.hover)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Theme.Palette.divider, lineWidth: 0.5)
+        )
+        .accessibilityIdentifier("sidebar-search-tasks")
+    }
+
+    private var unloadableBanner: some View {
+        let count = unloadableConversations.count
+        let title = count == 1
+            ? "1 conversation couldn't be loaded"
+            : "\(count) conversations couldn't be loaded"
+        return Button {
+            NSWorkspace.shared.activateFileViewerSelecting(unloadableConversations.map(\.url))
+        } label: {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11))
+                    .padding(.top, 1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 11.5, weight: .medium))
+                    Text("Show in Finder")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Theme.Palette.tertiary)
+                }
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Theme.Palette.secondary)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Theme.Palette.hover)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Reveal unreadable conversation files in Finder")
+        .accessibilityLabel(title)
+        .accessibilityIdentifier("unloadable-conversations-banner")
     }
 
     /// Full-width bottom control — same icon column + label alignment for all three.
@@ -576,6 +686,21 @@ private struct ZCodeTaskRow: View {
 // MARK: - Preview / relative time helpers
 
 extension ZCodeSidebar {
+    /// Case-insensitive title + preview substring. Trimmed-empty query returns `items`.
+    static func filteredConversations(
+        _ items: [Conversation],
+        query: String,
+        cleanModelChrome: Bool
+    ) -> [Conversation] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return items }
+        return items.filter { conv in
+            if conv.title.localizedCaseInsensitiveContains(needle) { return true }
+            let preview = previewLine(for: conv, cleanModelChrome: cleanModelChrome)
+            return preview.localizedCaseInsensitiveContains(needle)
+        }
+    }
+
     /// Last assistant (or user) line for the task list preview.
     static func previewLine(for conv: Conversation, cleanModelChrome: Bool = true) -> String {
         let msg = conv.messages.last(where: { $0.role == .assistant && $0.appearsInTranscript })

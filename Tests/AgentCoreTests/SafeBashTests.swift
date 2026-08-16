@@ -71,6 +71,9 @@ final class SafeBashTests: XCTestCase {
         XCTAssertTrue(SafeBash.isReadOnlyCommand("cargo check"))
         XCTAssertTrue(SafeBash.isReadOnlyCommand("cargo clippy"))
         XCTAssertTrue(SafeBash.isReadOnlyCommand("swift package describe"))
+        XCTAssertFalse(SafeBash.isReadOnlyCommand("swift package update"))
+        XCTAssertFalse(SafeBash.isReadOnlyCommand("swift package add-dependency foo"))
+        XCTAssertFalse(SafeBash.isReadOnlyCommand("swift package reset"))
     }
 
     func testBuildsAreNotReadOnly() {

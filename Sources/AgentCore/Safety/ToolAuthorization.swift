@@ -5,6 +5,7 @@
 //    1. PreTool hooks (stub / optional denials)
 //    2. Explicit deny rules (incl. project/user PermissionRules files)
 //    3. Explicit ask rules
+//    3b. Explicit allow rules (command-prefix / host; still plan+confine)
 //    4. Remembered grants + file alwaysAllow / alwaysDeny (never for dangerous shell)
 //    5. Built-in read-only auto-approve
 //    6. Execution-mode policy (Plan / Ask / Auto / Full)
@@ -33,21 +34,98 @@ public struct AuthorizationRule: Sendable, Equatable {
     public let toolName: String?
     /// Substring match on shell command (case-insensitive) when tool is run_shell.
     public let commandContains: String?
+    /// ZCode-style optional subject: command prefix (`git status` / `git status:*`),
+    /// host glob (`*.example.com`), or exact subject. On-disk field `ruleContent`
+    /// (also accepted as `commandPrefix` / `host` / `domain`).
+    public let ruleContent: String?
 
-    public init(kind: Kind, toolName: String? = nil, commandContains: String? = nil) {
+    public init(
+        kind: Kind,
+        toolName: String? = nil,
+        commandContains: String? = nil,
+        ruleContent: String? = nil
+    ) {
         self.kind = kind
         self.toolName = toolName
         self.commandContains = commandContains
+        self.ruleContent = ruleContent
     }
 
     public func matches(tool: String, command: String?) -> Bool {
-        if let toolName, toolName != tool { return false }
+        matches(tool: tool, command: command, url: nil, query: nil)
+    }
+
+    public func matches(
+        tool: String,
+        command: String?,
+        url: String?,
+        query: String? = nil
+    ) -> Bool {
+        if let toolName, !PermissionRuleMatch.toolNamesMatch(toolName, tool) {
+            return false
+        }
+        if let content = ruleContent?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !content.isEmpty {
+            return PermissionRuleMatch.matches(
+                tool: tool,
+                ruleContent: content,
+                command: command,
+                url: url,
+                query: query
+            )
+        }
         if let needle = commandContains {
             guard let command else { return false }
             return command.lowercased().contains(needle.lowercased())
         }
-        // tool-only rule
         return toolName != nil || commandContains != nil
+    }
+
+    public func matches(tool: String, arguments: ToolArguments) -> Bool {
+        matches(
+            tool: tool,
+            command: arguments.stringOptional("command"),
+            url: arguments.stringOptional("url"),
+            query: arguments.stringOptional("query")
+        )
+    }
+}
+
+/// Wave-2 approval-sheet payload. Persist as an allow/deny/ask
+/// `AuthorizationRule` (`toolName` + optional `ruleContent`) — same JSON
+/// model as `.vibecoder/permissions.json`. Do not invent a new on-disk format.
+public struct SuggestedPermissionUpdate: Sendable, Equatable {
+    public var toolName: String
+    public var ruleContent: String?
+    public var behavior: AuthorizationRule.Kind
+
+    public init(
+        toolName: String,
+        ruleContent: String? = nil,
+        behavior: AuthorizationRule.Kind = .allow
+    ) {
+        self.toolName = toolName
+        self.ruleContent = ruleContent
+        self.behavior = behavior
+    }
+
+    /// Approval-sheet label. Example: `Always allow git status`.
+    public var approvalLabel: String {
+        let subject: String
+        if let ruleContent, !ruleContent.isEmpty {
+            subject = ruleContent
+        } else {
+            subject = toolName
+        }
+        switch behavior {
+        case .allow: return "Always allow \(subject)"
+        case .deny: return "Always deny \(subject)"
+        case .ask: return "Always ask for \(subject)"
+        }
+    }
+
+    public var asRule: AuthorizationRule {
+        AuthorizationRule(kind: behavior, toolName: toolName, ruleContent: ruleContent)
     }
 }
 
@@ -100,6 +178,12 @@ public enum ToolAuthorization {
         return sep.lowerBound > name.startIndex && sep.upperBound < name.endIndex
     }
 
+    /// Prefix rules the approval sheet can persist (wave-2 UI binds this).
+    /// Example: `git status -sb` → Always allow `git status`.
+    public static func suggestions(forShellCommand command: String) -> [SuggestedPermissionUpdate] {
+        PermissionRules.suggestions(forShellCommand: command)
+    }
+
     /// Authorize an MCP tool call with the same ordered pipeline as
     /// builtins. Call this **before** `MCPServerPool.invokeTool`.
     public static func authorizeMCP(
@@ -129,10 +213,8 @@ public enum ToolAuthorization {
     }
 
     public static func isSessionPlanPath(_ url: URL, context: ToolContext) -> Bool {
-        let plan = (context.sessionPlanFileURL
-                    ?? sessionPlanURL(workingDirectory: context.workingDirectory,
-                                      conversationID: context.conversationID))
-            .resolvingSymlinksInPath().path
+        guard let planURL = context.sessionPlanFileURL else { return false }
+        let plan = planURL.resolvingSymlinksInPath().path
         let target = url.resolvingSymlinksInPath().path
         return SafeModeConfig.normalizePath(target) == SafeModeConfig.normalizePath(plan)
     }
@@ -147,6 +229,8 @@ public enum ToolAuthorization {
         remembered: [GrantKey: GrantDecision] = [:]
     ) -> AuthorizationOutcome {
         let command = arguments.stringOptional("command")
+        let url = arguments.stringOptional("url")
+        let query = arguments.stringOptional("query")
 
         // 1. PreTool hooks (stub denials on context)
         if let hookDeny = context.preToolHookDenials?.first(where: {
@@ -158,7 +242,10 @@ public enum ToolAuthorization {
         // 2–3. Explicit rules: deny wins over earlier ask, then ask, then allow.
         // Scan every matching rule so an ask listed first cannot mask alwaysDeny.
         var matchedAsk = false
-        for rule in config.rules where rule.matches(tool: toolName, command: command) {
+        var matchedAllow = false
+        for rule in config.rules where rule.matches(
+            tool: toolName, command: command, url: url, query: query
+        ) {
             switch rule.kind {
             case .deny:
                 return .deny("Denied by rule for tool '\(toolName)'")
@@ -166,7 +253,7 @@ public enum ToolAuthorization {
                 matchedAsk = true
             case .allow:
                 // still must pass dangerous + plan + safe mode below for safety
-                break
+                matchedAllow = true
             }
         }
         if matchedAsk {
@@ -220,6 +307,21 @@ public enum ToolAuthorization {
         }
 
         let remMap = mergeRemembered(remembered, config.remembered)
+
+        // 3b. Project/user allow rules (prefix / host). Dangerous already
+        // returned above. Plan + confinement still apply.
+        if matchedAllow, allowRulesCover(
+            toolName: toolName,
+            command: command,
+            url: url,
+            query: query,
+            rules: config.rules
+        ) {
+            return applyPlanAndSafeMode(
+                toolName: toolName, permission: permission,
+                arguments: arguments, context: context, base: .allow,
+                remembered: remMap)
+        }
 
         // 5. Built-in read-only auto-approve
         if permission == .readOnly || builtInReadOnlyTools.contains(toolName) {
@@ -321,6 +423,32 @@ public enum ToolAuthorization {
         var out = b
         for (k, v) in a { out[k] = v }
         return out
+    }
+
+    /// Allow rules must cover every shell segment so `git status && rm`
+    /// cannot ride a `git status` prefix.
+    private static func allowRulesCover(
+        toolName: String,
+        command: String?,
+        url: String?,
+        query: String?,
+        rules: [AuthorizationRule]
+    ) -> Bool {
+        let allow = rules.filter { $0.kind == .allow }
+        guard !allow.isEmpty else { return false }
+        let isShell = toolName == "run_shell" || toolName == "run_shell_command"
+        if isShell, let command {
+            let segs = SafeBash.segments(of: command)
+            let subjects = segs.isEmpty ? [command] : segs
+            return subjects.allSatisfy { seg in
+                allow.contains {
+                    $0.matches(tool: toolName, command: seg, url: nil, query: nil)
+                }
+            }
+        }
+        return allow.contains {
+            $0.matches(tool: toolName, command: command, url: url, query: query)
+        }
     }
 
     /// Plan-mode gate for `task`: allow explore/plan and read-only custom
@@ -426,9 +554,11 @@ public enum ToolAuthorization {
                 }
             }
             // create_plan etc already RO; write_file/edit to plan.md allowed above
+            let planHint = context.sessionPlanFileURL?.path
+                ?? "bind a project first — no session plan path without a workspace"
             return .deny(
                 "Plan mode: mutations are limited to the session plan file "
-                + "(\(sessionPlanURL(workingDirectory: context.workingDirectory, conversationID: context.conversationID).path)). "
+                + "(\(planHint)). "
                 + "Switch to Auto or Full access after the plan is approved.")
         }
 

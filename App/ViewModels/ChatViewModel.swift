@@ -82,6 +82,17 @@ final class ChatViewModel: ObservableObject {
     /// end-of-turn `queuedPrompt` auto-send — Grok/Claude mid-turn steer.)
     @Published var pendingInterjectionCount: Int = 0
 
+    /// Held follow-ups. Survives Stop; flushed after the next successful turn
+    /// unless `queuePaused`.
+    @Published var composerQueue: [ComposerQueueItem] = []
+    /// True after the user Stopped while items remained (Continue to resume).
+    @Published var queuePaused: Bool = false
+
+    /// Epoch sampled when this turn became `isRunning`. Late enqueues from
+    /// a finished turn must use this, not a post-hop `currentEpoch` (that
+    /// would accept into the next turn after `clear` bumps the generation).
+    internal var turnInterjectionEpoch: UInt64 = 0
+
     /// Legacy alias for UI that still checks "something is queued while busy".
     /// Maps to interjection pending count (non-nil when count > 0).
     var queuedPrompt: String? {
@@ -215,6 +226,12 @@ final class ChatViewModel: ObservableObject {
     /// Set when the conversation is deleted mid-turn so the run task must
     /// not persist and resurrect it.
     private var persistSuppressed = false
+
+    /// Turn-end card Undo → existing `/rewind` path for this conversation.
+    private var turnRewindObserver: NSObjectProtocol?
+    /// Composer Compress button → `/compact` for the selected conversation.
+    private var compactConversationObserver: NSObjectProtocol?
+    private var composerNotificationsStarted = false
 
     /// Whether the in-flight run is headless. Set at `send`, read in
     /// `consume` (to bypass the notification frontmost-check) and in
@@ -411,6 +428,25 @@ final class ChatViewModel: ObservableObject {
         self.isRehydratingStickyPins = true
         self.stickyContextPins = conversation.stickyContextPins.map(StickyContextPin.init(record:))
         self.isRehydratingStickyPins = false
+        turnRewindObserver = NotificationCenter.default.addObserver(
+            forName: .turnRewindRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            Task { @MainActor [weak self] in
+                self?.handleTurnRewindNotification(note)
+            }
+        }
+        startComposerNotifications()
+    }
+
+    deinit {
+        if let turnRewindObserver {
+            NotificationCenter.default.removeObserver(turnRewindObserver)
+        }
+        if let compactConversationObserver {
+            NotificationCenter.default.removeObserver(compactConversationObserver)
+        }
     }
 
     /// Replace sticky pins from a conversation snapshot (e.g. after list reload).
@@ -573,10 +609,27 @@ final class ChatViewModel: ObservableObject {
     /// Lazily load the shared prompt history on first access. Called
     /// when the composer mounts so ↑/↓ arrows work immediately.
     func ensurePromptHistoryLoaded() {
+        startComposerNotifications()
         guard promptHistory.isEmpty else { return }
         Task {
             let history = await PromptHistoryStore.shared.load()
             await MainActor.run { self.promptHistory = history }
+        }
+    }
+
+    /// Observe Compress (`agentos.compactConversation`). Safe to call more
+    /// than once — ChatView already invokes this via `ensurePromptHistoryLoaded`.
+    func startComposerNotifications() {
+        guard !composerNotificationsStarted else { return }
+        composerNotificationsStarted = true
+        compactConversationObserver = NotificationCenter.default.addObserver(
+            forName: .compactConversationRequested,
+            object: nil,
+            queue: .main
+        ) { [weak self] note in
+            Task { @MainActor [weak self] in
+                self?.handleCompactConversationNotification(note)
+            }
         }
     }
 
@@ -591,69 +644,189 @@ final class ChatViewModel: ObservableObject {
         Task { await PromptHistoryStore.shared.record(trimmed) }
     }
 
+    // MARK: - Composer follow-up queue
+
+    @discardableResult
+    func enqueueFollowUp(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let hookRoots = lifecycleHookRoots()
+        if let blocked = ChatPromptHooks.userPromptSubmitDeniedMessage(
+            text: trimmed,
+            projectRoot: hookRoots.project,
+            worktreeRoot: hookRoots.worktree
+        ) {
+            setStatus(blocked)
+            return false
+        }
+        recordPrompt(trimmed)
+        var store = queueStoreSnapshot()
+        guard store.enqueue(trimmed) != nil else { return false }
+        applyQueueStore(store)
+        let n = composerQueue.count
+        statusLine = n <= 1
+            ? "Queued — will send after this turn"
+            : "\(n) messages queued"
+        return true
+    }
+
+    func removeQueuedItem(id: UUID) {
+        var store = queueStoreSnapshot()
+        _ = store.remove(id: id)
+        applyQueueStore(store)
+    }
+
+    func moveQueuedItem(from: Int, to: Int) {
+        var store = queueStoreSnapshot()
+        _ = store.move(from: from, to: to)
+        applyQueueStore(store)
+    }
+
+    func moveQueuedItemUp(id: UUID) {
+        var store = queueStoreSnapshot()
+        _ = store.moveUp(id: id)
+        applyQueueStore(store)
+    }
+
+    func moveQueuedItemDown(id: UUID) {
+        var store = queueStoreSnapshot()
+        _ = store.moveDown(id: id)
+        applyQueueStore(store)
+    }
+
+    /// Drop from the visible queue and inject via InterjectionBuffer (Steer).
+    func steerQueuedItem(id: UUID) {
+        var store = queueStoreSnapshot()
+        guard let item = store.takeForSteer(id: id) else { return }
+        applyQueueStore(store)
+        enqueueInterjection(item.text)
+    }
+
+    /// `/compact`/`/compress` run immediately. Other items move to the front
+    /// and `send` if the turn is idle.
+    func runQueuedItemNow(id: UUID) {
+        guard let item = composerQueue.first(where: { $0.id == id }) else { return }
+        if ComposerQueueStore.isCompactSlash(item.text) {
+            var store = queueStoreSnapshot()
+            _ = store.remove(id: id)
+            applyQueueStore(store)
+            let result = handleSlashCommand(
+                ComposerQueueStore.normalizedCompactCommand(item.text)
+            )
+            if case .handled(let message) = result, let message, !message.isEmpty {
+                statusLine = message
+            }
+            return
+        }
+        var store = queueStoreSnapshot()
+        _ = store.moveToFront(id: id)
+        applyQueueStore(store)
+        guard !isRunning else { return }
+        guard let first = store.dequeueFirst() else { return }
+        applyQueueStore(store)
+        Task { @MainActor [weak self] in
+            _ = self?.send(first.text)
+        }
+    }
+
+    func continuePausedQueue() {
+        var store = queueStoreSnapshot()
+        let next = store.continuePaused(isRunning: isRunning)
+        applyQueueStore(store)
+        guard let text = next else { return }
+        Task { @MainActor [weak self] in
+            self?.dispatchQueuedFollowUp(text)
+        }
+    }
+
+    private func queueStoreSnapshot() -> ComposerQueueStore {
+        ComposerQueueStore(items: composerQueue, paused: queuePaused)
+    }
+
+    private func applyQueueStore(_ store: ComposerQueueStore) {
+        composerQueue = store.items
+        queuePaused = store.paused
+    }
+
+    /// Mid-turn Steer — same InterjectionBuffer path Send used to take.
+    private func enqueueInterjection(_ trimmed: String) {
+        let text = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        let convoId = conversation.id
+        let epoch = turnInterjectionEpoch
+        Task { @MainActor in
+            guard self.isRunning else {
+                self.statusLine = "Turn ended — interjection not applied."
+                return
+            }
+            let accepted = await InterjectionBuffer.shared.enqueue(
+                conversationId: convoId,
+                text: text,
+                expectedEpoch: epoch
+            )
+            if !accepted {
+                self.statusLine = "Turn ended — interjection not applied."
+                return
+            }
+            if !self.isRunning {
+                await InterjectionBuffer.shared.clear(conversationId: convoId)
+                self.pendingInterjectionCount = 0
+                self.statusLine = "Turn ended — interjection not applied."
+                return
+            }
+            let n = await InterjectionBuffer.shared.peekCount(conversationId: convoId)
+            self.pendingInterjectionCount = n
+            self.statusLine = n <= 1
+                ? "Interjection sent — applied on next step."
+                : "\(n) interjections pending — applied on next step."
+        }
+    }
+
+    private func flushComposerQueueAfterTurn() {
+        var store = queueStoreSnapshot()
+        guard let text = store.takeNextAfterTurn() else { return }
+        applyQueueStore(store)
+        Task { @MainActor [weak self] in
+            self?.dispatchQueuedFollowUp(text)
+        }
+    }
+
+    /// Compact slash must not go through `send` as a user bubble.
+    private func dispatchQueuedFollowUp(_ text: String) {
+        if ComposerQueueStore.isCompactSlash(text) {
+            let result = handleSlashCommand(
+                ComposerQueueStore.normalizedCompactCommand(text)
+            )
+            if case .handled(let message) = result, let message, !message.isEmpty {
+                statusLine = message
+            }
+            if !isRunning && !queuePaused && !composerQueue.isEmpty {
+                flushComposerQueueAfterTurn()
+            }
+            return
+        }
+        _ = send(text)
+    }
+
     // MARK: - Send / cancel
 
     /// - Parameter forceHeadless: when true, the turn runs headless
     ///   regardless of the global toggle. Used by the scheduler so a
     ///   scheduled/overnight run is always unattended.
-    /// - Returns: `true` when a turn was started or a mid-turn interjection
-    ///   was accepted; `false` when send bailed early (restore composer draft).
+    /// - Returns: `true` when a turn was started or a follow-up was queued;
+    ///   `false` when send bailed early (restore composer draft).
     @discardableResult
     func send(_ text: String, forceHeadless: Bool = false) -> Bool {
-        let hookRoots = lifecycleHookRoots()
-
-        // Mid-turn interjection (Grok / Claude Code parity): if a turn is
-        // already running, enqueue into InterjectionBuffer. AgentLoop drains
-        // after tool batches / at iteration start — never mid-tool-pairing.
-        // Do NOT start a second AgentLoop or wait until the turn finishes.
+        // While a turn is live, Send queues. Steer uses InterjectionBuffer.
         if isRunning {
-            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { return false }
-            // PB2: UserPromptSubmit gates mid-turn steers as well as new turns.
-            if let blocked = ChatPromptHooks.userPromptSubmitDeniedMessage(
-                text: trimmed,
-                projectRoot: hookRoots.project,
-                worktreeRoot: hookRoots.worktree
-            ) {
-                setStatus(blocked)
-                return false
-            }
-            recordPrompt(trimmed)
-            let convoId = conversation.id
-            // Sample epoch *before* scheduling the Task so a post-clear bump rejects.
-            // InterjectionBuffer is an actor — we still await, but pass expectedEpoch.
-            Task { @MainActor in
-                let epoch = await InterjectionBuffer.shared.currentEpoch(conversationId: convoId)
-                // Re-check turn still live after hop (cancel may have finished).
-                guard self.isRunning else {
-                    self.statusLine = "Turn ended — interjection not applied."
-                    return
-                }
-                let accepted = await InterjectionBuffer.shared.enqueue(
-                    conversationId: convoId,
-                    text: trimmed,
-                    expectedEpoch: epoch
-                )
-                if !accepted {
-                    self.statusLine = "Turn ended — interjection not applied."
-                    return
-                }
-                // If turn ended after enqueue, clear again so next turn is clean.
-                if !self.isRunning {
-                    await InterjectionBuffer.shared.clear(conversationId: convoId)
-                    self.pendingInterjectionCount = 0
-                    self.statusLine = "Turn ended — interjection not applied."
-                    return
-                }
-                let n = await InterjectionBuffer.shared.peekCount(conversationId: convoId)
-                self.pendingInterjectionCount = n
-                self.statusLine = n <= 1
-                    ? "Interjection sent — applied on next step."
-                    : "\(n) interjections pending — applied on next step."
-            }
-            return true
+            return enqueueFollowUp(text)
+        }
+        // Keep existing items; they flush after this new turn (no confirm sheet).
+        if queuePaused && !composerQueue.isEmpty {
+            queuePaused = false
         }
         guard let app else { return false }
+        let hookRoots = lifecycleHookRoots()
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         var textForCompose = trimmed
         // Session `/remember` notes — inject once at the top of the user turn.
@@ -1136,12 +1309,21 @@ final class ChatViewModel: ObservableObject {
     /// calls `finishRun`. Until then the Stop button shows "Cancelling…".
     func cancel() {
         guard isRunning else { return }
-        statusLine = "Cancelling…"
-        // Grok: cancel discards buffered interjections so they do not apply
-        // to a later turn after the user stopped this one.
+        // Interjections do not survive Stop. The visible follow-up queue does.
         let convoId = conversation.id
         pendingInterjectionCount = 0
-        Task { await InterjectionBuffer.shared.clear(conversationId: convoId) }
+        var store = queueStoreSnapshot()
+        if store.pauseIfNonEmpty() {
+            applyQueueStore(store)
+            statusLine = "Cancelling… queue paused"
+        } else {
+            statusLine = "Cancelling…"
+        }
+        Task { @MainActor in
+            await InterjectionBuffer.shared.clear(conversationId: convoId)
+            self.turnInterjectionEpoch = await InterjectionBuffer.shared.currentEpoch(
+                conversationId: convoId)
+        }
         // Fail-closed any open approval sheets so the turn can unwind.
         app?.shellApprovalCoordinatorService.denyPendingAndDrain()
         app?.patchReviewCoordinator.resolve(.rejectAll)
@@ -1184,14 +1366,22 @@ final class ChatViewModel: ObservableObject {
         // model call would otherwise stick in the buffer).
         let convoId = conversation.id
         pendingInterjectionCount = 0
-        Task { await InterjectionBuffer.shared.clear(conversationId: convoId) }
+        Task { @MainActor in
+            await InterjectionBuffer.shared.clear(conversationId: convoId)
+            self.turnInterjectionEpoch = await InterjectionBuffer.shared.currentEpoch(
+                conversationId: convoId)
+        }
 
         // Drop completed background job records; leave running jobs for the
         // user to wait/kill. Full cleanup on conversation delete / app quit.
         isRunning = false
         runTask = nil
         flushStreamBuffersNow()
-        statusLine = wasCancelled ? "Task ended by user" : status
+        if wasCancelled && queuePaused && !composerQueue.isEmpty {
+            statusLine = "Task ended by user — queue paused"
+        } else {
+            statusLine = wasCancelled ? "Task ended by user" : status
+        }
         streamingContent = ""
         streamingReasoning = ""
         pendingContentDelta = ""
@@ -1253,9 +1443,11 @@ final class ChatViewModel: ObservableObject {
             toolCallsByMessage[msgID] = updated
         }
 
-        // Interjections are drained mid-turn by AgentLoop; nothing left to
-        // auto-fire after finish. Clear the pending badge.
+        // Interjections do not survive the turn. The visible queue does.
         pendingInterjectionCount = 0
+        if !queuePaused {
+            flushComposerQueueAfterTurn()
+        }
     }
 
     // MARK: - Event consumption
@@ -2504,6 +2696,35 @@ final class ChatViewModel: ObservableObject {
             try? await ConversationStore.shared.save(self.conversation)
         }
         return .handled(message: "Undoing last send (files + conversation)…")
+    }
+
+    /// Compress button. Only the selected conversation's VM runs `/compact`.
+    func handleCompactConversationNotification(_ note: Notification) {
+        if let posted = (note.userInfo?["conversationID"] as? UUID)
+            ?? (note.object as? UUID),
+           posted != conversation.id {
+            return
+        }
+        if let selected = app?.selectedConversationID, selected != conversation.id {
+            return
+        }
+        let result = handleSlashCommand("/compact")
+        if case .handled(let message) = result, let message, !message.isEmpty {
+            statusLine = message
+        }
+    }
+
+    /// Turn-end Undo. Ignores notifications aimed at another conversation.
+    func handleTurnRewindNotification(_ note: Notification) {
+        if let posted = (note.userInfo?["conversationID"] as? UUID)
+            ?? (note.object as? UUID),
+           posted != conversation.id {
+            return
+        }
+        let result = handleRewind()
+        if case .handled(let message) = result, let message, !message.isEmpty {
+            statusLine = message
+        }
     }
 
     private func handleRewind() -> SlashCommandResult {

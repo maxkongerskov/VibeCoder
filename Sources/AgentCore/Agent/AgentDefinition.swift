@@ -11,6 +11,7 @@
 //
 //  Phase B PB5: `AgentToolAllowlist` resolves custom markdown frontmatter
 //  tool lists (tools / allowed-tools) against the known registry set.
+//  Profile overrides (`AgentProfileSettings`) come from markdown frontmatter.
 //
 
 import Foundation
@@ -340,17 +341,123 @@ public struct AgentDefinition: Sendable {
     /// Whether this agent has safe mode enabled.
     public var isSafe: Bool { safeMode != nil }
 
+    /// Markdown-profile spawn overrides (empty for parent / built-in agents).
+    /// Wave-2 `SubAgentRunner` reads these after custom-agent discovery.
+    public let profileSettings: AgentProfileSettings
+
     public init(
         backend: InferenceBackend,
         model: ModelDescriptor,
         loopConfig: AgentLoop.Configuration,
         sampling: SamplingParams? = nil,
-        displayName: String? = nil
+        displayName: String? = nil,
+        profileSettings: AgentProfileSettings = .empty
     ) {
         self.backend = backend
         self.model = model
         self.loopConfig = loopConfig
         self.sampling = sampling
         self.displayName = displayName ?? model.displayName
+        self.profileSettings = profileSettings
+    }
+}
+
+// MARK: - Markdown agent profile (ZCode frontmatter)
+
+/// Optional per-agent spawn fields from markdown frontmatter.
+/// Stored on `DiscoveredAgentDefinition` and `AgentDefinition.profileSettings`
+/// so `SubAgentRunner` can apply model / effort / mode / turn-cap / background.
+public struct AgentProfileSettings: Sendable, Equatable {
+    /// Preferred model id (string; host maps to a `ModelDescriptor` at spawn).
+    public var model: String?
+    /// Reasoning effort (`thoughtLevel` or `effort` in frontmatter).
+    public var thoughtLevel: String?
+    /// Mapped permission mode (`acceptEdits` → `.edit`, `bypassPermissions` → `.yolo`).
+    public var permissionMode: ExecutionMode?
+    /// Child loop iteration cap.
+    public var maxTurns: Int?
+    /// When true, spawn as a background job by default.
+    public var background: Bool?
+
+    public static let empty = AgentProfileSettings()
+
+    public init(
+        model: String? = nil,
+        thoughtLevel: String? = nil,
+        permissionMode: ExecutionMode? = nil,
+        maxTurns: Int? = nil,
+        background: Bool? = nil
+    ) {
+        self.model = Self.nonEmpty(model)
+        self.thoughtLevel = Self.nonEmpty(thoughtLevel)
+        self.permissionMode = permissionMode
+        self.maxTurns = maxTurns.flatMap { $0 > 0 ? $0 : nil }
+        self.background = background
+    }
+
+    public var isEmpty: Bool {
+        model == nil && thoughtLevel == nil && permissionMode == nil
+            && maxTurns == nil && background == nil
+    }
+
+    /// ZCode / Claude `permissionMode` → VibeCoder `ExecutionMode`.
+    /// Accepts `plan|build|edit|yolo|acceptEdits|bypassPermissions`
+    /// (kebab/snake/camel, case-insensitive).
+    public static func parsePermissionMode(_ raw: String?) -> ExecutionMode? {
+        guard let token = normalizedToken(raw), !token.isEmpty else { return nil }
+        switch token {
+        case "plan":
+            return .plan
+        case "build":
+            return .build
+        case "edit", "acceptedits":
+            return .edit
+        case "yolo", "bypasspermissions":
+            return .yolo
+        default:
+            return nil
+        }
+    }
+
+    /// Prefer `thoughtLevel`, then `effort`. Empty → nil.
+    public static func parseThoughtLevel(thoughtLevel: String?, effort: String?) -> String? {
+        nonEmpty(thoughtLevel) ?? nonEmpty(effort)
+    }
+
+    public static func parseMaxTurns(_ raw: String?) -> Int? {
+        guard let text = nonEmpty(raw) else { return nil }
+        if let i = Int(text), i > 0 { return i }
+        if let d = Double(text), d.isFinite, d == d.rounded(),
+           d > 0, d < Double(Int.max) {
+            return Int(d)
+        }
+        return nil
+    }
+
+    public static func parseBackground(_ raw: String?) -> Bool? {
+        parseBool(raw)
+    }
+
+    public static func parseBool(_ raw: String?) -> Bool? {
+        guard let token = normalizedToken(raw) else { return nil }
+        switch token {
+        case "true", "yes", "on", "1": return true
+        case "false", "no", "off", "0": return false
+        default: return nil
+        }
+    }
+
+    public static func nonEmpty(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    /// Lowercased alphanumeric-only token so `acceptEdits` / `accept_edits` match.
+    static func normalizedToken(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        return trimmed.lowercased().filter { $0.isLetter || $0.isNumber }
     }
 }

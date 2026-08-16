@@ -50,6 +50,10 @@ final class BuildGuardVerifyEditsTests: XCTestCase {
             SystemReminder.autoVerify(path: "/tmp/a.swift", tail: "let x = 1")))
         XCTAssertTrue(SystemReminder.isWireOnly(SystemReminder.memoryFirstTurn("- note")))
         XCTAssertTrue(SystemReminder.isWireOnly(SystemReminder.interjection("stop")))
+        XCTAssertTrue(SystemReminder.isWireOnly(
+            "[system] Background job update for the parent agent:\noutput: hello"))
+        XCTAssertTrue(SystemReminder.isWireOnly(
+            "[Background job completed] kind=subagent task_id=X"))
         XCTAssertFalse(SystemReminder.isWireOnly("Please edit App.swift"))
         XCTAssertFalse(SystemReminder.isWireOnly(""))
     }

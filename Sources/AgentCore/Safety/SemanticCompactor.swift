@@ -27,7 +27,8 @@ public struct ExtractiveHistorySummarizer: HistorySummarizing {
             header: "[context summary — compacted older turns]")
     }
 
-    /// Sync path for FullReplace / tests (same extractive body as `summarize`).
+    /// Sync path for tests (legacy machine headers). FullReplace uses
+    /// `buildNineSectionSummary` instead.
     public func forceSyncSummary(_ messages: [ChatMessage], hint: String) -> String {
         Self.buildSummary(
             messages: messages,
@@ -42,31 +43,75 @@ public struct ExtractiveHistorySummarizer: HistorySummarizing {
         systemHint: String,
         header: String
     ) -> String {
-        var decisions: [String] = []
-        var files: Set<String> = []
-        var failures: [String] = []
-        var todos: [String] = []
-        var goals: [String] = []
-        var lastUser = ""
+        let facts = extractFacts(from: messages)
+        var lines: [String] = [
+            header,
+            systemHint.isEmpty ? "" : "hint: \(systemHint)",
+            "current_goal: \(facts.goals.last ?? facts.lastUser)",
+        ]
+        if !facts.decisions.isEmpty {
+            lines.append("decisions:")
+            lines.append(contentsOf: facts.decisions.suffix(6).map { "  - \($0)" })
+        }
+        if !facts.todos.isEmpty {
+            lines.append("open_todos:")
+            lines.append(contentsOf: facts.todos.suffix(8).map { "  - \($0)" })
+            lines.append("pending_tasks:")
+            lines.append(contentsOf: facts.todos.suffix(8).map { "  - \($0)" })
+        }
+        if !facts.files.isEmpty {
+            lines.append("files_touched:")
+            lines.append(contentsOf: facts.files.prefix(20).map { "  - \($0)" })
+        }
+        if !facts.failures.isEmpty {
+            lines.append("failing_commands_or_errors:")
+            lines.append(contentsOf: facts.failures.suffix(6).map { "  - \($0)" })
+        }
+        lines.append("note: recent turns after this summary are verbatim.")
+        return lines.filter { !$0.isEmpty }.joined(separator: "\n")
+    }
 
+    /// Facts mined from a message prefix — shared by Semantic + FullReplace.
+    public struct ExtractedFacts: Sendable {
+        public var decisions: [String] = []
+        public var files: [String] = []
+        public var failures: [String] = []
+        public var todos: [String] = []
+        public var goals: [String] = []
+        public var lastUser: String = ""
+        public var userMessages: [String] = []
+        public var lastAssistant: String = ""
+    }
+
+    public static func extractFacts(from messages: [ChatMessage]) -> ExtractedFacts {
+        var facts = ExtractedFacts()
+        var fileSet = Set<String>()
         for m in messages {
             if m.role == .user {
-                lastUser = String(m.content.prefix(200))
+                if m.isWireOnlySystemReminder { continue }
+                let clipped = String(m.content.prefix(200))
+                facts.lastUser = clipped
+                facts.userMessages.append(String(m.content.prefix(240)))
                 if m.content.lowercased().contains("goal") || m.content.count < 120 {
-                    goals.append(String(m.content.prefix(160)))
+                    facts.goals.append(String(m.content.prefix(160)))
                 }
             }
             if m.role == .assistant {
+                if !m.content.isEmpty {
+                    facts.lastAssistant = String(m.content.prefix(240))
+                }
                 let lower = m.content.lowercased()
                 if lower.contains("decide") || lower.contains("will ") {
-                    decisions.append(String(m.content.prefix(160)))
+                    facts.decisions.append(String(m.content.prefix(160)))
                 }
                 for tc in m.toolCalls {
                     if tc.name.contains("plan") || tc.name.contains("todo") {
-                        todos.append("\(tc.name): \(String(tc.arguments.prefix(80)))")
+                        facts.todos.append("\(tc.name): \(String(tc.arguments.prefix(80)))")
                     }
                     if let path = extractPathArgument(from: tc.arguments) {
-                        files.insert(path)
+                        if fileSet.insert(path).inserted {
+                            facts.files.append(path)
+                        }
                     }
                 }
             }
@@ -74,37 +119,72 @@ public struct ExtractiveHistorySummarizer: HistorySummarizing {
                 if m.content.lowercased().contains("error")
                     || m.content.lowercased().contains("failed")
                     || m.content.hasPrefix("Tool error") {
-                    failures.append(String(m.content.prefix(160)))
+                    facts.failures.append(String(m.content.prefix(160)))
                 }
                 if m.content.contains("Edited ") || m.content.contains("Created ") {
-                    files.insert(String(m.content.prefix(80)))
+                    let snippet = String(m.content.prefix(80))
+                    if fileSet.insert(snippet).inserted {
+                        facts.files.append(snippet)
+                    }
                 }
             }
         }
+        return facts
+    }
 
-        var lines: [String] = [
-            header,
-            systemHint.isEmpty ? "" : "hint: \(systemHint)",
-            "current_goal: \(goals.last ?? lastUser)",
-        ]
-        if !decisions.isEmpty {
-            lines.append("decisions:")
-            lines.append(contentsOf: decisions.suffix(6).map { "  - \($0)" })
+    /// ZCode 9-section extractive body (no LLM). Empty sections get a stub.
+    public static func buildNineSectionSummary(messages: [ChatMessage]) -> String {
+        let facts = extractFacts(from: messages)
+        func bullets(_ items: [String], empty: String) -> String {
+            if items.isEmpty { return "   \(empty)" }
+            return items.map { "   - \($0)" }.joined(separator: "\n")
         }
-        if !todos.isEmpty {
-            lines.append("open_todos:")
-            lines.append(contentsOf: todos.suffix(8).map { "  - \($0)" })
+        let primary = facts.goals.last ?? facts.lastUser
+        let primaryBody = primary.isEmpty
+            ? "   None recorded."
+            : "   \(primary)"
+        let concepts = facts.decisions.suffix(8).map { String($0) }
+        let fileItems = Array(facts.files.prefix(20))
+        let errors = facts.failures.suffix(8).map { String($0) }
+        let users = facts.userMessages.suffix(30).map { String($0) }
+        let todos = facts.todos.suffix(8).map { String($0) }
+        var current = facts.lastAssistant
+        if !facts.lastUser.isEmpty {
+            current = "User: \(facts.lastUser)"
+                + (facts.lastAssistant.isEmpty ? "" : "\n   Assistant: \(facts.lastAssistant)")
         }
-        if !files.isEmpty {
-            lines.append("files_touched:")
-            lines.append(contentsOf: files.prefix(20).map { "  - \($0)" })
-        }
-        if !failures.isEmpty {
-            lines.append("failing_commands_or_errors:")
-            lines.append(contentsOf: failures.suffix(6).map { "  - \($0)" })
-        }
-        lines.append("note: recent turns after this summary are verbatim.")
-        return lines.filter { !$0.isEmpty }.joined(separator: "\n")
+        let next = facts.lastUser.isEmpty
+            ? "   None recorded."
+            : "   Continue from the user's most recent request: \(facts.lastUser)"
+
+        return """
+        1. Primary Request and Intent:
+        \(primaryBody)
+
+        2. Key Technical Concepts:
+        \(bullets(Array(concepts), empty: "None recorded."))
+
+        3. Files and Code Sections:
+        \(bullets(fileItems, empty: "None recorded."))
+
+        4. Errors and fixes:
+        \(bullets(Array(errors), empty: "None recorded."))
+
+        5. Problem Solving:
+        \(errors.isEmpty && concepts.isEmpty ? "   None recorded." : bullets(Array(errors) + Array(concepts.suffix(3)), empty: "None recorded."))
+
+        6. All user messages:
+        \(bullets(Array(users), empty: "None recorded."))
+
+        7. Pending Tasks:
+        \(bullets(Array(todos), empty: "None recorded."))
+
+        8. Current Work:
+           \(current.isEmpty ? "None recorded." : current)
+
+        9. Optional Next Step:
+        \(next)
+        """
     }
 
     /// JSON `"path"` field when present (same contract as ToolResultCompressor).

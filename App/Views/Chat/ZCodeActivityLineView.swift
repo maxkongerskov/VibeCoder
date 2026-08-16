@@ -16,10 +16,13 @@ struct ZCodeActivityLineView: View {
     /// Kill a running subagent/background job when the row can resolve an id.
     var onKillJob: ((UUID) -> Void)? = nil
     var runningJobID: UUID? = nil
+    /// Inspector / nested child thread: verb row only, no full directory table.
+    var compact: Bool = false
 
     @State private var expanded = false
     /// When true, detail blocks show full I/O (no 600/800 char hard cut).
     @State private var showFullDetail = false
+    @State private var childThread: [SubagentThreadItem] = []
 
     private var isTask: Bool { state.toolName == "task" }
 
@@ -61,7 +64,16 @@ struct ZCodeActivityLineView: View {
 
     private var successSummary: String {
         switch state.toolName {
-        case "list_directory": return "1 list"
+        case "list_directory":
+            if let listing = DirectoryListing.parse(state.output) {
+                let dirs = listing.directories.count
+                let files = listing.files.count
+                if dirs > 0, files == 0 { return "\(dirs) folders" }
+                if files > 0, dirs == 0 { return "\(files) files" }
+                if dirs + files > 0 { return "\(dirs + files) entries" }
+            }
+            let label = ArtifactLabel.activityLabel(toolName: state.toolName, argsJSON: state.input)
+            return label.isEmpty ? "1 list" : label
         case "read_file", "read_file_range": return "1 file"
         case "run_shell", "run_shell_command": return "1 command"
         case "write_file": return "1 write"
@@ -86,36 +98,97 @@ struct ZCodeActivityLineView: View {
 
             if expanded, hasExpandableDetail {
                 VStack(alignment: .leading, spacing: 6) {
-                    if !state.input.isEmpty {
-                        detailBlock(
-                            label: "Input",
-                            text: previewText(state.input, limit: showFullDetail ? nil : 600)
-                        )
-                    }
-                    if isListDirectory, let listing = DirectoryListing.parse(state.output) {
-                        DirectoryListingTableView(listing: listing)
-                    } else if !state.output.isEmpty {
-                        detailBlock(
-                            label: "Output",
-                            text: previewText(state.output, limit: showFullDetail ? nil : 800)
-                        )
-                    }
-                    if !showFullDetail, detailIsTruncated {
-                        Button("Show full I/O") {
-                            withAnimation(.easeOut(duration: 0.12)) { showFullDetail = true }
+                    if isTask, !childThread.isEmpty {
+                        ForEach(childThread) { item in
+                            childThreadRow(item)
                         }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Theme.Palette.accent)
+                    } else {
+                        if !state.input.isEmpty {
+                            detailBlock(
+                                label: "Input",
+                                text: previewText(state.input, limit: showFullDetail ? nil : 600)
+                            )
+                        }
+                        if !compact, isListDirectory, let listing = DirectoryListing.parse(state.output) {
+                            DirectoryListingTableView(listing: listing)
+                        } else if !state.output.isEmpty {
+                            detailBlock(
+                                label: "Output",
+                                text: previewText(state.output, limit: showFullDetail ? nil : 800)
+                            )
+                        }
+                        if !showFullDetail, detailIsTruncated {
+                            Button("Show full I/O") {
+                                withAnimation(.easeOut(duration: 0.12)) { showFullDetail = true }
+                            }
+                            .buttonStyle(.plain)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.Palette.accent)
+                        }
                     }
                 }
                 .padding(.leading, 24)
                 .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .task(id: "\(runningJobID?.uuidString ?? state.id)-\(expanded)") {
+            guard expanded else { return }
+            while !Task.isCancelled {
+                await refreshChildThread()
+                try? await Task.sleep(for: .milliseconds(200))
+            }
+        }
         .onChange(of: expanded) { _, open in
             if !open { showFullDetail = false }
         }
+    }
+
+    @ViewBuilder
+    private func childThreadRow(_ item: SubagentThreadItem) -> some View {
+        switch item.kind {
+        case .thought:
+            Text("Thought · \(previewText(item.text, limit: 160))")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.Palette.tertiary)
+        case .assistant:
+            Text(item.text)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Theme.Palette.secondary)
+                .textSelection(.enabled)
+        case .tool:
+            ZCodeActivityLineView(
+                state: ToolCallUIState(
+                    id: item.id,
+                    toolName: item.toolName ?? "tool",
+                    status: {
+                        switch item.status {
+                        case .pending: return .pending
+                        case .running: return .running
+                        case .success: return .success
+                        case .failure: return .failure
+                        }
+                    }(),
+                    input: item.arguments,
+                    output: item.output
+                ),
+                compact: true
+            )
+        }
+    }
+
+    private func refreshChildThread() async {
+        guard isTask else {
+            childThread = []
+            return
+        }
+        let jobID = runningJobID
+            ?? InspectorSubagentDirectory.parseResult(state.output).taskUUID
+        guard let jobID else {
+            childThread = []
+            return
+        }
+        let items = await SubagentThreadStore.shared.items(for: jobID)
+        childThread = items
     }
 
     private var detailIsTruncated: Bool {
@@ -130,65 +203,78 @@ struct ZCodeActivityLineView: View {
     //         gray      blue               description
 
     private var subagentRow: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                expanded.toggle()
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "shippingbox")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.Palette.tertiary)
-                    .frame(width: 16)
-
-                Text("SubAgent")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Theme.Palette.secondary)
-
-                Text(taskArgs.type)
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(Theme.Palette.subagentType)
-
-                Text("·")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.Palette.activityDivider)
-
-                Text(subagentStatusText)
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundStyle(Theme.Palette.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-
-                if state.status == .running {
-                    ProgressView()
-                        .controlSize(.mini)
-                        .padding(.leading, 2)
+        // Not one outer Button — nested Open/Kill would not receive clicks.
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    expanded.toggle()
                 }
-
-                Spacer(minLength: 4)
-
-                if state.status == .running, let jobID = runningJobID, let onKillJob {
-                    Button {
-                        onKillJob(jobID)
-                    } label: {
-                        Text("Kill")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(Theme.Palette.error)
-                    }
-                    .buttonStyle(.plain)
-                    .help("Stop this subagent")
-                }
-
-                if hasExpandableDetail {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "shippingbox")
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Theme.Palette.tertiary)
-                        .rotationEffect(.degrees(expanded ? 0 : -90))
+                        .frame(width: 16)
+
+                    Text("SubAgent")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.Palette.secondary)
+
+                    Text(taskArgs.type)
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Theme.Palette.subagentType)
+
+                    Text("·")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.Palette.activityDivider)
+
+                    Text(subagentStatusText)
+                        .font(.system(size: 13, weight: .regular))
+                        .foregroundStyle(Theme.Palette.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if state.status == .running {
+                        ProgressView()
+                            .controlSize(.mini)
+                            .padding(.leading, 2)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    if hasExpandableDetail {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(Theme.Palette.tertiary)
+                            .rotationEffect(.degrees(expanded ? 0 : -90))
+                    }
                 }
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            Button {
+                openInSidePane()
+            } label: {
+                Text("Open in side pane")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.Palette.accent)
+            }
+            .buttonStyle(.plain)
+            .help("Open in side pane")
+
+            if state.status == .running, let jobID = runningJobID, let onKillJob {
+                Button {
+                    onKillJob(jobID)
+                } label: {
+                    Text("Kill")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Theme.Palette.error)
+                }
+                .buttonStyle(.plain)
+                .help("Stop this subagent")
+            }
         }
-        .buttonStyle(.plain)
     }
 
     private var subagentStatusText: String {
@@ -202,6 +288,27 @@ struct ZCodeActivityLineView: View {
             return d.isEmpty ? "done" : d
         case .failure: return "Failed"
         }
+    }
+
+    private func openInSidePane() {
+        let args = taskArgs
+        let meta = InspectorSubagentDirectory.parseResult(state.output)
+        let request = InspectorSubagentOpenRequest(
+            taskId: runningJobID?.uuidString ?? meta.taskId,
+            toolCallId: state.id,
+            type: args.type,
+            description: args.description.isEmpty ? nil : args.description
+        )
+        NotificationCenter.default.post(
+            name: .openSubagentInInspector,
+            object: nil,
+            userInfo: request.userInfo()
+        )
+        NotificationCenter.default.post(
+            name: .setInspectorVisible,
+            object: nil,
+            userInfo: ["visible": true]
+        )
     }
 
     // MARK: - Generic tool row
@@ -258,7 +365,14 @@ struct ZCodeActivityLineView: View {
     }
 
     private var hasExpandableDetail: Bool {
-        !state.input.isEmpty || !state.output.isEmpty
+        if compact {
+            if isListDirectory { return false }
+            if state.output.hasPrefix("VC_LIST") || state.output.hasPrefix("BC_LIST") {
+                return false
+            }
+            return false
+        }
+        return !state.input.isEmpty || !state.output.isEmpty
     }
 
     @ViewBuilder

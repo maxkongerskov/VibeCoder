@@ -272,6 +272,13 @@ public actor AgentLoop {
         var lifecycleStopReason = "finished"
         /// True after any path already emitted `.finished` / `turnEnd` this run.
         var didEmitFinished = false
+        var refill = RapidRefillBreaker()
+        /// One reactive compact + retry per consecutive overflow; a second
+        /// overflow after that compact fails the turn.
+        var didReactiveCompactThisStep = false
+        var stopContinuationCount = 0
+        /// Natural no-tool finish already ran `stopDetailed` — skip trailing `stop`.
+        var stopHookAlreadyFired = false
         let userMsg = ChatMessage(
             id: userMessageId ?? UUID(),
             role: .user,
@@ -319,7 +326,7 @@ public actor AgentLoop {
                 projectKey: projectKey)
             authConfig = PermissionRules.merge(into: authConfig, snapshot: fileRules)
         }
-        let context = ToolContext(
+        var context = ToolContext(
             projectRoot: convo.projectRoot,
             worktreeRoot: convo.worktreeRootURL,
             safeMode: config.safeMode,
@@ -331,7 +338,8 @@ public actor AgentLoop {
             model: model,
             subagentDepth: 0,
             executionMode: config.executionMode,
-            authorization: authConfig
+            authorization: authConfig,
+            disabledToolNames: config.disabledToolNames
         )
 
         // PA4: open a filesystem turn checkpoint so mutating tools can
@@ -435,8 +443,9 @@ public actor AgentLoop {
         /// When true, pool is owned by MCPSessionHolder — do not disconnect on turn end.
         var mcpPoolIsSessionShared = false
         if !config.rawMode {
-            let mcpCwd = convo.worktreeRootURL ?? convo.projectRoot
-                ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            // Never walk `/.mcp.json` — Finder-launched apps often have CWD `/`.
+            let mcpCwd = PathConfinement.usableWorkspaceRoot(
+                worktree: convo.worktreeRootURL, project: convo.projectRoot)
             let resolvedMcpServers = MCPConfigWalker.resolveMcpServers(
                 cwd: mcpCwd,
                 appSettingsServers: config.mcpServers)
@@ -458,7 +467,7 @@ public actor AgentLoop {
 
         // Wave C: rehydrate structured plan from disk/transcript so
         // GoalAssessment + update_todo work after process restart.
-        let workDir = context.workingDirectory
+        let workDir = context.usableWorkspaceRoot
         _ = await PlanStore.shared.hydrateIfNeeded(
             for: convo.id,
             messages: convo.messages,
@@ -570,13 +579,12 @@ public actor AgentLoop {
             if !systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 requestMessages.append(.init(role: .system, content: systemPrompt))
             }
-            // Compress old large tool results before assembling the wire copy.
-            // The persisted conversation keeps full fidelity — this is for the
-            // wire only. Compression runs first so compactHistory's token
-            // estimate reflects the already-reduced sizes.
-            let compressedMessages = ToolResultCompressor.compress(convo.messages)
+            // Wire copy only — persisted `convo` stays full (same as today's
+            // FullReplace). Micro-clear old compactable tool bodies, then
+            // compress so compactHistory's estimate sees the reduced sizes.
+            var wireHistory = MicroCompactor.compact(messages: convo.messages)
+            wireHistory = ToolResultCompressor.compress(wireHistory)
             if let budget = config.contextBudgetTokens {
-                var wireHistory = compressedMessages
                 // Structural compact: FullReplace first; if it drops nothing
                 // (no safe cut), fall through to Semantic so exclusivity does
                 // not leave us elision-only when FR no-ops (Wave C2).
@@ -586,6 +594,13 @@ public actor AgentLoop {
                     messages: wireHistory,
                     systemPromptTokens: systemPromptTokens,
                     budgetTokens: budget) {
+                    if refill.shouldHardStop() {
+                        return await finishRapidRefillBlocked(
+                            convo: convo,
+                            memoryBackend: memoryBackend,
+                            dreamConsolidator: dreamConsolidator,
+                            events: events)
+                    }
                     // Pre-compact memory flush (Grok memory_flush) — best-effort
                     if let mb = memoryBackend {
                         let durable = wireHistory
@@ -635,7 +650,7 @@ public actor AgentLoop {
                     systemPromptTokens: systemPromptTokens,
                     budgetTokens: budget))
             } else {
-                requestMessages.append(contentsOf: compressedMessages)
+                requestMessages.append(contentsOf: wireHistory)
             }
 
             let request = ChatRequest(model: model, messages: requestMessages,
@@ -697,6 +712,35 @@ public actor AgentLoop {
             } catch let urlError as URLError where urlError.code == .cancelled {
                 streamCancelled = true
             } catch {
+                let overflow = ContextOverflowClassifier.isContextExceeded(error: error)
+                    || ContextOverflowClassifier.isContextExceeded(error.localizedDescription)
+                if overflow && !didReactiveCompactThisStep {
+                    didReactiveCompactThisStep = true
+                    if refill.shouldHardStop() {
+                        return await finishRapidRefillBlocked(
+                            convo: convo,
+                            memoryBackend: memoryBackend,
+                            dreamConsolidator: dreamConsolidator,
+                            events: events)
+                    }
+                    let didShrink = await applyReactiveCompact(
+                        convo: &convo,
+                        systemPromptTokens: systemPromptTokens,
+                        events: events)
+                    if didShrink {
+                        refill.recordCompact()
+                    }
+                    if refill.shouldHardStop() {
+                        return await finishRapidRefillBlocked(
+                            convo: convo,
+                            memoryBackend: memoryBackend,
+                            dreamConsolidator: dreamConsolidator,
+                            events: events)
+                    }
+                    await events(.info("Context overflow — compacted and retrying"))
+                    iteration = max(0, iteration - 1)
+                    continue
+                }
                 await events(.error(description: error.localizedDescription))
                 await InterjectionBuffer.shared.clear(conversationId: convo.id)
                 await Self.captureEndOfTurnMemory(
@@ -708,6 +752,7 @@ public actor AgentLoop {
                 mcpServerPool = nil
                 throw error
             }
+            didReactiveCompactThisStep = false
 
             let thinkingDurationSeconds: Int? = {
                 guard !assistantReasoning.isEmpty, let start = reasoningStartedAt else { return nil }
@@ -851,7 +896,7 @@ public actor AgentLoop {
                         continue
                     }
                     let plan = await PlanStore.shared.plan(
-                        for: convo.id, workingDirectory: context.workingDirectory)
+                        for: convo.id, workingDirectory: context.usableWorkspaceRoot)
                     // goalOrchestrator is only created when goalDescription is set.
                     let goalText = config.goalDescription ?? ""
                     let assessment = GoalAssessment.assess(
@@ -893,6 +938,35 @@ public actor AgentLoop {
                         break // fall through to dream + finished
                     }
                 }
+                // Stop-hook continuation: honor `continue` + additionalContext
+                // up to `maxStopContinuations`. Cap/cancel/error still use
+                // `fireStopHook` (drops continue).
+                let stopReason = Self.canonicalStopReason(
+                    finishReason, maxIterations: config.maxIterations)
+                let stop = HookDispatcher.stopDetailed(
+                    reason: stopReason,
+                    projectRoot: convo.projectRoot,
+                    worktreeRoot: convo.worktreeRootURL)
+                if HookDispatcher.shouldContinueAfterStop(
+                    stop, continuationCount: stopContinuationCount)
+                {
+                    let body = HookDispatcher.formatHookAdditionalContext(
+                        [stop.additionalContext].compactMap { $0 })
+                    if !body.isEmpty {
+                        let inject = ChatMessage(
+                            role: .user,
+                            content: """
+                            # System reminder — hook
+                            \(body)
+                            """)
+                        convo.messages.append(inject)
+                        await events(.userMessage(inject))
+                    }
+                    stopContinuationCount += 1
+                    await events(.info("Stop hook requested continuation"))
+                    continue
+                }
+                stopHookAlreadyFired = true
                 // Grok dream consolidation (best-effort)
                 // Wave C: flush session log so dream has fuel; always turnEnd.
                 await Self.captureEndOfTurnMemory(memoryBackend, conversation: convo, dreamEnabled: config.dreamEnabled, consolidator: dreamConsolidator)
@@ -1019,7 +1093,7 @@ public actor AgentLoop {
                         let label = Self.toolActivityLabel(invocation: inv)
                         await events(.toolCompleted(id: inv.id, name: inv.name, label: label, isError: result.isError))
                         anyMutation = await recordToolResult(
-                            inv, result: result, convo: &convo, context: context,
+                            inv, result: result, convo: &convo, context: &context,
                             recentToolErrorFlags: &recentToolErrorFlags,
                             lastToolOutput: &lastToolOutput,
                             pendingAutoVerifyPaths: &pendingAutoVerifyPaths,
@@ -1028,15 +1102,46 @@ public actor AgentLoop {
                 } else if let inv = readOnlyBatch.first {
                     let result = await dispatchOne(inv, context: context, events: events)
                     anyMutation = await recordToolResult(
-                        inv, result: result, convo: &convo, context: context,
+                        inv, result: result, convo: &convo, context: &context,
                         recentToolErrorFlags: &recentToolErrorFlags,
                         lastToolOutput: &lastToolOutput,
                         pendingAutoVerifyPaths: &pendingAutoVerifyPaths,
                         events: events) || anyMutation
                 }
 
+                // Parallel `task` fan-out: consecutive `task` calls, max 10.
+                if Task.isCancelled {
+                    for remaining in invocations[dispatchIndex...] {
+                        let result = ToolResult(content: "Cancelled by user before execution.", isError: true)
+                        convo.messages.append(.init(role: .tool, content: result.content, toolCallID: remaining.id))
+                        await events(.toolResult(invocation: remaining, result: result))
+                    }
+                    cancelledMidDispatch = true
+                    break
+                }
+                let taskStart = dispatchIndex
                 while dispatchIndex < invocations.count,
-                      !(await isParallelSafeReadOnlyDispatch(invocations[dispatchIndex].name)) {
+                      invocations[dispatchIndex].name == "task",
+                      dispatchIndex - taskStart < 10 {
+                    dispatchIndex += 1
+                }
+                let taskBatch = Array(invocations[taskStart..<dispatchIndex])
+                if !taskBatch.isEmpty {
+                    let results = await dispatchTaskBatch(
+                        taskBatch, context: context, events: events)
+                    for (inv, result) in zip(taskBatch, results) {
+                        anyMutation = await recordToolResult(
+                            inv, result: result, convo: &convo, context: &context,
+                            recentToolErrorFlags: &recentToolErrorFlags,
+                            lastToolOutput: &lastToolOutput,
+                            pendingAutoVerifyPaths: &pendingAutoVerifyPaths,
+                            events: events) || anyMutation
+                    }
+                }
+
+                while dispatchIndex < invocations.count,
+                      !(await isParallelSafeReadOnlyDispatch(invocations[dispatchIndex].name)),
+                      invocations[dispatchIndex].name != "task" {
                     // Cancel between serial mutators so Stop does not run remaining edits.
                     if Task.isCancelled {
                         for remaining in invocations[dispatchIndex...] {
@@ -1051,12 +1156,15 @@ public actor AgentLoop {
                     dispatchIndex += 1
                     let result = await dispatchOne(inv, context: context, events: events)
                     anyMutation = await recordToolResult(
-                        inv, result: result, convo: &convo, context: context,
+                        inv, result: result, convo: &convo, context: &context,
                         recentToolErrorFlags: &recentToolErrorFlags,
                         lastToolOutput: &lastToolOutput,
                         pendingAutoVerifyPaths: &pendingAutoVerifyPaths,
                         events: events) || anyMutation
                 }
+            }
+            if !cancelledMidDispatch {
+                refill.recordToolTurn()
             }
             // Flush AutoVerify after all tool results (pairing-safe).
             if !cancelledMidDispatch, !pendingAutoVerifyPaths.isEmpty {
@@ -1256,10 +1364,13 @@ public actor AgentLoop {
         // See InterjectionBuffer.clear epoch bump — late enqueue is rejected.
         await InterjectionBuffer.shared.clear(conversationId: convo.id)
         // PB1/PC5/P4: Stop lifecycle after natural turn end (canonical reasons).
-        Self.fireStopHook(
-            reason: Self.canonicalStopReason(
-                lifecycleStopReason, maxIterations: config.maxIterations),
-            conversation: convo)
+        // Natural no-tool finish already ran `stopDetailed` above.
+        if !stopHookAlreadyFired {
+            Self.fireStopHook(
+                reason: Self.canonicalStopReason(
+                    lifecycleStopReason, maxIterations: config.maxIterations),
+                conversation: convo)
+        }
         // Session-shared MCP: leave pool connected for the next turn.
         mcpServerPool = nil
         return convo
@@ -1482,6 +1593,31 @@ public actor AgentLoop {
         }
     }
 
+    /// Consecutive `task` invocations — `withTaskGroup` + `dispatchOne`, max 10.
+    /// Other executes stay serial. Actor reentrancy overlaps at `await` points.
+    private func dispatchTaskBatch(
+        _ batch: [ToolCallInvocation],
+        context: ToolContext,
+        events: @escaping @Sendable (LoopEvent) async -> Void
+    ) async -> [ToolResult] {
+        if batch.count == 1, let inv = batch.first {
+            return [await dispatchOne(inv, context: context, events: events)]
+        }
+        return await withTaskGroup(of: (Int, ToolResult).self) { group in
+            for (index, inv) in batch.enumerated() {
+                group.addTask {
+                    let result = await self.dispatchOne(inv, context: context, events: events)
+                    return (index, result)
+                }
+            }
+            var slots = [ToolResult?](repeating: nil, count: batch.count)
+            for await (index, result) in group {
+                slots[index] = result
+            }
+            return slots.map { $0 ?? ToolResult(content: "Tool error: missing result", isError: true) }
+        }
+    }
+
     /// Parallel RO dispatch excludes `ask_user` — it suspends for a human
     /// and must emit `.pendingQuestion` via `dispatchOne`.
     private func isParallelSafeReadOnlyDispatch(_ name: String) async -> Bool {
@@ -1529,7 +1665,7 @@ public actor AgentLoop {
         _ inv: ToolCallInvocation,
         result: ToolResult,
         convo: inout Conversation,
-        context: ToolContext,
+        context: inout ToolContext,
         recentToolErrorFlags: inout [Bool],
         lastToolOutput: inout ToolOutputInfo?,
         pendingAutoVerifyPaths: inout [String],
@@ -1543,6 +1679,10 @@ public actor AgentLoop {
             bytes: result.content.utf8.count)
         convo.messages.append(.init(role: .tool, content: result.content, toolCallID: inv.id))
         await events(.toolResult(invocation: inv, result: result))
+
+        if !result.isError {
+            context = Self.contextApplyingToolExtras(context, extras: result.extras)
+        }
 
         // `tool_search` unlocks deferred tools for subsequent iterations.
         if inv.name == ToolSearchTool.name, !result.isError {
@@ -1731,10 +1871,13 @@ public actor AgentLoop {
         let wakes = await PendingWakeInject.shared.drain(conversationID: conversationId)
         for text in wakes {
             let wrapped = SystemReminder.interjection(text)
-            // Model-facing: system-style nudge (via pendingNudges) + visible user line.
+            // Wire-only: model still sees the wake; it must not render as a user bubble.
             let msg = ChatMessage(
                 role: .user,
-                content: "[system] Background job update for the parent agent:\n\(text)"
+                content: """
+                # System reminder — background job
+                \(text)
+                """
             )
             convo.messages.append(msg)
             await events(.userMessage(msg))
@@ -1742,6 +1885,105 @@ public actor AgentLoop {
             await events(.info("Background job completed — wake injected for model"))
         }
         return wakes.count
+    }
+
+    /// Honor `request_execution_mode` / `plan_approved` extras (COORDINATION).
+    /// `plan_approved=false` ignores a mode switch.
+    private static func contextApplyingToolExtras(
+        _ context: ToolContext,
+        extras: [String: String]
+    ) -> ToolContext {
+        let approved = extras["plan_approved"]
+        var mode = context.executionMode
+        var exited = context.planModeExited
+        if approved == "true" {
+            exited = true
+        }
+        if approved != "false",
+           let raw = extras["request_execution_mode"],
+           let parsed = ExecutionMode(rawValue: raw) {
+            mode = parsed
+        }
+        if mode == context.executionMode && exited == context.planModeExited {
+            return context
+        }
+        return ToolContext(
+            projectRoot: context.projectRoot,
+            worktreeRoot: context.worktreeRoot,
+            safeMode: context.safeMode,
+            patchReviewer: context.patchReviewer,
+            userQuestionReviewer: context.userQuestionReviewer,
+            shellApprovalCoordinator: context.shellApprovalCoordinator,
+            conversationID: context.conversationID,
+            inferenceBackend: context.inferenceBackend,
+            model: context.model,
+            subagentDepth: context.subagentDepth,
+            executionMode: mode,
+            authorization: context.authorization,
+            sessionReadPaths: context.sessionReadPaths,
+            sessionPlanFileURL: context.sessionPlanFileURL,
+            preToolHookDenials: context.preToolHookDenials,
+            planModeExited: exited,
+            disabledToolNames: context.disabledToolNames
+        )
+    }
+
+    /// Persist FullReplace (then Semantic) after a context-overflow stream error.
+    @discardableResult
+    private func applyReactiveCompact(
+        convo: inout Conversation,
+        systemPromptTokens: Int,
+        events: @escaping @Sendable (LoopEvent) async -> Void
+    ) async -> Bool {
+        let estimate = ChatLoop.estimateTotalTokens(
+            systemPromptTokens: systemPromptTokens, messages: convo.messages)
+        let budget = config.contextBudgetTokens ?? max(1, estimate / 2)
+        var didShrink = false
+        if config.fullReplaceCompactEnabled && !config.rawMode {
+            let fr = await FullReplaceCompactor.compact(
+                convo.messages,
+                systemPromptTokens: systemPromptTokens,
+                budgetTokens: budget)
+            if fr.droppedCount > 0 {
+                convo.messages = fr.messages
+                didShrink = true
+                await events(.contextCompacted(
+                    summaryPreview: String(fr.summary.prefix(240)),
+                    droppedMessages: fr.droppedCount))
+            }
+        }
+        if !didShrink {
+            let semantic = await SemanticCompactor.compact(
+                convo.messages,
+                systemPromptTokens: systemPromptTokens,
+                budgetTokens: budget)
+            if semantic.didCompact {
+                convo.messages = semantic.messages
+                didShrink = true
+                await events(.contextCompacted(
+                    summaryPreview: String((semantic.summary ?? "").prefix(240)),
+                    droppedMessages: semantic.droppedCount))
+            }
+        }
+        return didShrink
+    }
+
+    private func finishRapidRefillBlocked(
+        convo: Conversation,
+        memoryBackend: MemoryBackend?,
+        dreamConsolidator: (any MemoryConsolidating)?,
+        events: @escaping @Sendable (LoopEvent) async -> Void
+    ) async -> Conversation {
+        await events(.error(description: "rapid refill blocked"))
+        await InterjectionBuffer.shared.clear(conversationId: convo.id)
+        await Self.captureEndOfTurnMemory(
+            memoryBackend, conversation: convo,
+            dreamEnabled: config.dreamEnabled, consolidator: dreamConsolidator)
+        await ExtensionRegistry.shared.turnEnd(conversation: convo, reason: "error")
+        await events(.finished(reason: "rapid refill blocked"))
+        Self.fireStopHook(reason: "rapid refill blocked", conversation: convo)
+        mcpServerPool = nil
+        return convo
     }
 
     /// PC5: fire `HookDispatcher.stop` on every exit path (natural finish,

@@ -12,7 +12,7 @@
 
 ---
 
-## Complete Bug List (13 Confirmed Bugs, All Fixed)
+## Complete Bug List (37 Confirmed Bugs, All Fixed)
 
 ### Round 1 — Services, ViewModels, Views/Theme/Utilities, AgentCore
 | # | File | Bug | Severity | Fix |
@@ -75,11 +75,19 @@
 | 33 | MemoryIndex.swift:220-230 | Global/workspace memory chunks NEVER age (no decay) — 100-day-old chunk always out-scores fresh session results | **high** (search quality) | Added 180-day half-life decay for global/workspace memories (session stays at 14-day) |
 | 34 | MemoryStorage.swift:80-84 | `FileHandle(forWritingTo:)` append is NOT atomic — crash between seekToEnd() and write() corrupts MEMORY.md | **high** (file corruption) | Atomic rewrite: read existing, append new block, write with `atomically: true` |
 
+### Round 9 — Design-review pass (Tool.swift primary arg path, availability decode, debris, docs)
+| # | File | Bug | Severity | Fix |
+|---|------|-----|----------|-----|
+| 35 | Tool.swift:142-149 | `ToolArguments.int`/`intOptional` use `Int(Double)` — model emitting `{"timeoutSeconds": 1e20}` traps the process. Same crash class as #17/#18/#21, but on the **primary** path every builtin tool uses (15+ call sites: offset, maxLines, timeoutSeconds, maxResults, …). | **crash** (remote-triggered) | Bounds-checked `Int(v)` (`isFinite`, `>= Double(Int.min)`, `< Double(Int.max)`); `int()` throws `invalidArguments`, `intOptional` returns nil so caller defaults apply. Truncation semantics preserved (pinned by existing tests). |
+| 36 | Tool.swift:47-55 | `ToolAvailability.platformGated` decoded to `.core` — a platform gate silently becomes always-available after any Codable round-trip (fail-open). Latent (registry isn't persisted today) but a landmine. | **logic** (fail-open gate) | Decode fails closed to `.deferred` (hidden behind `tool_search`); regression test added. |
+| 37 | Sources/_CryptoKitTest/, Tests/CryptoKitExploration/ | Unreferenced scratch/exploration targets committed to the repo (zero references in Package.swift, tests, or the Xcode project). | debris | Deleted. |
+| 38 | ARCHITECTURE.md §1/§3/§13/§16, DESIGN.md §5/§2-12 | Docs still said "Closed-source", argued against open-source, named the product AgentOS NEW DAY, and specified tiered compaction + NIO server — contradicting the public MIT LICENSE/README, `FullReplaceCompactor`, and the zero-dependency Package.swift. Violates the project's own doc-as-rail amendment rule. | docs drift | Dated honesty amendments added (ARCHITECTURE §17 row 2026-08-15; DESIGN §5 shipped-reality note; §2 row 12 NIO correction). |
+
 ---
 
 ## Project Scope
 - **Total files audited:** ~450+ Swift source files, 114 test files, shell scripts, eval configs
-- **Total bugs confirmed:** 23 (all fixed, all build cleanly)
+- **Total bugs confirmed:** 37 (all fixed, all build cleanly)
 - **False alarms discarded:** ~60+ (force unwraps that were safe, warnings without runtime impact, theoretical races with no practical path)
 - **Folders audited:** App/Services, App/ViewModels, App/Views, App/Theme, App/Utilities, Sources/AgentCore (Tools, Backends, MCP, LSP, Patch, Memory, Plan, Project, Context, Catalog, **Agent**, Safety, **Tasks**, **Util**, **LSP**, **Conversation**, **Notes**, Skills), Tests/AgentCoreTests, **Sources/Harness** (Context, Core, Provider, Tools), Scripts, Evals
-- **Folders NOT audited:** App/Tests/* (non-AgentCore), Sources/MLXBackend/, Sources/EvalRunner/*, HANDOFF orchestration docs, Sources/AgentCore/Conversation/, Sources/AgentCore/Memory/ (not yet audited)
+- **Folders NOT audited:** App/Tests/* (non-AgentCore), Sources/MLXBackend/, Sources/EvalRunner/*, HANDOFF orchestration docs. (Conversation/ and Memory/ were covered by Round 8; scratch dirs `Sources/_CryptoKitTest` / `Tests/CryptoKitExploration` were deleted in Round 9 rather than audited.)

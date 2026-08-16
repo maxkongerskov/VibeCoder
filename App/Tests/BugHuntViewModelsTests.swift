@@ -46,6 +46,116 @@ final class BugHuntViewModelsTests: XCTestCase {
         }
     }
 
+    // MARK: 0 — P0-4 first-run permission default
+
+    func testConnectionFieldTypingDoesNotFireSettingsSideEffects() {
+        let app = makeApp()
+        let baseline = app.settingsSideEffectCount
+        for i in 0..<20 {
+            app.persistSettings { $0.lmStudioHost = "127.0.0.\(i % 10)" }
+            app.persistSettings { $0.lmStudioPort = 1234 + i }
+            app.persistSettings { $0.lmStudioAPIKey = "k\(i)" }
+        }
+        XCTAssertEqual(
+            app.settingsSideEffectCount, baseline,
+            "host/port/key typing must not invalidate MCP or bounce Local API")
+        XCTAssertEqual(app.settings.lmStudioHost, "127.0.0.9")
+        app.applySettingsSideEffects()
+        XCTAssertEqual(
+            app.settingsSideEffectCount, baseline + 1,
+            "Test / commit applies side effects once")
+    }
+
+    func testDefaultExecutionModeIsAskNotFull() {
+        let app = AppViewModel()
+        XCTAssertEqual(
+            app.executionMode, .build,
+            "fresh AppViewModel must default to Ask, not Full/YOLO")
+        XCTAssertTrue(
+            app.safeModeOn,
+            "Ask default must arm Safe Mode (executionMode.enablesSafeMode)")
+        XCTAssertNotEqual(app.executionMode, .yolo)
+    }
+
+    // MARK: 0b — P0-3 sidebar save merge keeps live transcript
+
+    func testSaveMergeKeepsLiveMessagesWhenListRowIsStale() {
+        var listRow = Conversation(
+            title: "old",
+            messages: [ChatMessage(role: .user, content: "start")])
+        var live = listRow
+        live.messages.append(ChatMessage(role: .assistant, content: "working…"))
+        listRow.title = "renamed"
+        live.title = "renamed"
+        let snap = ConversationSaveMerge.snapshot(listRow: listRow, live: live)
+        XCTAssertEqual(snap.title, "renamed")
+        XCTAssertEqual(snap.messages.count, 2, "must persist the live VM transcript, not the stale list row")
+        XCTAssertEqual(snap.messages.last?.content, "working…")
+    }
+
+    func testSaveMergeWithoutLiveVMUsesListRow() {
+        let listRow = Conversation(title: "only-list")
+        let snap = ConversationSaveMerge.snapshot(listRow: listRow, live: nil)
+        XCTAssertEqual(snap.id, listRow.id)
+        XCTAssertEqual(snap.title, "only-list")
+    }
+
+    func testRenamePersistsLiveTranscriptNotStaleListRow() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("p0-3-rename-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = ConversationStore(directory: dir)
+        let app = makeApp()
+        app.conversationsCoordinator.conversationStore = store
+
+        var convo = Conversation(title: "pre-turn")
+        convo.messages = [ChatMessage(role: .user, content: "hello")]
+        app.conversations = [convo]
+        let vm = app.chatViewModel(for: convo.id)
+        vm.conversation.messages.append(
+            ChatMessage(role: .assistant, content: "mid-turn reply"))
+
+        app.renameConversation(id: convo.id, to: "after-rename")
+        // persistMergedConversation writes in a Task — wait for disk.
+        let deadline = Date().addingTimeInterval(2)
+        var loaded: Conversation?
+        while Date() < deadline {
+            loaded = try await store.load(id: convo.id)
+            if loaded?.title == "after-rename" { break }
+            try? await Task.sleep(nanoseconds: 20_000_000)
+        }
+        XCTAssertEqual(loaded?.title, "after-rename")
+        XCTAssertEqual(
+            loaded?.messages.count, 2,
+            "rename must not persist the pre-turn message array")
+        XCTAssertEqual(loaded?.messages.last?.content, "mid-turn reply")
+    }
+
+    func testRefreshConversationsSurfacesUnloadableCount() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("p0-list-unloadable-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = ConversationStore(directory: dir)
+        let healthy = Conversation(title: "visible")
+        try await store.save(healthy)
+        try Data("{broken".utf8).write(
+            to: dir.appendingPathComponent("\(UUID().uuidString).json"))
+
+        let app = makeApp()
+        app.conversationsCoordinator.conversationStore = store
+        await app.refreshConversations()
+
+        XCTAssertEqual(app.conversations.map(\.id), [healthy.id])
+        XCTAssertEqual(app.unloadableConversations.count, 1)
+        XCTAssertEqual(
+            app.unloadableConversations.first?.filename.hasSuffix(".json"),
+            true)
+    }
+
     // MARK: 1 — /loop interval-only uses the token as the prompt
 
     func testLoopIntervalOnlyDoesNotScheduleTokenAsPrompt() async {

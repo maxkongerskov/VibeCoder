@@ -200,7 +200,11 @@ final class BackendConnectionCoordinator: ObservableObject {
         await LocalAPIServer.shared.configure(
             backend: backend,
             settings: host.settings,
-            agentToolsEnabled: host.settings.localAPIAgentToolsEnabled)
+            agentToolsEnabled: host.settings.localAPIAgentToolsEnabled,
+            agentLoopProjectRoot: host.openedProject?.url
+                ?? host.selectedConversationID.flatMap { id in
+                    host.conversations.first(where: { $0.id == id })?.projectRoot
+                })
         do {
             if localServerRunning {
                 await LocalAPIServer.shared.stopAndWait()

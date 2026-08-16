@@ -8,6 +8,7 @@
 
 import SwiftUI
 import AppKit
+import AgentCore
 
 struct CodeBlockView: View {
     let language: String?
@@ -64,7 +65,7 @@ struct CodeBlockView: View {
 
             // ── Code body ───────────────────────────────────────────
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(code)
+                Text(highlightedCode)
                     .font(Theme.Typography.mono(size: fontSize))
                     .foregroundColor(Theme.Palette.primary)
                     .textSelection(.enabled)
@@ -77,6 +78,34 @@ struct CodeBlockView: View {
             RoundedRectangle(cornerRadius: Theme.Radius.codeBlock)
                 .stroke(Theme.Palette.divider, lineWidth: 0.5)
         )
+    }
+
+    // MARK: - Highlighting
+
+    /// Keyword spans from `CodeHighlighter`. Gaps stay `Theme.Palette.primary`.
+    private var highlightedCode: AttributedString {
+        var attributed = AttributedString(code)
+        for token in CodeHighlighter.tokens(for: code, language: language) {
+            guard token.kind != .plain else { continue }
+            guard let lower = AttributedString.Index(token.range.lowerBound, within: attributed),
+                  let upper = AttributedString.Index(token.range.upperBound, within: attributed)
+            else { continue }
+            attributed[lower..<upper].foregroundColor = Self.color(for: token.kind)
+        }
+        return attributed
+    }
+
+    /// Calm mapping aligned with `DiffSyntaxHighlighter` (violet keywords,
+    /// green-ish strings, muted comments, orange numbers).
+    private static func color(for kind: CodeTokenKind) -> Color {
+        switch kind {
+        case .keyword: return Theme.Palette.violet
+        case .string: return Theme.Palette.diffAdd
+        case .commentLine, .commentBlock: return Theme.Palette.tertiary
+        case .number: return Theme.Palette.warning
+        case .typeable: return Theme.Palette.info
+        case .plain: return Theme.Palette.primary
+        }
     }
 
     // MARK: - Adaptive backgrounds

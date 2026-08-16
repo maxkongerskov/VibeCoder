@@ -112,6 +112,40 @@ final class ToolArgumentsTests: XCTestCase {
         XCTAssertNil(args.intOptional("count"))
     }
 
+    // MARK: - int overflow (crash regression — Int(Double) trap)
+
+    func testIntThrowsOnOverflowingDouble() {
+        // Models do emit huge numbers (`1e20`, or JSON ints beyond Int64
+        // that JSONSerialization hands back as Double). Int(Double) traps
+        // on those; the accessor must degrade to a thrown ToolError.
+        let args = ToolArguments(dictionary: ["count": 1e20])
+        XCTAssertThrowsError(try args.int("count")) { error in
+            guard case ToolError.invalidArguments = error else {
+                return XCTFail("Expected invalidArguments, got \(error)")
+            }
+        }
+    }
+
+    func testIntThrowsOnHugeJSONIntegerLiteral() throws {
+        // Beyond-Int64 JSON literals arrive as Double too.
+        let args = try ToolArguments(json: #"{"count": 99999999999999999999}"#)
+        XCTAssertThrowsError(try args.int("count"))
+    }
+
+    func testIntOptionalReturnsNilOnOverflowInsteadOfTrapping() {
+        let args = ToolArguments(dictionary: ["count": -1e20, "other": 1e308])
+        XCTAssertNil(args.intOptional("count"))
+        XCTAssertNil(args.intOptional("other"))
+    }
+
+    func testIntHandlesBoundaryValues() throws {
+        // Integral doubles right at the representable edge still coerce.
+        // 2^63 - 1024 is the largest Double below 2^63 (Double(Int.max)
+        // rounds up to 2^63, so the bound is exclusive there).
+        let args = ToolArguments(dictionary: ["count": 9.223372036854775e18])
+        XCTAssertEqual(try args.int("count"), 9_223_372_036_854_774_784)
+    }
+
     // MARK: - bool
 
     func testBoolDefaultsToFalse() {
@@ -154,5 +188,18 @@ final class ToolArgumentsTests: XCTestCase {
     func testStringArrayReturnsEmptyOnWrongType() {
         let args = ToolArguments(dictionary: ["tags": "not-an-array"])
         XCTAssertEqual(args.stringArray("tags"), [])
+    }
+
+    // MARK: - ToolAvailability Codable round-trip
+
+    func testPlatformGatedAvailabilityDecodesFailClosed() throws {
+        // The @Sendable gate closure cannot survive Codable. Decode must
+        // fail CLOSED (deferred — hidden behind tool_search), never
+        // silently promote to .core.
+        let encoded = try JSONEncoder().encode(ToolAvailability.platformGated(check: { true }))
+        let decoded = try JSONDecoder().decode(ToolAvailability.self, from: encoded)
+        guard case .deferred = decoded else {
+            return XCTFail("Expected .deferred after round-trip, got \(decoded)")
+        }
     }
 }

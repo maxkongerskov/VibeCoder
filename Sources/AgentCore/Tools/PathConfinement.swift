@@ -18,14 +18,35 @@ public enum PathConfinement {
     /// When a worktree is active, mutations are confined to the **worktree
     /// only** so absolute paths into the main project cannot bypass isolation.
     /// Without a worktree, the project root (or `workingDirectory`) is used.
+    /// True when `url` is a project folder we may confine writes to.
+    /// Rejects empty paths and filesystem root (`/`) — a Finder-launched
+    /// Mac app often has CWD `/`, which must never become "the workspace"
+    /// (that would make confinement a no-op).
+    public static func isUsableWorkspaceRoot(_ url: URL) -> Bool {
+        usableWorkspaceRoot(url) != nil
+    }
+
+    /// Normalized usable root, or nil when confinement would be meaningless.
+    public static func usableWorkspaceRoot(_ url: URL?) -> URL? {
+        guard let url else { return nil }
+        let path = SafeModeConfig.normalizePath(url.path)
+        guard !path.isEmpty, path != "/" else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    /// Worktree wins when usable; otherwise the project root. Never CWD `/`.
+    public static func usableWorkspaceRoot(worktree: URL?, project: URL?) -> URL? {
+        usableWorkspaceRoot(worktree) ?? usableWorkspaceRoot(project)
+    }
+
     public static func workspaceRoots(for context: ToolContext) -> [URL] {
         var roots: [URL] = []
         var seen = Set<String>()
         func append(_ url: URL?) {
-            guard let url else { return }
-            let key = SafeModeConfig.normalizePath(url.path)
-            guard !key.isEmpty, seen.insert(key).inserted else { return }
-            roots.append(url)
+            guard let usable = usableWorkspaceRoot(url) else { return }
+            let key = SafeModeConfig.normalizePath(usable.path)
+            guard seen.insert(key).inserted else { return }
+            roots.append(usable)
         }
         if context.worktreeRoot != nil {
             append(context.worktreeRoot)

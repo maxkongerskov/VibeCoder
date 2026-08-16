@@ -1,16 +1,17 @@
 //
 //  MentionAwareComposer.swift
 //
-//  Composer with @-mention autocomplete and removable context chips.
+//  Composer with mention autocomplete and removable context chips.
 //
-//  S1: popup lists files / folders / symbols; sticky pins re-inject each turn.
+//  Triggers: `@` files/folders/symbols, `$` skills, `#` sessions.
+//  Sticky pins re-inject each turn.
 //
 //  Width: the input card tracks the live chat column. Prefer the host’s
 //  `maxCardWidth` (ChatView passes `Theme.ChatLayout.contentWidth(pane:)`).
 //  Also re-measure the pane on resize so a stale default never pins the card
 //  while the transcript grows.
 //
-//  Keyboard: when the @ popup is open — ↑/↓ move highlight, Enter pin,
+//  Keyboard: when the mention popup is open — ↑/↓ move highlight, Enter pin,
 //  Esc dismiss.
 //
 
@@ -48,6 +49,7 @@ struct MentionAwareComposer: View {
     var thinkingCapability: ThinkingCapability? = nil
     @Binding var thinkingEffort: ThinkingEffort
 
+    @EnvironmentObject private var app: AppViewModel
     @StateObject private var mentionSearch = MentionSearchCoordinator()
     @State private var measuredPaneWidth: CGFloat = 0
 
@@ -114,7 +116,10 @@ struct MentionAwareComposer: View {
             await mentionSearch.warm(root: root)
         }
         .onChange(of: text) { _, newValue in
-            Task { await mentionSearch.refresh(text: newValue, root: projectRoot) }
+            Task { await refreshMentions(text: newValue) }
+        }
+        .onChange(of: app.selectedConversationID) { _, _ in
+            Task { await refreshMentions(text: text) }
         }
         .onChange(of: projectRoot) { _, newRoot in
             if let root = newRoot {
@@ -233,7 +238,7 @@ struct MentionAwareComposer: View {
     private var mentionPopup: some View {
         InputCardPopupChrome(includePadding: false) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("@ context — ↑/↓ Enter pin · Esc dismiss")
+                Text(popupHeaderTitle)
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(Theme.Palette.tertiary)
                     .padding(.horizontal, 12)
@@ -284,12 +289,34 @@ struct MentionAwareComposer: View {
         }
     }
 
+    private var popupHeaderTitle: String {
+        switch mentionSearch.activeTriggerKind {
+        case .skill:
+            return "$ skills — ↑/↓ Enter pin · Esc dismiss"
+        case .session:
+            return "# sessions — ↑/↓ Enter pin · Esc dismiss"
+        case .at, .none:
+            return "@ context — ↑/↓ Enter pin · Esc dismiss"
+        }
+    }
+
+    private func refreshMentions(text: String) async {
+        await mentionSearch.refresh(
+            text: text,
+            root: projectRoot,
+            sessions: app.conversations,
+            currentID: app.selectedConversationID
+        )
+    }
+
     private func kindBadge(_ kind: MentionCandidateKind) -> some View {
         let label: String
         switch kind {
         case .file: label = "file"
         case .folder: label = "folder"
         case .symbol: label = "symbol"
+        case .skill: label = "skill"
+        case .session: label = "session"
         }
         return Text(label)
             .font(.system(size: 9, weight: .semibold))
@@ -300,14 +327,13 @@ struct MentionAwareComposer: View {
             .clipShape(Capsule())
     }
 
-    /// Selecting an @ hit pins it for the session (re-inject every turn).
+    /// Selecting a hit pins it for the session (re-inject every turn).
     private func selectCandidate(_ candidate: MentionCandidate) {
         let pin = StickyContextPin(candidate: candidate)
         if !stickyPins.contains(where: { $0.dedupeKey == pin.dedupeKey }) {
             stickyPins.append(pin)
         }
-        // Also keep one-shot attachment for files/symbols so first send
-        // is consistent if pins were empty before (compose merges both).
+        // Files/symbols also one-shot attach. Skills/sessions are header-only.
         if candidate.kind == .file || candidate.kind == .symbol {
             let attachment = ContextAttachment(
                 path: candidate.path,
@@ -318,11 +344,7 @@ struct MentionAwareComposer: View {
                 attachments.append(attachment)
             }
         }
-        // Only strip an @-token at the start of the string or after whitespace.
-        // `max@icloud.com` must not be treated as a mention.
-        if let range = text.range(of: #"(?:(?<=^)|(?<=\s))@[^\s\n]*$"#, options: .regularExpression) {
-            text.removeSubrange(range)
-        }
+        text = MentionSearchCoordinator.stripActiveTriggerToken(from: text)
         mentionSearch.dismiss()
     }
 }

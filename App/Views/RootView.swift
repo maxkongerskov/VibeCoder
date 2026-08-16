@@ -30,6 +30,62 @@ extension Notification.Name {
     static let exportConversationRequested = Notification.Name("agentos.exportConversation")
     /// Slash `/loop` with no args — open Scheduled tasks tab.
     static let scheduledTasksRequested = Notification.Name("agentos.scheduledTasks")
+    /// ⌘. — cancel the in-flight agent turn.
+    static let cancelAgentRequested = Notification.Name("agentos.cancelAgent")
+    /// Command palette "New Project" — ProjectsView presents its sheet.
+    static let newProjectSheetRequested = Notification.Name("agentos.newProjectSheet")
+    /// File → Open Workspace… (⌘O) / palette — VibeCoderApp runs the folder picker.
+    static let openWorkspaceRequested = Notification.Name("agentos.openWorkspace")
+    /// View → Toggle Sidebar (⌘B). RootView flips `columnVisibility`.
+    static let toggleSidebarRequested = Notification.Name("agentos.toggleSidebar")
+    /// View → Previous Task (⌘⇧[). Same walk as palette `prev-task`.
+    static let previousTaskRequested = Notification.Name("agentos.previousTask")
+    /// View → Next Task (⌘⇧]). Same walk as palette `next-task`.
+    static let nextTaskRequested = Notification.Name("agentos.nextTask")
+}
+
+/// Pure File/View chrome helpers. Tests call these without mounting RootView.
+enum MenuChrome {
+    /// Walk `visibleIDs` by `delta` from `currentID`. Nil at the ends,
+    /// when the list is empty, or when `currentID` is missing.
+    static func adjacentTaskID(visibleIDs: [UUID], currentID: UUID?, delta: Int) -> UUID? {
+        guard let currentID, let index = visibleIDs.firstIndex(of: currentID) else {
+            return nil
+        }
+        let next = index + delta
+        guard visibleIDs.indices.contains(next) else { return nil }
+        return visibleIDs[next]
+    }
+
+    /// Sidebar column: `.all` ↔ `.detailOnly`. Any other value hides.
+    static func toggledSidebarVisibility(
+        _ current: NavigationSplitViewVisibility
+    ) -> NavigationSplitViewVisibility {
+        current == .detailOnly ? .all : .detailOnly
+    }
+}
+
+/// Pure `/export` routing. ChatView owns the save panel; RootView only
+/// selects the conversation (and switches to Chat when the transcript
+/// is not on screen). **Never** rebroadcasts the notification.
+enum ExportConversationRouting {
+    struct Decision: Equatable {
+        var selectConversationID: UUID?
+        /// Switch the sidebar to Chat so the user can see the transcript.
+        var switchToChatTab: Bool
+    }
+
+    static func decide(
+        noteObject: Any?,
+        selectedConversationID: UUID?,
+        chatTabVisible: Bool
+    ) -> Decision {
+        let targetID = (noteObject as? UUID) ?? selectedConversationID
+        if chatTabVisible {
+            return Decision(selectConversationID: targetID, switchToChatTab: false)
+        }
+        return Decision(selectConversationID: targetID, switchToChatTab: true)
+    }
 }
 
 struct RootView: View {
@@ -72,6 +128,7 @@ struct RootView: View {
             selectedConversationID: selectedConversationID,
             selectedTab: $selectedTab,
             conversations: app.sidebarOrderedConversations(),
+            unloadableConversations: app.unloadableConversations,
             onShowSettings: { showingSettings = true },
             onDeleteAll: { app.deleteAllConversations() },
             onNewConversation: {
@@ -164,6 +221,7 @@ struct RootView: View {
             // so hide-sidebar doesn't leave a centered app name in the title bar.
             .toolbarBackground(.hidden, for: .windowToolbar)
             .modifier(RemoveWindowTitleModifier())
+            .toolbar { detailChromeToolbar }
         }
         // Smooth slide when the system "Hide Sidebar" control toggles visibility.
         .animation(
@@ -173,6 +231,7 @@ struct RootView: View {
         .toolbarBackground(.hidden, for: .windowToolbar)
         .modifier(RemoveWindowTitleModifier())
         .hidesSystemFocusRing()
+        .vibecoderInspectorPanel()
     }
 
     private var navigationWithSheets: some View {
@@ -235,25 +294,20 @@ struct RootView: View {
                 }
             }
             .onReceive(NotificationCenter.default.publisher(for: .exportConversationRequested)) { note in
-                // Route export to the currently active conversation's view model.
-                let targetID = note.object as? UUID ?? app.selectedConversationID
-                guard let id = targetID else { return }
-                if selectedTab == .chat || selectedTab == .code {
-                    // Delegate to ChatView's export logic by posting on the
-                    // view model's notification center — but since ChatView owns
-                    // exportMarkdownToFile(), we simply activate that conversation
-                    // and let the user's "/export" slash-command re-fire on the right view.
+                // Never re-post `.exportConversationRequested`. NotificationCenter
+                // delivers synchronously; a re-post from this handler is unbounded
+                // recursion (stack overflow) whenever Chat is visible.
+                // ChatView already received the original post and runs the save panel.
+                let decision = ExportConversationRouting.decide(
+                    noteObject: note.object,
+                    selectedConversationID: app.selectedConversationID,
+                    chatTabVisible: selectedTab == .chat || selectedTab == .code
+                )
+                if let id = decision.selectConversationID {
                     app.selectedConversationID = id
-                    // Post to the ChatView-specific handler path: it will match
-                    // because note.object (the UUID) equals viewModel.conversation.id.
-                    NotificationCenter.default.post(name: .exportConversationRequested, object: id)
-                } else {
-                    // ChatView not visible (Projects/Scheduled/cluster tab): activate
-                    // the conversation so the user can navigate to it and export.
-                    app.selectedConversationID = id
-                    if !selectedTab.isWorkspaceTab {
-                        selectedTab = .chat
-                    }
+                }
+                if decision.switchToChatTab, !selectedTab.isWorkspaceTab {
+                    selectedTab = .chat
                 }
             }
             .onAppear {
@@ -284,6 +338,11 @@ struct RootView: View {
                 showingSettings = false
                 selectedTab = .models
             }
+            .onReceive(NotificationCenter.default.publisher(for: .cancelAgentRequested)) { _ in
+                if let id = app.selectedConversationID {
+                    app.chatViewModel(for: id).cancel()
+                }
+            }
     }
 
     private var navigationWithDebugNotifications: some View {
@@ -304,8 +363,21 @@ struct RootView: View {
             }
     }
 
-    private var navigationRoot: some View {
+    private var navigationWithMenuChrome: some View {
         navigationWithDebugNotifications
+            .onReceive(NotificationCenter.default.publisher(for: .toggleSidebarRequested)) { _ in
+                columnVisibility = MenuChrome.toggledSidebarVisibility(columnVisibility)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .previousTaskRequested)) { _ in
+                selectAdjacentTask(delta: -1)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .nextTaskRequested)) { _ in
+                selectAdjacentTask(delta: 1)
+            }
+    }
+
+    private var navigationRoot: some View {
+        navigationWithMenuChrome
             .background(WindowChromeAdjuster())
             .preferredColorScheme(resolvedColorScheme(app.settings.colorScheme))
             .onChange(of: app.selectedConversationID) { _, newID in
@@ -329,6 +401,36 @@ struct RootView: View {
         selectedTab = .chat
     }
 
+    private func selectAdjacentTask(delta: Int) {
+        let nextID = MenuChrome.adjacentTaskID(
+            visibleIDs: app.sidebarOrderedConversations().map(\.id),
+            currentID: app.selectedConversationID,
+            delta: delta
+        )
+        guard let nextID else { return }
+        app.selectedConversationID = nextID
+        selectedTab = .chat
+    }
+
+    @ToolbarContentBuilder
+    private var detailChromeToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button {
+                NotificationCenter.default.post(name: .toggleInspectorRequested, object: nil)
+            } label: {
+                Image(systemName: "sidebar.right")
+            }
+            .help("Toggle Side Pane (⌥⌘B)")
+
+            Button {
+                NotificationCenter.default.post(name: .toggleTerminalRequested, object: nil)
+            } label: {
+                Image(systemName: "terminal")
+            }
+            .help("Toggle Terminal (⌘J)")
+        }
+    }
+
     /// Map persisted `colorScheme` string → SwiftUI's optional ColorScheme.
     /// `nil` means "follow System" (the OS appearance).
     private func resolvedColorScheme(_ raw: String) -> ColorScheme? {
@@ -347,6 +449,12 @@ struct RootView: View {
 
     private func commandPaletteItems() -> [CommandPaletteItem] {
         let safeOn = app.safeModeOn
+        let themeLabel: String
+        switch app.settings.colorScheme {
+        case "light": themeLabel = "Light"
+        case "dark":  themeLabel = "Dark"
+        default:      themeLabel = "System"
+        }
         return [
             CommandPaletteItem(
                 id: "new-chat", title: "New Conversation", subtitle: "Start a fresh chat",
@@ -394,6 +502,58 @@ struct RootView: View {
                 id: "fork-chat", title: "Fork Conversation",
                 subtitle: "Branch with history preserved (/fork)",
                 category: "Chat", keywords: ["fork", "branch", "duplicate"]),
+            CommandPaletteItem(
+                id: "find-in-task", title: "Find in Task",
+                subtitle: "Search messages in this conversation (⌘F)",
+                category: "Chat", keywords: ["find", "search", "task", "messages"]),
+            CommandPaletteItem(
+                id: "toggle-theme", title: "Theme: \(themeLabel)",
+                subtitle: "Cycle System → Light → Dark",
+                category: "App", keywords: ["theme", "appearance", "dark", "light", "system", "color"]),
+            CommandPaletteItem(
+                id: "prev-task", title: "Previous Task",
+                subtitle: "Select the previous visible task (⌘⇧[)",
+                category: "Chat", keywords: ["previous", "prev", "task", "conversation", "up"]),
+            CommandPaletteItem(
+                id: "next-task", title: "Next Task",
+                subtitle: "Select the next visible task (⌘⇧])",
+                category: "Chat", keywords: ["next", "task", "conversation", "down"]),
+            CommandPaletteItem(
+                id: "export-conversation", title: "Export Conversation",
+                subtitle: "Save the current chat as Markdown (/export)",
+                category: "Chat", keywords: ["export", "markdown", "save", "share"]),
+            CommandPaletteItem(
+                id: "open-notes", title: "Open Notes",
+                subtitle: "Open the notes tab",
+                category: "App", keywords: ["notes", "memo", "scratch"]),
+            CommandPaletteItem(
+                id: "open-models", title: "Open Models",
+                subtitle: "Open the models pane",
+                category: "App", keywords: ["models", "library", "download", "llm"]),
+            CommandPaletteItem(
+                id: "new-project", title: "New Project",
+                subtitle: "Open the Projects tab",
+                category: "App", keywords: ["new", "project", "folder", "workspace"]),
+            CommandPaletteItem(
+                id: "stop-agent", title: "Stop Agent",
+                subtitle: "Cancel the in-flight turn (⌘.)",
+                category: "Safety", keywords: ["stop", "cancel", "abort", "agent"]),
+            CommandPaletteItem(
+                id: "toggle-sidebar", title: "Toggle Sidebar",
+                subtitle: "Show or hide the tasks sidebar (⌘B)",
+                category: "App", keywords: ["sidebar", "panel", "tasks", "left"]),
+            CommandPaletteItem(
+                id: "toggle-side-pane", title: "Toggle Side Pane",
+                subtitle: "Show or hide the inspector (⌥⌘B)",
+                category: "App", keywords: ["inspector", "side", "pane", "files", "changes", "subagents", "panel"]),
+            CommandPaletteItem(
+                id: "toggle-terminal", title: "Toggle Terminal",
+                subtitle: "Show or hide the bottom terminal dock (⌘J)",
+                category: "App", keywords: ["terminal", "shell", "dock", "pty"]),
+            CommandPaletteItem(
+                id: "open-workspace", title: "Open Workspace…",
+                subtitle: "Open a folder as a workspace (⌘O)",
+                category: "App", keywords: ["open", "folder", "workspace", "project"]),
         ]
     }
 
@@ -413,6 +573,11 @@ struct RootView: View {
             }
         case "fork-chat":
             _ = activeChatViewModel?.handleSlashCommand("/fork")
+        case "find-in-task":
+            selectedTab = .chat
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(name: .findInTaskRequested, object: nil)
+            }
         case "toggle-safe-mode":
             // Avoid Plan↔toggle conflict: if Plan, leave plan; else flip allow-list.
             if app.executionMode == .plan {
@@ -433,6 +598,44 @@ struct RootView: View {
         case "choose-model":
             selectedTab = .chat
             showingModelPicker = true
+        case "toggle-theme":
+            switch app.settings.colorScheme {
+            case "system": app.settings.colorScheme = "light"
+            case "light":  app.settings.colorScheme = "dark"
+            default:       app.settings.colorScheme = "system"
+            }
+        case "prev-task", "next-task":
+            selectAdjacentTask(delta: item.id == "next-task" ? 1 : -1)
+        case "export-conversation":
+            // Same post as `/export`. ChatView owns the save panel; the
+            // existing RootView receiver must not re-post this name.
+            guard let id = app.selectedConversationID else { break }
+            if !selectedTab.isWorkspaceTab {
+                selectedTab = .chat
+            }
+            DispatchQueue.main.async {
+                NotificationCenter.default.post(
+                    name: .exportConversationRequested,
+                    object: id
+                )
+            }
+        case "open-notes":
+            selectedTab = .notes
+        case "open-models":
+            NotificationCenter.default.post(name: .openModelsPane, object: nil)
+        case "new-project":
+            selectedTab = .projects
+            NotificationCenter.default.post(name: .newProjectSheetRequested, object: nil)
+        case "stop-agent":
+            NotificationCenter.default.post(name: .cancelAgentRequested, object: nil)
+        case "toggle-sidebar":
+            NotificationCenter.default.post(name: .toggleSidebarRequested, object: nil)
+        case "toggle-side-pane":
+            NotificationCenter.default.post(name: .toggleInspectorRequested, object: nil)
+        case "toggle-terminal":
+            NotificationCenter.default.post(name: .toggleTerminalRequested, object: nil)
+        case "open-workspace":
+            NotificationCenter.default.post(name: .openWorkspaceRequested, object: nil)
         default:
             break
         }
@@ -477,28 +680,33 @@ private struct DetailPane: View {
         // while the sidebar still highlights Projects. The back arrow
         // in the project view clears `openedProject`, which returns
         // us here and falls through to the tab's normal pane.
-        if let project = app.openedProject {
-            ProjectFolderLandingView(project: project)
-        } else {
-            switch tab {
-            case .chat, .code:
-                // PA10: Code workspace UI is retired (CodeWorkspaceView has no
-                // call sites). Legacy `.code` tab enum values still open Chat only.
-                workspaceDetail(mode: .chat)
-            case .projects:
-                // TODO(autopilot): Was DetailPlaceholder stub. Swapped in
-                // the ported ProjectsView so the Projects tab renders the
-                // full landing grid + its own NewProjectSheet wiring.
-                ProjectsView()
-            case .scheduled:
-                ScheduledLandingView()
-            case .cluster:
-                ClusterView(host: app.settings.exoHost, port: app.settings.exoPort)
-            case .notes:
-                NotesDetailEmpty()
-            case .models:
-                ModelsDetailEmpty()
+        Group {
+            if let project = app.openedProject {
+                ProjectFolderLandingView(project: project)
+            } else {
+                switch tab {
+                case .chat, .code:
+                    // PA10: Code workspace UI is retired (CodeWorkspaceView has no
+                    // call sites). Legacy `.code` tab enum values still open Chat only.
+                    workspaceDetail(mode: .chat)
+                case .projects:
+                    // TODO(autopilot): Was DetailPlaceholder stub. Swapped in
+                    // the ported ProjectsView so the Projects tab renders the
+                    // full landing grid + its own NewProjectSheet wiring.
+                    ProjectsView()
+                case .scheduled:
+                    ScheduledLandingView()
+                case .cluster:
+                    ClusterView(host: app.settings.exoHost, port: app.settings.exoPort)
+                case .notes:
+                    NotesDetailEmpty()
+                case .models:
+                    ModelsDetailEmpty()
+                }
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            TerminalDockHost()
         }
     }
 

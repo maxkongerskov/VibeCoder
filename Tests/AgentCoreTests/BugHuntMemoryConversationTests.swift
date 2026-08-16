@@ -355,6 +355,37 @@ final class BugHuntMemoryConversationTests: XCTestCase {
         XCTAssertEqual(loaded?.attachedSkillIds, convo.attachedSkillIds)
     }
 
+    func testListReportsCorruptFileAlongsideHealthyConversation() async throws {
+        let dir = try makeTempDir("bh-convo-corrupt-list")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ConversationStore(directory: dir)
+        let healthy = Conversation(title: "keep-me")
+        try await store.save(healthy)
+
+        let badID = UUID()
+        let badURL = dir.appendingPathComponent("\(badID.uuidString).json")
+        try Data("{broken".utf8).write(to: badURL)
+
+        let listing = try await store.listDirectory()
+        XCTAssertEqual(listing.conversations.map(\.id), [healthy.id])
+        XCTAssertEqual(listing.unloadable.count, 1, "list() silently dropped the corrupt file")
+        XCTAssertEqual(listing.unloadable.first?.filename, badURL.lastPathComponent)
+        XCTAssertFalse(listing.unloadable.first?.reason.isEmpty ?? true)
+
+        let listed = try await store.list()
+        XCTAssertEqual(listed.map(\.id), [healthy.id])
+    }
+
+    func testListCleanDirectoryReportsZeroUnloadable() async throws {
+        let dir = try makeTempDir("bh-convo-clean-list")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = ConversationStore(directory: dir)
+        try await store.save(Conversation(title: "only-healthy"))
+        let listing = try await store.listDirectory()
+        XCTAssertEqual(listing.conversations.count, 1)
+        XCTAssertTrue(listing.unloadable.isEmpty)
+    }
+
     func testConversationStoreSaveRecreatesDeletedDirectory() async throws {
         let dir = try makeTempDir("bh-convo-mkdir")
         let store = ConversationStore(directory: dir)

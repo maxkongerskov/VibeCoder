@@ -250,7 +250,8 @@ public struct MemoryBackend: Sendable {
         }
         // Gate on log *bodies* only (exclude filename banners from the threshold).
         if contentChars < MemoryDream.minSessionBlobChars {
-            MemoryDream.recordConsolidation(lockURL: storage.dreamLockFile)
+            // Do not stamp the dream lock — a thin/cancelled turn must
+            // not block a later substantive consolidation for minHours.
             return DreamResult(didRun: false, reason: "logs_too_thin")
         }
         let existing = storage.readMemory(scope: .workspace) ?? ""
@@ -262,7 +263,6 @@ public struct MemoryBackend: Sendable {
 
         if consolidated.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || consolidated.contains("NO_REPLY") {
-            MemoryDream.recordConsolidation(lockURL: storage.dreamLockFile)
             return DreamResult(didRun: false, reason: reasonTag == "extractive"
                 ? "extractive_no_signal"
                 : "no_signal_after_fallback")

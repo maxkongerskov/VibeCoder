@@ -27,10 +27,10 @@ public actor PlanStore {
     /// In-memory plan, loading durable JSON when cold.
     public func plan(for conversation: UUID, workingDirectory: URL?) -> Plan? {
         if let existing = plans[conversation] { return existing }
-        if let workingDirectory,
-           let disk = Self.loadDurable(conversation: conversation, workingDirectory: workingDirectory) {
+        if let root = PathConfinement.usableWorkspaceRoot(workingDirectory),
+           let disk = Self.loadDurable(conversation: conversation, workingDirectory: root) {
             plans[conversation] = disk
-            durableRoots[conversation] = workingDirectory
+            durableRoots[conversation] = root
             return disk
         }
         return nil
@@ -40,12 +40,12 @@ public actor PlanStore {
         plans[conversation] = plan
     }
 
-    /// Persist plan in memory and (when cwd is known) on disk.
+    /// Persist plan in memory and (when cwd is a usable workspace) on disk.
     public func setPlan(_ plan: Plan, for conversation: UUID, workingDirectory: URL?) {
         plans[conversation] = plan
-        if let workingDirectory {
-            durableRoots[conversation] = workingDirectory
-            Self.saveDurable(plan, conversation: conversation, workingDirectory: workingDirectory)
+        if let root = PathConfinement.usableWorkspaceRoot(workingDirectory) {
+            durableRoots[conversation] = root
+            Self.saveDurable(plan, conversation: conversation, workingDirectory: root)
         }
     }
 
@@ -72,9 +72,9 @@ public actor PlanStore {
         }
         guard let updated = updateTodo(id: todoID, status: status, result: result, for: conversation)
         else { return nil }
-        if let workingDirectory {
-            durableRoots[conversation] = workingDirectory
-            Self.saveDurable(updated, conversation: conversation, workingDirectory: workingDirectory)
+        if let root = PathConfinement.usableWorkspaceRoot(workingDirectory) {
+            durableRoots[conversation] = root
+            Self.saveDurable(updated, conversation: conversation, workingDirectory: root)
         }
         return updated
     }
@@ -102,9 +102,9 @@ public actor PlanStore {
         guard let revised = revise(for: conversation, addingTexts: addingTexts,
                                    removingIDs: removingIDs, goal: goal)
         else { return nil }
-        if let workingDirectory {
-            durableRoots[conversation] = workingDirectory
-            Self.saveDurable(revised, conversation: conversation, workingDirectory: workingDirectory)
+        if let root = PathConfinement.usableWorkspaceRoot(workingDirectory) {
+            durableRoots[conversation] = root
+            Self.saveDurable(revised, conversation: conversation, workingDirectory: root)
         }
         return revised
     }
@@ -128,18 +128,18 @@ public actor PlanStore {
         workingDirectory: URL?
     ) -> Plan? {
         if let existing = plans[conversation] { return existing }
-        if let workingDirectory,
-           let disk = Self.loadDurable(conversation: conversation, workingDirectory: workingDirectory) {
+        if let root = PathConfinement.usableWorkspaceRoot(workingDirectory),
+           let disk = Self.loadDurable(conversation: conversation, workingDirectory: root) {
             plans[conversation] = disk
-            durableRoots[conversation] = workingDirectory
+            durableRoots[conversation] = root
             return disk
         }
         if let fromTranscript = PlanTranscript.latestPlan(in: messages) {
             plans[conversation] = fromTranscript
-            if let workingDirectory {
-                durableRoots[conversation] = workingDirectory
+            if let root = PathConfinement.usableWorkspaceRoot(workingDirectory) {
+                durableRoots[conversation] = root
                 Self.saveDurable(fromTranscript, conversation: conversation,
-                                 workingDirectory: workingDirectory)
+                                 workingDirectory: root)
             }
             return fromTranscript
         }
@@ -161,6 +161,7 @@ public actor PlanStore {
     }
 
     private static func saveDurable(_ plan: Plan, conversation: UUID, workingDirectory: URL) {
+        guard PathConfinement.usableWorkspaceRoot(workingDirectory) != nil else { return }
         let dir = durableDirectory(workingDirectory: workingDirectory, conversation: conversation)
         let file = durableFileURL(workingDirectory: workingDirectory, conversation: conversation)
         do {

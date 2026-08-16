@@ -8,7 +8,7 @@
 
 ## 1. The one-paragraph product
 
-NEW DAY is a native macOS coding agent that runs on your own hardware **against a bring-your-own local OpenAI-compatible model server**. **Working backends today:** LM Studio, oMLX, Ollama, EXO, and custom `/v1` (all HTTP). **In-process Swift MLX** is an adapter **stub** (`mlx-swift` not wired — generation throws). **Bundled llama.cpp/GGUF** was a planned path and is **removed as a product** (no vendored binary; no `LiteLocalBackend`; legacy settings migrate to Ollama). The agent iterates plan → tool calls → verify → repeat, edits via SEARCH/REPLACE and unified diffs, isolates work in git worktrees (`<project>-agentcore-<id>` / `agentcore/<id>`), and can verify mutations with builds. It also exposes an OpenAI-compatible HTTP server on loopback for Xcode Intelligence — **v1 is a backend proxy** (`tools: []`); full agent-loop routing on that endpoint is not the default. Closed-source. No product license key or trial. No subscription. Model weights leave the Mac only if **you** point at a remote endpoint. Apple Silicon.
+NEW DAY is a native macOS coding agent that runs on your own hardware **against a bring-your-own local OpenAI-compatible model server**. **Working backends today:** LM Studio, oMLX, Ollama, EXO, and custom `/v1` (all HTTP). **In-process Swift MLX** is an adapter **stub** (`mlx-swift` not wired — generation throws). **Bundled llama.cpp/GGUF** was a planned path and is **removed as a product** (no vendored binary; no `LiteLocalBackend`; legacy settings migrate to Ollama). The agent iterates plan → tool calls → verify → repeat, edits via SEARCH/REPLACE and unified diffs, isolates work in git worktrees (`<project>-agentcore-<id>` / `agentcore/<id>`), and can verify mutations with builds. It also exposes an OpenAI-compatible HTTP server on loopback for Xcode Intelligence — **v1 is a backend proxy** (`tools: []`); full agent-loop routing on that endpoint is not the default. **Public open-source snapshot (amended 2026-08-15): MIT-licensed and distributed as VibeCoder** — the closed-source positioning below is historical. No product license key or trial. No subscription. Model weights leave the Mac only if **you** point at a remote endpoint. Apple Silicon.
 
 ## 2. Target user (precise)
 
@@ -32,7 +32,7 @@ NEW DAY is **explicitly not for**: web developers who only touch HTML/CSS/JS, be
 | "Why not Claude Code?" | Same — cloud and subscription. Plus NEW DAY is native macOS, not Node/CLI-first. |
 | "Why not LM Studio?" | LM Studio is chat. NEW DAY is the *agent on top of* LM Studio (and we can use it as a backend). |
 | "Why not Ollama + Cursor with a self-hosted endpoint?" | That stack doesn't have a real agent loop with tools, build verification, or worktree isolation. NEW DAY is that layer, designed for it. |
-| "Why not free / open-source?" | Closed-source means we ship a polished single binary. The economics fund continuous development. Free alternatives exist; we're the polished one. |
+| "Why not free / open-source?" | **(Historical — superseded 2026-08-15: the repo is public MIT open source.)** Closed-source means we ship a polished single binary. The economics fund continuous development. Free alternatives exist; we're the polished one. |
 | "Why one-time and not subscription?" | We bet that "buy once, own it" is a defensible position against the entire competitive set. It's also honest — local-first software doesn't have ongoing cloud cost. |
 
 Distribution/pricing TBD. **No product license keys, trials, or activation gate in the app.**
@@ -646,7 +646,7 @@ These are decisions, not omissions:
 5. **No voice / audio in v1.** Whisper/TTS deferred to v2.
 6. **No translation / localization.** English-only at launch. Adding later is cheap if there's demand.
 7. **No free tier.** Trial + paid. A free tier would dilute the price anchor and the "ownership" pitch.
-8. **No open-source plugin marketplace.** Closed-core, possibly with curation if a marketplace emerges in v1.2.
+8. **No open-source plugin marketplace.** Closed-core, possibly with curation if a marketplace emerges in v1.2. **(Amended 2026-08-15: core is public MIT; the non-goal is the *marketplace*, not openness.)**
 9. **Not a replacement for Xcode.** We integrate via Intelligence; we don't rebuild the IDE.
 10. **Not a generic macOS assistant.** Coding-focused. No "what's the weather" surface.
 
@@ -672,7 +672,7 @@ Distribution: Paddle or LemonSqueezy as merchant of record. Sales tax / VAT hand
 
 ## 16. Brand & voice
 
-- Name: **AgentOS NEW DAY** (full), **AgentOS** (short).
+- Name: **AgentOS NEW DAY** (full), **AgentOS** (short). **(Amended 2026-08-15: the public snapshot ships as *VibeCoder* — `AppBranding.displayName`; AgentOS NEW DAY remains the internal/architectural name used across these docs.)**
 - Tagline: "Local-first coding agent. Nothing leaves your Mac."
 - Voice: precise, technical, dry. No hype. Talk to developers like developers.
 - Visual: Geist Mono + Geist Sans. Minimal chrome. Dark mode parity with light. SF Symbols. No animation for animation's sake.
@@ -684,6 +684,7 @@ When this doc is amended, log the change here with date + reason. The doc itself
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
+| 2026-08-15 | §1, §2, §3, §13, §16 | **Open-source honesty:** public snapshot ships MIT as **VibeCoder**; "Closed-source" §1 claim, §3 closed-source positioning row, §13 closed-core wording, §16 name marked amended. §2's "$430 buyer" framing is historical pricing copy, not product truth. | Commit 9a2182b (public snapshot) added MIT LICENSE/README but body text still said closed-source — the doc-as-rail contract requires the amendment |
 | 2026-07-24 | §5 diagram, §5.4, §5.6, §11.3–11.5, §17 | **P7 docs honesty:** tool names match `registerBuiltins`; seatbelt ≠ App Sandbox; no Grok monitor product; dream is extractive not embeddings; diagram drops SkillStore; headless without fake `agentos` CLI | Polish P7 |
 | 2026-07-24 | §5.5, §5.4 incomplete list, §10.1 | Skills honesty: `SkillDiscovery` + `load_skill` + `.cursor/skills` + metadata index shipped; marketplace/UI still deferred. §10.1 no longer claims Xcode runs full agent loop (proxy only). | Phase A PA9 / T4+T10 finish-lane lies |
 | 2026-07-23 | §1, §4.1, §5 diagram, §5.3, §12, §14 | Wave B W14 honesty: BYO HTTP only; oMLX/Ollama first-class; MLX stub; llama product **removed** (not “scaffold”); first-run server guidance; no LiteLocalBackend | Sweep C-OFFLINE / W14-sweep; DESIGN/README aligned |

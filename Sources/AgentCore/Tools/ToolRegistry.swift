@@ -144,8 +144,46 @@ public actor ToolRegistry {
         register(LoadSkillTool.self)
         // PA4: restore filesystem turn checkpoint (code-aware rewind).
         register(RestoreCheckpointTool.self)
+        // ZCode-parity: session context, schedules, mailbox, plan-mode enter/exit.
+        register(ReadSessionContextTool.self)
+        register(CronCreateTool.self)
+        register(CronListTool.self)
+        register(CronUpdateTool.self)
+        register(CronDeleteTool.self)
+        register(SendMessageTool.self)
+        register(EnterPlanModeTool.self)
+        register(ExitPlanModeTool.self)
         // Add new tools here. Compiler will flag a forgotten `import` —
         // there is no second touchpoint to forget.
+    }
+
+    /// PreToolUse with ZCode `updatedInput` / `permissionDecision`. Deny and
+    /// `ask` fail closed (no UI broker on this path). Successful rewrite
+    /// replaces the model's arguments.
+    private func applyPreToolDetailed(
+        name: String,
+        arguments: ToolArguments,
+        context: ToolContext
+    ) -> (ok: ToolArguments?, deny: ToolResult?) {
+        let pre = HookDispatcher.preToolDetailed(
+            toolName: name,
+            argumentsSummary: String(describing: arguments),
+            projectRoot: context.projectRoot,
+            worktreeRoot: context.worktreeRoot)
+        let decision = pre.permissionDecision?.lowercased()
+        if !pre.allow || decision == "deny" {
+            return (nil, ToolResult(content: pre.message ?? "Denied by hook", isError: true))
+        }
+        if decision == "ask" {
+            return (nil, ToolResult(
+                content: pre.message ?? "Hook requested user approval before this tool can run.",
+                isError: true))
+        }
+        if let json = pre.updatedInputJSON, !json.isEmpty,
+           let rewritten = try? ToolArguments(json: json) {
+            return (rewritten, nil)
+        }
+        return (arguments, nil)
     }
 
     /// Resolve and execute a tool by name. Centralized permission check
@@ -156,32 +194,27 @@ public actor ToolRegistry {
             throw ToolError.unavailable("Unknown tool: \(name). Available: \(available)")
         }
         try await checkPermission(meta: meta, arguments: arguments, context: context)
-        let pre = HookDispatcher.preTool(
-            toolName: name,
-            argumentsSummary: String(describing: arguments),
-            projectRoot: context.projectRoot,
-            worktreeRoot: context.worktreeRoot)
-        if !pre.allow {
-            return ToolResult(content: pre.message ?? "Denied by hook", isError: true)
-        }
+        let preApplied = applyPreToolDetailed(name: name, arguments: arguments, context: context)
+        if let denied = preApplied.deny { return denied }
+        let effectiveArgs = preApplied.ok ?? arguments
         // PA4: snapshot pre-mutation file state for code-aware /rewind.
         // Runs after permission/hooks so denied tools leave no checkpoint noise.
         if meta.permission == .mutates
             || CheckpointStore.snapshotToolNames.contains(name) {
             await CheckpointStore.shared.snapshotBeforeMutation(
                 toolName: name,
-                arguments: arguments,
+                arguments: effectiveArgs,
                 context: context)
         }
         let result: ToolResult
         if let executor = dynamicExecutors[name] {
-            result = try await executor(arguments, context)
+            result = try await executor(effectiveArgs, context)
         } else {
             guard let factory = factories[name] else {
                 throw ToolError.unavailable("Unknown tool: \(name)")
             }
             let tool = factory()
-            result = try await tool.execute(arguments: arguments, context: context)
+            result = try await tool.execute(arguments: effectiveArgs, context: context)
         }
         let post = HookDispatcher.postTool(
             toolName: name,
@@ -255,6 +288,10 @@ public actor ToolRegistry {
         "ask_user",
     ]
 
+    /// Execute-permission tools safe to overlap (isolated spawn). Source of
+    /// truth for `task`; dispatch still lives in AgentLoop.
+    public static let parallelSafeExecuteTools: Set<String> = ["task"]
+
     /// Mutators whose bodies call `MutationReview` — Ask mode may pass them
     /// through for the sheet. All other mutators need ShellApproval in Ask.
     public static let mutationReviewAwareTools: Set<String> = [
@@ -307,21 +344,16 @@ public actor ToolRegistry {
             }
 
             // Pre-tool hooks (same gate as serial execute — deny-tools etc.)
-            let pre = HookDispatcher.preTool(
-                toolName: inv.name,
-                argumentsSummary: String(describing: inv.arguments),
-                projectRoot: context.projectRoot,
-                worktreeRoot: context.worktreeRoot)
-            if !pre.allow {
-                let msg = pre.message ?? "Denied by hook"
-                work.append(WorkItem(index: index, run: {
-                    ToolResult(content: msg, isError: true)
-                }))
+            let preApplied = applyPreToolDetailed(
+                name: inv.name, arguments: inv.arguments, context: context)
+            if let denied = preApplied.deny {
+                work.append(WorkItem(index: index, run: { denied }))
                 continue
             }
+            let hookedArgs = preApplied.ok ?? inv.arguments
 
             if let executor = dynamicExecutors[inv.name] {
-                let args = inv.arguments
+                let args = hookedArgs
                 let toolName = inv.name
                 work.append(WorkItem(index: index, run: {
                     do {
@@ -347,7 +379,7 @@ public actor ToolRegistry {
                     }
                 }))
             } else if let factory = factories[inv.name] {
-                let args = inv.arguments
+                let args = hookedArgs
                 let toolName = inv.name
                 work.append(WorkItem(index: index, run: {
                     do {

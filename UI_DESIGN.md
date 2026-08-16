@@ -1,29 +1,36 @@
-# UI DESIGN — NEW DAY
+# UI DESIGN — VibeCoder 1.0.5
 
-> Sibling document to `ARCHITECTURE.md`. The architecture says *what* exists; this says *how it looks, feels, and behaves*. When tactical UI work disagrees with this doc, this doc wins (amendments via §15).
+> Sibling document to `ARCHITECTURE.md`. Architecture says *what* exists; this says *how it looks, feels, and behaves*. **Live SwiftUI is the source of truth.** When a later PR disagrees with this file, amend §11 — do not invent Azure/Geist chrome that is not on screen.
 >
 > Read in order: §1 (principles) → §2 (foundations) → §3 (components) → §4 (screens) → §5 (states) → §6 (flows). Skim §7–§10 for reference. Sign off after §11.
+>
+> Identity (locked 2026-08-16): **orange accent + SF Pro / SF Mono**. Local-model-first. No onboarding, no license/trial chrome.
 
 ---
 
 ## 1. Design principles
 
-Four locked decisions from the sign-off question, plus the values that fall out of them:
+Four locked decisions, updated to what 1.0.5 actually ships:
 
-1. **Visual density: Claude.ai-spacious.** Generous whitespace, comfortable line height, large-ish text. Calm enough for 4-hour sessions. Built for big screens but graceful at 1280-wide.
-2. **Aesthetic: polished + warm.** Mixed typography (Geist Sans for UI, Geist Mono for code/data), purposeful use of accent color, subtle decorative touches where they communicate something. Not minimalist-cold, not consumer-busy. The voice is "the senior engineer who keeps their workspace nice."
-3. **Color: single accent + neutrals.** One signature accent (§2.3), grayscale everywhere else. Semantic colors (green/red/amber) reserved for status communication. Dark mode parity is enforced; no setting exists only in light.
-4. **Animation: Claude.ai-level nice.** Restrained delight — functional motion as the baseline, signature moments where they matter (model ready pulse, build pass confirmation, message send), nothing decorative. 150–300 ms easeOut for most, spring physics for chip pulses.
+1. **Visual density: Claude.ai-spacious.** Generous whitespace, comfortable line height, large-ish text. Calm enough for 4-hour sessions. Built for big screens; graceful at the 960 × 620 minimum.
+2. **Aesthetic: polished + warm.** System typography (SF Pro for UI and prose, SF Mono for code/data), one signature orange, subtle decorative touches only when they communicate something. Not minimalist-cold, not consumer-busy. Voice: “the senior engineer who keeps their workspace nice.”
+3. **Color: single accent + neutrals.** One orange accent (§2.3). Grayscale everywhere else. Semantic green/red/amber/blue reserved for status. Dark-mode parity is enforced — every token has both appearances.
+4. **Animation: restrained delight.** Functional motion as the baseline; signature moments only where they communicate state (shimmer on “Working…”, send-circle fill). 150–300 ms easeOut for most, spring for pulses. **Reduced-motion respect is an open item** — tokens exist; the app does not yet query `accessibilityDisplayShouldReduceMotion`.
 
 The principles that fall out:
 
 - **Predictability over surprise.** Same gesture, same result, every time.
-- **Latency disguised as design.** When the model is loading or thinking, that time is filled with information (load progress, status line, thinking chip), not a blank wait.
-- **One affordance per action.** No button that does three things. No menu hidden inside a chip.
-- **The model is the product.** Chrome (sidebar, toolbar, settings) gets out of the way during chat. Conversation typography is the centerpiece.
+- **Latency disguised as design.** While the model thinks, fill the time with information (Working header, reasoning block, `Verb · Status` rows) — never a blank wait.
+- **One affordance per action.** No button that does three things. Composer chips are single-purpose.
+- **The model is the product.** Chrome (sidebar, settings, palette) gets out of the way during chat. Conversation typography is the centerpiece.
 - **Hierarchical, never flat.** Every screen has primary / secondary / tertiary information.
-- **Errors are conversation, not interruption.** No modal alerts for recoverable issues. Inline status, dismissable banners.
-- **Keyboard is first-class, not afterthought.** Every primary action has a shortcut. Power users live in the keyboard.
+- **Errors are conversation, not interruption.** Recoverable issues are dismissable banners or activity **Failed** rows. Approval sheets are the exception (fail-closed).
+- **Keyboard is first-class.** File → New conversation (⌘N), Settings (⌘,), Command Palette (⌘K), Stop (⌘.), Esc dismisses sheets / stops generation.
+- **Local-model-first.** First-run lands on the main window. Empty chat is a model-connect hero (loopback detect + **Open Connection settings**), not a download wizard and not a license gate.
+
+Removed from the 2026-06 spec (do not resurrect): license/trial sheets, two-screen onboarding, Geist type, Azure/Cobalt accent, 4-icon sidebar tabs, icon-only sidebar collapse, per-hunk Accept/Reject, in-transcript ToolStub + PlanCard, docked iteration status bar.
+
+Sources: `App/VibeCoderApp.swift`, `App/Theme/Theme.swift`, `App/Theme/FontExtensions.swift`
 
 ---
 
@@ -31,965 +38,662 @@ The principles that fall out:
 
 ### 2.1 Typography
 
-Two families, three roles:
+Product type is **SF Pro** (`.system`, design `.default`) + **SF Mono** (design `.monospaced`). `Font.registerGeist()` is a no-op; `Font.geist(...)` stubs to system. Never mix `.serif` (no New York) into chrome or transcript.
 
-| Role | Family | Size | Weight | Line height | Used for |
-|---|---|---|---|---|---|
-| **Display** | Geist Sans | 32 pt | Semibold | 1.15 | Welcome screens, "AgentOS NEW DAY" wordmark, large empty states |
-| **Title** | Geist Sans | 20 pt | Semibold | 1.25 | Chat header titles, sheet headers, sidebar section labels |
-| **Body** | Geist Sans | 14 pt | Regular | 1.55 | Conversation prose, settings forms, descriptions, most UI |
-| **Body emphasis** | Geist Sans | 14 pt | Semibold | 1.55 | Section labels in dense UI, button text |
-| **Caption** | Geist Sans | 12 pt | Regular | 1.4 | Timestamps, secondary labels, metadata |
-| **Caption emphasis** | Geist Sans | 12 pt | Medium | 1.4 | Status line, small badges, kbd shortcuts |
-| **Mono body** | Geist Mono | 13 pt | Regular | 1.5 | Tool args, code snippets in chat, tool result content |
-| **Mono small** | Geist Mono | 12 pt | Regular | 1.4 | Model IDs in picker, file paths, JSON in cards |
+| Role | Family | Size | Weight | Used for |
+|---|---|---|---|---|
+| **Display** | SF Pro | 32 pt | Semibold | Reserved scale (`Theme.Typography.display`); unused in live chrome |
+| **Hero** | SF Pro | 24 pt | Semibold | New-task landing title; Models / Projects pane titles |
+| **Title** | SF Pro | 20 pt | Semibold | Empty-chat hero titles |
+| **Body** | SF Pro | 15 pt | Regular | Transcript prose, composer field (`ChatLayout.bodyFontSize`) |
+| **Body emphasis** | SF Pro | 15 pt | Semibold / Medium | Section labels, button text |
+| **UI** | SF Pro | 13 pt | Regular / Medium / Semibold | Sidebar rows, chips, dense chrome |
+| **Caption** | SF Pro | 12 pt | Regular | Secondary labels |
+| **Caption emphasis** | SF Pro | 12 pt | Medium / Semibold | Status, small badges |
+| **Mono body** | SF Mono | 13 pt | Regular | Code blocks, tool I/O |
+| **Mono small** | SF Mono | 12 pt | Regular | Paths, model IDs, hunk headers |
 
-Geist Sans is the default; Mono only appears where the content *is* code or code-like data. Never mix in the same sentence.
+Ad-hoc 10 / 11 / 12.5 pt appear on timestamps, badges, and composer chips. Appearance scales chat type via `chatFontScale` (0.85 / 1.0 / 1.20). Markdown headings stay SF Pro (`markdownHeading(level:)`).
 
 ### 2.2 Spacing
 
-8-pt base unit. The canonical scale:
+8-pt base. Named scale in `Theme.Spacing`:
 
 ```
-2   4   6   8   12   16   24   32   48   64   96
+xxs 2    xs 4    s 8    m 12    ml 16    l 24    xl 32    xxl 48    xxxl 64
 ```
 
-- **Inline gaps (icon ↔ text):** 6 or 8
-- **Item padding (rows, cards):** 12 or 16
-- **Section padding (between groups):** 24 or 32
-- **Window margins:** 24 (content edges from window frame)
-- **Sheet padding:** 32 (sheets get more breathing room)
-
-Generous, not cramped. If two elements feel close, double the gap.
+Inline icon↔text 6–8; row/card pad 12–16; section 24. Chat gutters 24–96 (6% of pane). Composer: 14 H / 14 V / 18 bottom lift. Transcript: 12 message gap, 20 after user, 8 before assistant. `96` is `ChatLayout.maxSideGutter`, not a Spacing token.
 
 ### 2.3 Color
 
+Tokens below map 1:1 to `Theme.Palette`. Names keep the design-token convention; implementations are the `Palette.*` properties.
+
 **Light mode**
 
-| Token | Hex | Usage |
+| Token | Value | Usage |
 |---|---|---|
-| `bg.canvas` | `#FCFBF8` | Main background (warm off-white, not pure white) |
-| `bg.surface` | `#FFFFFF` | Cards, sheets, sidebar |
-| `bg.subtle` | `#F4F2EC` | Tool result cards, code blocks, input bar |
-| `bg.muted` | `#EAE6DC` | Hover/pressed states, dividers' fill |
-| `fg.primary` | `#1B1A17` | Body text, headings |
-| `fg.secondary` | `#5C5851` | Metadata, captions, less-important labels |
-| `fg.tertiary` | `#8B867D` | Placeholders, disabled, very-low-emphasis labels |
-| `fg.muted` | `#B8B3A8` | Decorative outlines, separators |
-| `accent` | `#2563EB` | **Azure** — the signature blue |
-| `accent.hover` | `#1D4ED8` | Buttons on hover |
-| `accent.subtle` | `#EFF4FF` | Accent-tinted backgrounds (user message bubble fill, selected row) |
-| `semantic.success` | `#2D7D32` | Build pass, ready state |
-| `semantic.warning` | `#B86E00` | Reload-to-apply banner, non-fatal warnings |
-| `semantic.error` | `#B91C1C` | Build fail, tool error, license expired |
-| `semantic.info` | `#1E5AB8` | Informational notices |
+| `bg.canvas` | `#F7F7F5` | Main chat / detail pane |
+| `bg.surface` | system `controlBackground` (≈ `#FFFFFF`) | Cards, sheets, elevated chrome |
+| `bg.subtle` | `#F0EFEC` | Composer card **and** sidebar (same plane) |
+| `bg.muted` | `#F0EFEC` | Legacy elevated fill; prefer `bg.subtle` |
+| `bg.hover` | black @ 5% | Selected / hover rows |
+| `bubble.user` | black @ 6% | User message pill |
+| `fg.primary` | `#1F1F1F` (white 0.12) | Body, titles |
+| `fg.secondary` | `#595959` (white 0.35) | Captions, metadata |
+| `fg.tertiary` | `#808080` (white 0.50) | Timestamps, idle chrome |
+| `fg.muted` | `#8C8C8C` (white 0.55) | Placeholders |
+| `divider` | black @ 8% | Hairlines |
+| `accent` | `#E37A38` (rgb 0.89, 0.48, 0.22) | Signature orange — buttons, New Task, send |
+| `accent.hover` | `#D16B2E` | Pressed / darker orange |
+| `accent.subtle` | accent @ 12% | Tinted fills (workspace folder chip, open menus) |
+| `semantic.success` | `#6BAD7D` | Ready, accepted, +lines |
+| `semantic.warning` | `#D1B36B` | Non-fatal warnings |
+| `semantic.error` | `#C97A7A` | Failures, Discard, stop-adjacent |
+| `semantic.info` | `#7A9EBF` | Informational |
+| `violet` | `#A68CD1` | Capability chips (tool / reason / vision) |
+| `subagent` | `#337AD9` | SubAgent type label |
 
-**Dark mode** — semantic role-equivalents, no setting exists only in light:
+**Dark mode** — same roles, ZCode-sampled neutrals (soft gray text, not pure white):
 
-| Token | Hex |
+| Token | Value |
 |---|---|
-| `bg.canvas` | `#181715` |
-| `bg.surface` | `#22201D` |
-| `bg.subtle` | `#2A2724` |
-| `bg.muted` | `#34302B` |
-| `fg.primary` | `#F2EFE8` |
-| `fg.secondary` | `#B5AFA3` |
-| `fg.tertiary` | `#857F73` |
-| `fg.muted` | `#544F47` |
-| `accent` | `#60A5FA` |
-| `accent.hover` | `#93C5FD` |
-| `accent.subtle` | `#1E3A5F` |
-| `semantic.success` | `#4ADE80` |
-| `semantic.warning` | `#FBBF24` |
-| `semantic.error` | `#F87171` |
-| `semantic.info` | `#60A5FA` |
+| `bg.canvas` | `#161616` |
+| `bg.surface` | `#222222` |
+| `bg.subtle` | `#2B2B2B` |
+| `bg.muted` | `#353535` |
+| `bg.hover` | white @ 6% |
+| `bubble.user` | white @ 6% |
+| `fg.primary` | `#D2D2D2` |
+| `fg.secondary` | `#9A9A9A` |
+| `fg.tertiary` | `#797979` |
+| `fg.muted` | `#6E6E6E` |
+| `divider` | white @ 8% |
+| `accent` | `#E48B46` |
+| `accent.hover` | `#F59447` |
+| `accent.subtle` | accent @ 14% |
+| `semantic.*` / `violet` | same fixed RGB as light (not dynamic) |
+| `subagent` | `#73ADF2` |
 
-**Why Azure?** Confident, modern blue (Tailwind blue-600 light / blue-400 dark — values used across Linear, Vercel, GitHub's newer surfaces). Strong dark-mode parity. Pairs cleanly with macOS native chrome (vibrancy materials, sidebar tinting) without competing. Reads professional rather than playful — fits the "senior engineer next to you" voice from §16 of `ARCHITECTURE.md`. Note: it's intentionally NOT macOS system blue (`#007AFF`) — that's the default everywhere and would make NEW DAY visually generic.
+**Diff tokens** (chat edit cards, worktree, patch sheet): `diffAdd` `#6BCB8D`, `diffRemove` `#E07A7A`, fills @ 14% (`diffAddBg` / `diffRemoveBg`). Body text variants `#B8E6C8` / `#E8B0B0`.
+
+`sendAccent` is the same orange as `accent`. Sampled from ZCode Full-access / send; Azure `#2563EB` and Cobalt/Ember are **retired**. Activity: verb = accent, status = secondary. Reasoning rail: accent @ 55% (live @ 85%).
 
 ### 2.4 Corners + shadows
 
 | Use | Radius | Shadow |
 |---|---|---|
-| Cards, tool result cards | 8 pt | `0 1px 2px rgba(0,0,0,0.04)` (light) / none (dark) |
-| Sheets | 12 pt | `0 8px 24px rgba(0,0,0,0.12)` (light) / `0 8px 24px rgba(0,0,0,0.40)` (dark) |
-| Chips, badges | full pill | none |
+| Cards, settings rows | 8 pt (`Radius.card`) | Hairline `divider` 0.5; no tokenized drop shadow |
+| Sheets / palette / planner | 12 pt (`Radius.sheet`) | Palette: 0 8 24 black @ 20% |
+| Composer input card | **18 pt** (`Radius.inputCard`) | 0 12  (focused: 0 18 8) black @ 10–12% |
+| Chips, badges | pill (`999`) | none |
 | Buttons | 6 pt | none |
-| Modals (license activation) | 12 pt | `0 16px 48px rgba(0,0,0,0.16)` (light) / `0 16px 48px rgba(0,0,0,0.60)` (dark) |
-| Code blocks | 6 pt | none — defined by background only |
-| Message bubbles | 12 pt (full-corner) | none |
+| Code blocks | 6 pt | none — header/body fill only |
+| User message pill | **16 pt** (live; `Radius.bubble` token is still 12) | none |
+| Inline edit card | 12 pt continuous | hairline |
+| Question card | 14 pt | accent stroke @ 25% |
 
 ### 2.5 Motion
 
-Five named animations, used consistently across the app:
-
 | Name | Duration | Curve | Used for |
 |---|---|---|---|
-| `quick` | 150 ms | `easeOut` | Hover states, focus rings, button press feedback |
-| `standard` | 250 ms | `easeOut` | Sheet present/dismiss, sidebar selection change, settings tab switch |
-| `gentle` | 300 ms | `easeInOut` | Disclosure expansion (tool result cards), patch hunk accept/reject |
-| `pulse` | 800 ms | spring(damping: 0.65, response: 0.4), repeating | Model ready chip, build pass status line, send button on ⌘⏎ |
-| `stream` | per-token | `easeOut` 80 ms on insertion | Streaming content delta — each new chunk gently slides in |
+| `quick` | 150 ms | `easeOut` | Hover, button press, copy flash |
+| `standard` | 250 ms | `easeOut` | Sheets, tab switch |
+| `gentle` | 300 ms | `easeInOut` | Disclosure, patch file expand |
+| `pulse` | spring | response 0.4, damping 0.65 | Chip / status pulses |
+| `stream` | 80 ms | `easeOut` | Token insertion |
 
-**Reduced Motion** (Accessibility): pulse → static color change; gentle → instant; stream → instant render. We respect `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion`.
+Sidebar column visibility uses a slightly longer spring (`response: 0.38, dampingFraction: 0.88`). Shimmer on live Working / Thinking labels is a 3.2 s left→right sweep (`ShimmerText`).
 
-Animation budget rule: **no animation longer than 350 ms unless it's a `pulse` (which is communicating state, not transitioning).** Anything slower than 350 ms feels sluggish during a coding session.
+**Open item:** no call site reads `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion` (or increase-contrast). Documented in §8.
+
+Animation budget: nothing longer than 350 ms unless it is communicating ongoing state (shimmer / pulse).
 
 ### 2.6 Iconography
 
-SF Symbols only, never custom raster icons. Sizes:
+SF Symbols only. Sidebar tabs are **12 pt regular** (not the old 18 medium). Composer chips 11–13 medium; timestamps 10–11; empty heroes 28–56; workspace folder 12 pt in a 28 pt accent-subtle tile.
 
-| Use | Size | Weight |
-|---|---|---|
-| Inline (in body text) | 14 pt | regular |
-| Toolbar buttons | 16 pt | regular |
-| Sidebar tab icons | 18 pt | medium |
-| Chat input bar action icons | 16 pt | regular |
-| Status line icons | 12 pt | medium |
-| Empty state icons | 32 pt | light |
-
-Icon vocabulary (locked, used consistently):
-
-| Concept | Symbol |
+| Region | Symbols |
 |---|---|
-| New conversation | `square.and.pencil` |
-| Settings | `gearshape` |
-| Search | `magnifyingglass` |
-| Project bind | `folder` / `folder.badge.plus` |
-| Worktree on | `shield.fill` |
-| Worktree off | `shield` |
-| Safe Mode | `lock.shield` |
-| Send | `arrow.up` |
-| Stop | `stop.fill` |
-| Build pass | `checkmark.circle.fill` |
-| Build fail | `xmark.octagon.fill` |
-| Model load progress | `circle.dashed` (animated rotation) |
-| Model ready | `circle.fill` |
-| Reload to apply | `arrow.clockwise` |
-| Tool call | `arrow.right.circle.fill` |
-| Tool result success | `checkmark.circle.fill` |
-| Tool result error | `xmark.circle.fill` |
-| Plan card | `list.bullet.rectangle` |
-| Sidebar tabs | `bubble.left`, `folder`, `wand.and.rays`, `cube` |
+| Sidebar nav | Chat `bubble.left.and.bubble.right` · Projects `folder` · Models `cpu` · Notes `note.text` · Scheduled `calendar.badge.clock` |
+| Sidebar chrome | Workspace `folder.fill` + decorative `chevron.up.chevron.down` · New Task / attach `plus` · Settings `gearshape` · Delete `trash` · toolbar new `square.and.pencil` |
+| Composer | Send `arrow.up` · Stop `stop.fill` · Think `brain.head.profile` · Web `globe` · Chat `bubble.left.and.bubble.right` · Agent `wrench.and.screwdriver` · Plan/Ask/Auto/Full `doc.text.magnifyingglass` / `shield.lefthalf.filled` / `pencil.and.ruler` / `bolt.fill` |
+| Transcript | Explore `magnifyingglass` · Read `book` · Write `pencil` · Edit `pencil.and.outline` · Run `terminal` · Build `hammer` · Manage `folder` · Search `globe` · Ask `questionmark.bubble` · SubAgent `shippingbox` · Undo `arrow.uturn.backward` · error `exclamationmark.triangle.fill` |
+| Other | Worktree `arrow.triangle.branch` · palette `magnifyingglass` · settings header `gearshape.2.fill` |
+
+Retired: `bubble.left`, `wand.and.rays`, `cube`, composer `lock.shield`, ToolStub `arrow.right.circle.fill`.
+
+Sources: `App/Theme/Theme.swift`, `App/Theme/FontExtensions.swift`, `App/Theme/ShimmerText.swift`, `App/Views/Sidebar/SidebarShell.swift` (`SidebarTab`), `App/Views/Sidebar/ZCodeSidebar.swift`
 
 ---
 
 ## 3. Component library
 
-Reusable building blocks. Defined once here, used everywhere. Adding a new component requires §15 amendment.
+Mounted blocks only. Unmounted leftovers (`ToolCallView`, `ThoughtProcessBlock`, `SidebarShell`, `ProcessingStatusBar`, `ZCodeStatusBar`, `PermissionsSheetView`) are not spec. New components need a §11 amendment.
 
 ### 3.1 Chip
 
-Pill-shaped, used for model picker, attached-skill display, status indicators, project bind.
+Pill used for execution mode, Chat/Agent, thinking effort, model picker.
 
 ```
-┌─────────────────────────────┐
-│ ● Qwen2.5-Coder 32B ▾       │
-└─────────────────────────────┘
+┌──────────────────┐
+│ ⊙ Ask            │
+└──────────────────┘
 ```
 
-- Height: 28 pt
-- Padding: 10 pt H × 5 pt V
-- Background: `bg.muted`
-- Border: 1 pt `fg.muted`, only on hover/focus
-- Status dot (when applicable): 8 pt circle, leading edge, 6 pt gap
-- Trailing chevron only when interactive (opens menu)
-- States: idle / hover (background shifts to `bg.subtle` in light, `bg.canvas` in dark) / pressed / disabled (opacity 0.5)
+- Height ~26 pt; padding 8 H × 5 V; capsule.
+- Default: `fg.secondary`, **no fill**. Accent foreground + `accent.subtle` fill **only while the upward menu is open** — never a permanent per-mode color.
+- Trailing chevron (`chevron.up.chevron.down`, 8 pt) on thinking + model chips.
+- Disabled while the agent is running (mode / think).
+- Model chip: pretty-printed name, or **“No model”** / **“Select model”**.
 
 ### 3.2 StatusDot
 
 ```
-●  (8 pt filled circle)
+●  (6 pt filled circle — sidebar task row)
 ```
 
-Semantic colors only:
-- `semantic.success` — ready, build pass, license valid
-- `semantic.warning` — reload needed, trial expiring soon
-- `semantic.error` — backend unreachable, build fail, license expired
-- `semantic.info` — informational state
-- `fg.tertiary` — idle / unconfigured
+| State | Treatment |
+|---|---|
+| Running | 6 pt `semantic.success` + soft glow |
+| Error | `exclamationmark.triangle.fill` (`statusLine` contains `"error"`) |
+| Idle | empty 6 pt slot (no tertiary dot) |
 
-The model picker chip uses a StatusDot at its leading edge.
+Connection / Local API panes use a similar ready/stopped dot. Capability badges may use `violet`. Do **not** put a status dot on the model chip.
 
 ### 3.3 Card
 
-Generic container for grouped content. Variants:
+**Default:** `bg.surface`, 8 pt radius, 0.5 `divider` hairline, 12–16 pt padding.
 
-**Default card:** `bg.surface` background, 8 pt radius, optional 1-pt `fg.muted` border, 16 pt padding, no shadow in dark mode, subtle shadow in light.
+**Subtle / input:** `bg.subtle`, 18 pt radius on the composer only.
 
-**Subtle card (tool result):** `bg.subtle` background, 8 pt radius, no border, 12 pt padding. Code-like content inside.
+**Disclosure:** header row toggles body; chevron rotates; `gentle` animation.
 
-**Disclosure card (expandable):** Subtle card with a header row that toggles content visibility on click. Animation: `gentle` (300 ms easeInOut). Chevron rotates 90° → 0° on expand.
+**Workspace header:** 10 pt radius, `bg.hover` fill, 28 pt accent-subtle folder tile.
 
 ### 3.4 Banner
 
-Non-modal hint, sits at top of content area. Used for "Reload model to apply", "Backend unreachable", "Trial expires in 4 days."
+Non-modal, top of the chat column.
 
-```
-⚠ Reload model to apply load changes              [Reload now] [Apply on restart] [×]
-```
+- Model-load error: `semantic.error` text + 8% tint, warning triangle, dismiss `xmark`.
+- Unloadable conversations (sidebar): warning triangle, **“N conversation(s) couldn't be loaded”**, **Show in Finder**.
+- Goal / stall / pause: `GoalStatusBanner` from `goalStatusText`.
+- Background shell: **Background shell** + command + **Kill**.
+- Transcript notices (`TranscriptNoticeCard`): compaction, goal, bg job, build verify — dismiss ×.
 
-- Background: `accent.subtle` for info, semantic-tinted for warnings
-- Padding: 12 pt
-- Dismissable with × on right (unless action-required)
-- Animation: `standard` slide-in from top
+No “trial expires” / license banners.
 
 ### 3.5 MessageBubble
 
-Three role variants:
+**User** — right-aligned pill, wrap cap **560 pt**, leading gutter 96. Fill `bubble.user` (neutral 6%, **not** `accent.subtle`). Radius 16, pad 14/10. Plain `Text` (no markdown), selection on. Hover **Copy** under the trailing edge.
 
-**User:**
-```
-                                        ┌─────────────────────────────┐
-                                        │ summarize the project       │
-                                        └─────────────────────────────┘
-```
-- Right-aligned, max 75% width
-- Background: `accent.subtle`
-- Padding: 12 pt
-- Radius: 12 pt
-- Selection enabled
+**Assistant** — left, full column, **no bubble**. Chronological run: thought → tools → prose; consecutive assistants group into one turn. Markdown via `MarkdownTextView` (h1–6, p, fenced code, lists, tables, quote, hr; inline bold/italic/links/code). Hover **Copy** under the final answer (leading).
 
-**Assistant:**
-```
-The project has three top-level targets: AgentCore, MLXBackend,
-and AgentCLI…
+**Code block:** LANG + **Copy**/**Copied**; scrollable mono; dark fills ≈ `#1F1F1F`/`#141414`. **Wave U1:** `SyntaxHighlighter` keyword tables (~15 languages). Patch hunks stay unhighlighted.
 
-  → read_file path: README.md
-  → grep_code pattern: "InferenceBackend"
-```
-- Left-aligned, full width minus 80 pt right margin
-- No bubble background (just inline text)
-- Tool call stubs inline as part of the message
-- Selection enabled, markdown rendered
+### 3.6 ActivityRow (`Verb · Status`)
 
-**Tool result (DisclosureCard variant):**
-```
-  ✓ tool result · tc_4cd2                                            ▾
-  ┌─────────────────────────────────────────────────────────────────┐
-  │     1 | # AgentOS                                                │
-  │     2 |                                                          │
-  │     3 | A local macOS coding agent…                              │
-  └─────────────────────────────────────────────────────────────────┘
-```
-- DisclosureCard format
-- Status icon (`checkmark.circle.fill` semantic.success / `xmark.octagon.fill` semantic.error)
-- Tool call ID in mono caption
-- Content in mono body inside subtle card
-- Expandable; collapsed by default after 5+ tool results have been added
-
-### 3.6 ToolStub (inline)
-
-Compact representation of a tool call within an assistant message:
+Replaces the retired ToolStub (`→ toolName  args≤60`).
 
 ```
-  → read_file  path: README.md
+  ⌕  Explore  ·  src/Auth.swift
+  ✎  Edit     ·  1 edit
+  [box] SubAgent  general-purpose  ·  list downloads
 ```
 
-- `arrow.right.circle.fill` icon, accent color
-- Tool name in mono caption emphasis
-- Args truncated (first 60 chars) in mono caption
-- Click to expand args + result inline (rare — usually the result card has it)
+13 pt. Verb `accent` semibold · middot `fg.tertiary` · status `fg.secondary`. Copy: **Queued…** / ArtifactLabel / **Failed** / `1 file` · `1 command` · `1 edit` · `search done`. Running: mini ProgressView. Expand → Input/Output (600/800 cap + **Show full I/O**); `list_directory` → table. Consecutive non-edit tools collapse under **Tools · {summary}** (`N · M running` / `failed` / `N completed`); auto-expand while live. SubAgent: `shippingbox` + type in `subagent` blue + **Kill** while running. File edits use §3.7.
 
-### 3.7 PlanCard
-
-Visual step tracker rendered when the agent calls `create_plan`:
+### 3.7 InlineEditCard
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│ ▾ Plan                                                    │
-├──────────────────────────────────────────────────────────┤
-│ ✓ Read project README                                     │
-│ ✓ List Sources/ directory                                 │
-│ ◯ Identify backend protocol               ← in progress   │
-│ ◯ Summarize architecture                                  │
-└──────────────────────────────────────────────────────────┘
+  ▾  App/Views/ChatView.swift     Applied    +24  −3    [Undo]
+     │ − old line
+     │ + new line
 ```
 
-- DisclosureCard with header "Plan" + step count
-- Each step: icon (filled = done, ring = pending, half-filled = in-progress)
-- In-progress step pulses gently (subtle accent tint background)
-- Updates animate `gentle` when `update_todo` is called
+Path (12.5 mono) · status / **Undone** · `+N` `−M` · chevron. Expand → `CodeDiffBlock` (tinted `+`/`−`, cap 40). Auto-open if running or has removals. **Undo** when `hunk_id` present. Surface 12 pt, `bg.surface` + hairline.
 
-### 3.8 PatchHunk
+**Wave U1 — turn-end change summary** (`TurnChangeSummaryView`): one card after a mutating turn (paths + +/−). **Review** opens the existing diff; **Undo** posts rewind / hunk-reject. Complements per-file Undo.
 
-Per-hunk diff view used in the Patch Review Sheet:
+### 3.8 PatchFile
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│ Sources/AgentCore/Tools/ReadFileTool.swift                    │
-│ @@ -42,7 +42,7 @@                                             │
-│  42      let url = resolvePath(path, base: context.workingDirectory) │
-│  43      let data: Data                                       │
-│- 44      do { data = try Data(contentsOf: url) }              │
-│+ 44      do { data = try Data(contentsOf: url, options: .mappedIfSafe) } │
-│  45      catch { return ToolResult(content: "...", isError: true) } │
-│                                          [Reject hunk] [Accept] │
-└──────────────────────────────────────────────────────────────┘
-```
+Per-**file** decision row in the Review patch sheet. Hunks are display-only.
 
-- File path header in mono caption emphasis
-- Line numbers in `fg.tertiary`, mono small
-- Added lines: `semantic.success` background tint (10% opacity)
-- Removed lines: `semantic.error` background tint (10% opacity)
-- Syntax highlighting via SwiftTreeSitter (P1 polish if Tree-sitter ships on time; plain mono otherwise)
-- Per-hunk Accept / Reject buttons
+- File header: chevron, `doc.text`, mono path, hunk-count capsule, **Reject** / **Accept** (toggle back to pending).
+- 3 pt leading bar: divider / success / error by decision.
+- Hunk: `@@ … @@` on `accent.subtle`; unified +/−/context at 10% semantic tint; 12 pt mono; **no line numbers**; **no syntax highlight**.
+- **Intentionally no per-hunk Accept/Reject.** AgentCore applies whole files; hunk buttons would lie about granularity.
 
 ### 3.9 Button
 
-Three variants by emphasis:
+| Variant | Treatment | Use |
+|---|---|---|
+| **Primary** | `accent` fill, white label (`PrimaryButtonStyle` / `.borderedProminent` tinted accent) | Apply selected, Accept, Approve & Run, Close (settings), Once |
+| **Secondary** | bordered / `bg.muted` | Accept all, Always, Stay in Plan |
+| **Plain** | transparent, `fg.primary` / secondary | Continue, Expand all, Cancel |
+| **Destructive** | `semantic.error` text | Reject, Discard, Delete, Never |
+| **Icon circle** | 32 pt circle | Send (`accent` if draft non-empty, else muted disabled); Stop (red `stop.fill`) |
 
-| Variant | Background | Foreground | Use |
-|---|---|---|---|
-| **Primary** | `accent` | `#FFFFFF` | One per view max — Send, Continue, Buy a license |
-| **Secondary** | `bg.muted` | `fg.primary` | Multiple per view OK — Cancel, Reload, Apply on restart |
-| **Plain** | transparent | `fg.primary` | Inline actions — Bind project, Edit title |
-| **Destructive** | transparent → `semantic.error.subtle` on hover | `semantic.error` | Delete, Discard worktree, Reject patch |
+Composer send is the circular icon, **not** a labeled “Send ↑”. Settings Close is prominent accent, Esc / `.cancelAction`.
 
-All buttons: 32 pt height, 16 pt horizontal padding, 6 pt radius, 14 pt body weight medium. Disabled = opacity 0.5, no hover.
-
-### 3.10 InputBar
-
-The chat composer.
+### 3.10 InputBar (`InputBarViewV2`)
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ Ask the agent…                                                │ │
-│ │                                                                │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-│ [⌘ Plan] [⌘ Safe Mode]                                  [Send ↑] │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│ Ask for follow-up changes                                            │
+│                                                                      │
+│ [+] [Ask ▾] [🌐] [ Agent ]  ██ 23/32.8k · 0%     [brain Medium] [Select model ▾] (↑) │
+└──────────────────────────────────────────────────────────────────────┘
 ```
 
-- TextEditor in `bg.subtle` card, 8 pt radius
-- Min height: 56 pt (single line padding); grows to max 200 pt then scrolls
-- Placeholder in `fg.tertiary`, fades on focus
-- Attached skill chips above the editor as a horizontally-scrolling row
-- Below editor: row of toggles (Plan mode, Safe Mode) on the left, Send button on the right
-- Send button: primary, 36 pt height, `arrow.up` icon. Replaced with red Stop button while running.
+- Fluid card, **18 pt** radius, `bg.subtle` + shadow; drop-target hairline.
+- Control is SwiftUI **`TextField(..., axis: .vertical)`** — not `TextEditor`.
+- Editor min 36 / max 100 / max 6 lines; card min height 76.
+- Placeholder idle: **“Ask for follow-up changes”**. Running: **“Keep typing to queue a follow-up…”**.
+- Keys: Return send; Shift+Return newline; ↑/↓ prompt history (or slash/mention nav); Esc clears slash draft.
+- **Left chips:** `plus` (NSOpenPanel **Attach files or folders**) · mode chip (Plan / Ask / Auto / Full) · web `globe` · Chat/Agent capsule · context meter.
+- **Right chips:** thinking (`brain.head.profile` + Off/Low/Medium/High/Max, only if `ThinkingCapability`) · model chip · send/stop circle.
+- Running + non-empty draft: red Stop **and** accent **Send interjection** (mid-turn steer, not a queued next user turn).
+- @ mentions: popup **“@ context — ↑/↓ Enter pin · Esc dismiss”**. Slash: upward menu of 30+ commands.
 
 ### 3.11 Sidebar Row
 
 ```
-   ✦ Conversation title here                  4m ago
-     First user message snippet that wraps…
+  ●  Please implement login                         4h
+     previous answer
 ```
 
-- 60 pt minimum height, 12 pt vertical padding
-- 16 pt horizontal padding
-- Hover: `bg.muted` fill
-- Selected: `accent.subtle` fill, 3 pt accent leading edge bar
-- Title in body emphasis, single line, truncated
-- Snippet in caption, 2-line max, `fg.secondary`
-- Right side: relative timestamp in caption, `fg.tertiary`
-- Optional leading icon if conversation has special state (worktree active, etc.)
+- 6 pt status slot + title (1 line, empty → **Untitled**) + preview (1 line, 72 chars + “…”) + relative time (`now` / `Nm` / `Nh` / `yday` / `Nd` / `MMM d`) at 10 pt tertiary.
+- Preview = last visible assistant (chrome-stripped) else last user.
+- Selected / hover: 8 pt `bg.hover` fill. **No** accent leading bar. **No** 2-line snippet.
+- Context menu: Move to project · Pin/Unpin · Rename · Archive · Delete · Move down.
+- Rename is an inline `TextField` (Return commit, Esc cancel, blur commit).
+
+### 3.12 QuestionCard + approval sheet
+
+`ask_user` is an inline card **above the composer** (not an alert): 16 pt question, option capsules, **Type your answer…** / **Or type a custom answer…**, queue badge **N more question(s) waiting**.
+
+`ShellApprovalSheet` titles: **Allow shell command?** / **Dangerous command** / **Allow MCP tool?** / **Allow subagent?** / **Allow {tool}?** Reason + mono detail. **Once** / **Always** · **Never** / **Deny**. Dangerous: Always/Never disabled — **Dangerous commands are never remembered — Always acts as Once.** Esc/dismiss → deny + drain.
+
+**Wave U1:** **Allow for session** (`SessionGrantStore`); Tab/arrows + Enter; prefix chips; subagent origin line. Existing four buttons and dangerous rules stay.
+
+Sources: `App/Views/Chat/InputBarViewV2.swift`, `MessageBubbleViewV2.swift`, `ZCodeActivityLineView.swift`, `InlineEditCardView.swift`, `CodeBlockView.swift`, `PatchReviewSheetV2.swift`, `QuestionCardView.swift`, `ShellApprovalSheet.swift`, `App/Views/Sidebar/ZCodeSidebar.swift`
 
 ---
 
 ## 4. Screens
 
-Every screen specified with layout, primary actions, and where the visual hierarchy puts emphasis.
+### 4.1 First launch (no onboarding)
 
-### 4.1 Onboarding (2 screens after the cut)
+Onboarding Screen 1 (Welcome + Hardware) and Screen 2 (Pick a starter model) are **retired**. `VibeCoderApp` forces `hasCompletedOnboarding = true` and paints `RootView`.
 
-**Screen 1: Welcome + Hardware**
+1. Brief clear splash while `SettingsStore` loads.
+2. Main window (min 960 × 620). No default size is set — first-open size is AppKit/SwiftUI default (the old “opens at 1280 × 800” is not implemented).
+3. Empty chat hero (§4.6) + composer. If no backend is up: **Connect a model server** + **Open Connection settings** / loopback **Use**.
 
-```
-┌───────────────────────────────────────────────────────────────┐
-│                                                                │
-│                      AgentOS NEW DAY                           │
-│            Local-first coding agent · v0.1.0                   │
-│                                                                │
-│      Nothing leaves your Mac. Ever.                            │
-│                                                                │
-│      Your Mac: M3 Max · 128 GB unified memory                  │
-│      You can run any model in the catalog smoothly.            │
-│                                                                │
-│              [ Send anonymous crash reports ☐ ]                │
-│                                                                │
-│                                          [ Continue ]          │
-│                                                                │
-└───────────────────────────────────────────────────────────────┘
-```
+License / trial lock screens do not exist (MIT; no key field).
 
-- Display title centered
-- Hardware detected automatically, shown as static line (not editable)
-- Crash reports toggle off by default, label in caption explaining what's sent
-- Continue → primary button, bottom-right
+### 4.2 Main window
 
-**Screen 2: Pick a starter model**
+Single `NavigationSplitView` (sidebar + detail). No inspector column. No width-based collapse.
 
 ```
-┌───────────────────────────────────────────────────────────────┐
-│  Pick a model to start with                                    │
-│  You can change this anytime in the model picker.             │
-│                                                                │
-│  ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐  │
-│  │  Small          │ │  Medium         │ │  Large           │  │
-│  │  fastest        │ │  most capable   │ │  for big Macs    │  │
-│  │  Qwen2.5-Coder  │ │  Qwen3.6 35B-A3B│ │  Qwen3-Coder-Next│  │
-│  │  7B MLX         │ │  MLX MoE        │ │  80B GGUF        │  │
-│  │                 │ │                 │ │                 │  │
-│  │  4 GB · tool✓   │ │  17 GB · tool✓  │ │  48 GB · tool✓  │  │
-│  │                 │ │                 │ │                 │  │
-│  │  [ Download ]   │ │  [ Download ]   │ │  [ Download ]   │  │
-│  └─────────────────┘ └─────────────────┘ └─────────────────┘  │
-│                                                                │
-│  [ Skip — I'll connect to LM Studio or EXO ]      [ Continue ] │
-│                                                                │
-└───────────────────────────────────────────────────────────────┘
+┌──────────────────┬────────────────────────────────────────────────────┐
+│ [📁] Default     │  Please implement login                        ▾   │
+│     Workspace    │                                                    │
+│ Chat             │           [VB outline]                             │
+│ Projects         │        Pick a model to start                       │
+│ Models        15 │        Detected on this Mac                        │
+│ Notes            │        ● Ollama          :11434   Use              │
+│ Scheduled        │                                                    │
+│ TASKS          ▾ │                                                    │
+│ + New Task       │  ┌──────────────────────────────────────────────┐  │
+│ Yesterday        │  │ Ask for follow-up changes                    │  │
+│  Please impl… 4h │  │ +  Ask  🌐  Agent  23/32.8k · 0%   Select ▾ ↑│  │
+│                  │  └──────────────────────────────────────────────┘  │
+│ Delete all       │                                                    │
+│ Settings         │                                                    │
+└──────────────────┴────────────────────────────────────────────────────┘
 ```
 
-- Three cards presented as equals — no "recommended" framing. Cards that won't fit in the detected RAM are dimmed with an inline "needs <X> GB" note, but the card itself is not hidden or de-prioritized
-- Each card: size category + honest one-line descriptor + model name + capability badges + primary Download button
-- Skip option as plain text button below cards
-- Continue is enabled either when a model is downloading (background) or Skip is hit
+**Chrome:** `WindowGroup`, empty title, unified toolbar, transparent titlebar, `fullSizeContentView`. Min 960 × 620. Sidebar 240 / 280 / 360, `bg.subtle`. Toolbar = system sidebar toggle + `square.and.pencil` only (**no** model/search/settings chips). Detail: Chat (legacy `.code` too), Projects, Models, Notes, Scheduled. `openedProject` overlay wins. Cluster is not in the nav.
 
-### 4.2 Main window (the workspace)
+**ZCodeSidebar**
 
-```
-┌─────────────────┬──────────────────────────────────────────────┐
-│ AgentOS         │ ● Qwen2.5-Coder 32B ▾    🔍   ⚙️   ✎          │
-├─────────────────┼──────────────────────────────────────────────┤
-│ [💬][📁][✦][🧊] │ Project audit                    📁 my-app   🛡 │
-│                 │                                               │
-│ Conversations   │  ┌───────────────────────────────────────┐   │
-│                 │  │ summarize the project                 │   │
-│ ✦ Project audit │  └───────────────────────────────────────┘   │
-│   4m ago        │                                               │
-│   summarize…    │  The project has three top-level targets:    │
-│                 │  AgentCore, MLXBackend, AgentCLI.            │
-│   Refactor      │                                               │
-│   2h ago        │  → read_file  path: Package.swift            │
-│   replace the…  │                                               │
-│                 │  ✓ tool result · tc_4cd2              ▾     │
-│                 │                                               │
-│                 │  → grep_code  pattern: "InferenceBackend"    │
-│                 │                                               │
-│                 │  ✓ tool result · tc_4cd3              ▾     │
-│                 │                                               │
-│                 │  The AgentCore target has 30 Swift files…    │
-│                 │                                               │
-│                 ├──────────────────────────────────────────────┤
-│                 │ ⚡ Iteration 4/30 · grep_code ✓ · build ✓     │
-│                 │ ┌───────────────────────────────────────────┐ │
-│                 │ │ Ask the agent…                            │ │
-│                 │ └───────────────────────────────────────────┘ │
-│                 │ [Plan] [Safe]              [Send ↑]           │
-└─────────────────┴──────────────────────────────────────────────┘
-```
+1. **Workspace header** — folder tile + name (`openedProject` / last path component / **Default Workspace**) + mono 10 path + decorative chevron. Tap → Projects.
+2. **Primary nav** (text rows, 12–12.5 pt): Chat / Projects / Models (count capsule when `availableModels > 0`) / Notes / Scheduled. Selected = `bg.hover` 8 pt rect, **no** accent underline.
+3. **TASKS** disclosure (10 pt bold small-caps, tracking 0.8) + accent **+ New Task**. Collapse persists in `@AppStorage("sidebarRecentsCollapsed")`.
+4. **Pinned** disclosure (if any), then time buckets: Today · Yesterday · Past 7 days · Past 30 days · Older.
+5. **Footer:** **Delete all** (alert **Delete all tasks?** / **Delete All**) + **Settings**.
 
-Layout proportions:
-- Sidebar: 260 pt wide (resizable 220 – 360 pt)
-- Detail pane: fills remaining
-- Top toolbar: 44 pt high
-- Chat header: 56 pt high (model chip + title + project chip + safe mode toggle)
-- Transcript: fills, scrolls
-- Status line: 28 pt high
-- Input bar: 88 pt high baseline, grows up to 200 pt
+New Task / ⌘N / toolbar immediately create + select a conversation. `NewTaskLandingViewV2` only appears when the list is already empty.
 
-Sidebar tab strip (top): four icon tabs (Conversations / Projects / Skills / Models). Selected tab gets accent underline + accent foreground. Tab content fills the rest of sidebar.
+**Chat surface:** slim title + chevron → Rename, Duplicate, Export/Copy as Markdown, Remote control…, Isolate work in git worktree, Delete. No header model/project/Safe pills. Transcript + composer share `contentWidth` (320–1040, gutters 24–96). Live turn: **Working for Ns** / **Worked for Ns** (seconds, then whole minutes) → orch caption → `ReasoningBlockView` (**Thinking · Ns** / **Thought for Ns** / **Thought**) → activity / edit cards → answer. Plan is a **floating** 200–320 card (`StickyPlannerView`): STEPS/COMPLETE + todos; idle Plan + todos show **Review checklist, then Approve to implement (Ask mode) or Stay in Plan.** · **Stay in Plan** / **Approve & Run**. `ask_user` sits above the composer; patch / approval / worktree are sheets.
 
-### 4.3 Settings sheet (5 tabs after the cut)
+### 4.3 Settings sheet
 
-Tabs along the top, content fills below. 720 × 520 pt default size, resizable.
+Modal sheet on `RootView` (⌘,, sidebar **Settings**, palette, `/settings`). **Not** a `Settings` scene.
 
-**Tab 1: General**
+- Size: min 920 × 620, ideal **980 × 700**, max 1100 × 820. Nav column 228.
+- Header: gear tile + **Settings** / **Configure VibeCoder for your Mac** + **Search settings**.
+- Footer: **Close** (Esc). Default tab: **Agent**. Deep-link via `initialTabRaw` (`connection`, `mcp`, …).
 
-- Appearance: System / Light / Dark (segmented)
-- Font size: Small / Default / Large (segmented)
-- Agent trace: toggle off; below in caption: "writes per-iteration JSONL trace to ~/Library/Application Support/…"
+**11 tabs in 4 groups** (`SettingsTab`):
 
-**Tab 2: Connection**
+| Group | Label | `rawValue` | Icon | Subtitle |
+|---|---|---|---|---|
+| Agent | Agent | `agent` | `text.bubble.fill` | Instructions & behavior |
+| Models & network | Connection | `connection` | `network` | Local servers & APIs |
+| Models & network | Model & Backend | `model` | `cpu` | Providers & sampling |
+| Models & network | MCP Servers | `mcp` | `server.rack` | External tools |
+| Workspace | Tools | `tools` | `wrench.and.screwdriver` | Built-in capabilities |
+| Workspace | Context | `context` | `rectangle.compress.vertical` | Window & compact |
+| Workspace | Memory | `memory` | `brain.head.profile` | MEMORY & DECISIONS |
+| System | Appearance | `general` | `paintbrush.fill` | Theme & type |
+| System | Privacy | `privacy` | `lock.shield` | Data & backup |
+| System | Advanced | `advanced` | `gearshape.2` | Chrome filter & debug |
+| System | About | `about` | `info.circle` | Version & credits |
 
-- Active backend: picker (LM Studio / EXO / llama.cpp / MLX)
-- For each backend, host + port + "Test connection" button with inline status
-- llama.cpp section: optional path override for `llama-server` binary
+**What they host:** Agent = system-instructions editor. Connection = LM Studio / EXO / oMLX / Ollama / Unsloth / Custom / Local API (+ Xcode MCP) — no llama.cpp spawn, no MLX pane. Model & Backend = engine strip + Two-Model Mode (**no** load/sampling sliders). MCP = list/probe/OAuth. Tools = Plan/Ask/Auto/Full, Safe/Headless, seatbelt, verify, Chat mode, allow-lists, grants. Context = max tokens + compact slider. Memory = MEMORY.md / DECISIONS.md. Appearance = theme + type + notifications. Privacy = issue link + export/import/clear (**no license**). Advanced = clean model chrome. About = version + credit (**no Sparkle**).
 
-**Tab 3: Models** (NEW — load + inference + system prompt nested here)
+**Wave U1 — Hooks** (`hooks`, Workspace, “Lifecycle scripts”): `HooksSettingsView` + `HooksConfigStore`. Seven events (matcher / command / args / timeout / background) at project `.vibecoder/hooks.json` and user `~/.vibecoder/hooks.json`. Applies to **new sessions**.
 
-```
-┌───────────────────────────────────────────────────────────────┐
-│  Model: [Qwen2.5-Coder 32B Instruct ▾]                         │
-├───────────────────────────────────────────────────────────────┤
-│  ⚠ Reload model to apply load changes      [Reload now] [×]   │
-├───────────────────────────────────────────────────────────────┤
-│  LOAD SETTINGS  (require reload)                               │
-│   Context length        [────────●──] 32,768  / 262,144 max    │
-│   GPU offload layers    [─────────●─] 99 / 99                  │
-│   Flash attention                          [✓]                  │
-│   KV cache type         ( f16 │ q8_0 │ q4_0 )                  │
-│                                                                │
-│  INFERENCE SETTINGS  (apply next turn)                         │
-│   Temperature           [──●────────] 0.30                     │
-│   Top-P                 [─────────●─] 0.95                     │
-│   Top-K                 [──●────────] 40                       │
-│   Repeat penalty        [──●────────] 1.05                     │
-│   [ Reset to Coder defaults ]  [ Reset to Balanced ]           │
-│                                                                │
-│  SYSTEM PROMPT OVERRIDE                                        │
-│   ┌──────────────────────────────────────────────────────┐    │
-│   │ [empty — uses global system prompt]                  │    │
-│   │                                                       │    │
-│   └──────────────────────────────────────────────────────┘    │
-└───────────────────────────────────────────────────────────────┘
-```
-
-Sliders use the `accent` thumb, `bg.muted` track, `accent.subtle` fill on left of thumb. Live value to the right in mono caption.
-
-Reload banner appears only when a load setting is dirty (changed from current spawned value). Dismiss with × means "don't reload now; will apply on next launch."
-
-**Tab 4: Privacy & License**
-
-- License key field + status (Trial: 13 days remaining / Valid through forever / Expired)
-- "Deactivate this Mac" button (v1.1; placeholder text in v1)
-- Crash reporting toggle with detailed caption: what's sent, what's never sent, link to privacy policy
-- Conversation backup: Export all / Import / Clear all
-
-**Tab 5: About**
-
-- App icon (large) + version + build
-- "Check for updates" button (triggers Sparkle check)
-- Credits: open source dependencies (mlx-swift, llama.cpp, SwiftUI, Sparkle, etc.)
-- Legal: privacy policy link, terms link
+Retired 5-tab set: General / Connection / Models (load+inference) / Privacy & License / About.
 
 ### 4.4 Patch Review Sheet
 
-Full-window sheet, modal to its parent window.
+Trigger: Ask mode (`ExecutionMode.build`) + `apply_patch` → `PatchReviewCoordinator.pendingBatch`. Esc / dismiss = reject all (fail-closed).
 
 ```
-┌────────────────────────────────────────────────────────────────┐
-│ Review patch                              [Reject all] [Accept]│
-├────────────────────────────────────────────────────────────────┤
-│ Sources/AgentCore/Tools/ReadFileTool.swift  (1 hunk)            │
-│ ┌──────────────────────────────────────────────────────────┐   │
-│ │ @@ -42,7 +42,7 @@                                         │   │
-│ │  let url = resolvePath(path, base: cwd)                   │   │
-│ │  let data: Data                                            │   │
-│ │- do { data = try Data(contentsOf: url) }                  │   │
-│ │+ do { data = try Data(contentsOf: url, options: .mapped)} │   │
-│ │  catch { return ToolResult(content: "...", isError: true)}│   │
-│ └──────────────────────────────────────────────────────────┘   │
-│                                          [Reject hunk] [Accept] │
-│                                                                 │
-│ Sources/AgentCore/Tools/WriteFileTool.swift  (1 hunk)           │
-│ ┌──────────────────────────────────────────────────────────┐   │
-│ │ @@ -28,3 +28,3 @@                                         │   │
-│ │- try content.write(to: url, atomically: true)             │   │
-│ │+ try content.write(to: url, atomically: true, encoding:.utf8) │
-│ │  return ToolResult(content: "Wrote …", mutatedPaths:[path])│   │
-│ └──────────────────────────────────────────────────────────┘   │
-│                                          [Reject hunk] [Accept] │
-└────────────────────────────────────────────────────────────────┘
+┌ Review patch                          [Reject all] [Accept all] ┐
+│  N files · M hunks (read-only) · K of N files decided           │
+│  ▾  Sources/…/ReadFile.swift          1 hunk   [Reject][Accept] │
+│     @@ -42,7 +42,7 @@                                           │
+│     − do { data = try Data(contentsOf: url) }                   │
+│     + do { data = try Data(contentsOf: url, options: .mapped) } │
+│                         [Cancel]  [Always allow folder] [Apply selected] │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-Layout:
-- 880 × 640 default, resizable to as big as the screen
-- Top bar: title + global Reject all / Accept buttons
-- Scrollable list of file sections, each containing one or more PatchHunk components
-- Accept all / Reject all keyboard: ⌘A / ⌘R
-- Per-hunk Accept/Reject: ←/→ to step through hunks, Y/N to decide
-- Dismiss: Esc rejects all unsaved decisions
+- min **760 × 540** (not 880 × 640).
+- Status: `N files · M hunks (read-only) · K of N files decided`.
+- Footer: **Cancel** · **Always allow folder** (optional, `RememberedGrants`) · **Apply selected** (disabled if 0 accepted) · “N files will be applied”.
+- **Decision (locked):** file-level only. Per-hunk Y/N, ⌘A/⌘R, ←/→ hunk step **removed** because apply is per file.
 
 ### 4.5 Worktree Review Sheet
 
-Similar layout to Patch Review but shows worktree-vs-main state.
+Header worktree toggle **on** → enable; **off tap** → this sheet (`git status` / `diff`).
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│ Worktree: agentos/a4f2c3                  4 files modified     │
-├────────────────────────────────────────────────────────────────┤
-│ Sources/AgentCore/Tools/ReadFileTool.swift                      │
-│   +12  −3                                                       │
-│   [ View diff ]                                                 │
-│                                                                 │
-│ Sources/AgentCore/Tools/WriteFileTool.swift                     │
-│   +5   −1                                                       │
-│   [ View diff ]                                                 │
-│                                                                 │
-│ Tests/AgentCoreTests/NewToolsTests.swift  (new file)            │
-│   +48                                                           │
-│   [ View diff ]                                                 │
-│                                                                 │
-│ DEBT.md  (new file)                                             │
-│   +3                                                            │
-│   [ View diff ]                                                 │
-├────────────────────────────────────────────────────────────────┤
-│                  [Discard]  [Continue working]  [Merge into main]│
-└────────────────────────────────────────────────────────────────┘
-```
-
-- Merge = `git merge --squash`, prompts for commit message
-- Discard = delete worktree + branch
-- Continue working = dismiss; worktree stays for next agent turn
+- 720 × 600. Title **Worktree review** + branch mono. **Expand all** / **Collapse all**.
+- Rows: kind icon + path + new/deleted/modified pill + +N −M; expand inline +/− diff (no syntax highlight).
+- Commit field **“Commit message…”**. Actions: **Continue** (dismiss) · **Discard** (confirm) · **Merge into main** (⌘↩, confirm). Errors: alert **Worktree error** / OK.
 
 ### 4.6 Empty states
 
-Every list has an empty state that's helpful, not just blank:
-
-**Conversations sidebar (empty):**
-```
-       💬
-
-   No conversations yet.
-
-   ⌘N to start one.
-```
-
-**Projects sidebar (empty):**
-```
-       📁
-
-   No projects bound.
-
-   Bind a folder to a conversation
-   from the chat header.
-```
-
-**Skills sidebar (empty):**
-```
-       ✦
-
-   182 bundled skills.
-
-   They auto-attach based on what you're
-   working on. Pin one to keep it active.
-```
-
-**Models sidebar (empty):**
-```
-       🧊
-
-   No models downloaded yet.
-
-   [ Browse catalog ]
-```
-
-All centered, icon at 32 pt in `fg.tertiary`, body text in caption-emphasis. One action where it makes sense.
-
----
-
-### 4.7 Models sidebar tab
-
-Two sub-tabs at the top: **Library** (your downloaded models) and **Discover** (HuggingFace browser).
-
-**Library** — your downloaded models. Nothing more, nothing less. No "recommended for you" section, no curated suggestions — we trust the user to find what they want via Discover or have already picked from the onboarding starter cards.
-
-- Each row shows: status dot (ready / downloading / paused / error), display name, backend tag (MLX / GGUF), size, primary action (Use), secondary actions (Settings — opens the Models settings tab pre-selected to this model; ··· menu = Delete, Reveal in Finder, Show metadata)
-- Active model highlighted with accent leading bar (same pattern as conversation row selection)
-- Empty Library state per §4.6 — points to Discover
-
-**Discover** — HuggingFace browser. Power user surface.
-
-- Search bar at top — free text
-- Filter chips: Backend (All / GGUF / MLX) · Size (Any / <10GB / 10–30GB / 30+) · Sort (Most downloaded / Recent / Trending)
-- Results render as repo cards, expandable to show all available quantizations
-- Per-quantization row: file name, size, hardware-fit indicator (✓ green if fits / ⚠ amber if tight / ✗ red if won't fit), Download button
-- Community uploads (anyone not on our curated whitelist) carry a "⚠ Community upload — use at your own risk" line in `semantic.warning`
-- Split-file GGUF auto-detected (looks for `-00001-of-N` pattern); on download, fetches all parts as a single job
-- Auto-config behavior: known model families (Qwen, Gemma, Llama, DeepSeek, Mistral, Phi) get pre-configured context length, sampling defaults, chat template, stop sequences. Unknown families fall back to sensible generic defaults with a "Verify settings in Models tab" hint shown after download completes.
-
-**Compatibility detection (honest scope):**
-
-| Detection | How |
+| Surface | Copy |
 |---|---|
-| Fits in your RAM | file size + safety margin vs. detected memory |
-| Tool calling supported | model family heuristic (allow-list of families known to handle function-calling cleanly) |
-| Split-file | filename pattern check before download |
-| Chat template available | embedded GGUF metadata if present |
-| Vision capability | tagged in HF metadata when present; otherwise "unverified" |
+| Sidebar tasks | **No tasks yet** (12 pt tertiary). No ⌘N hint, no bubble icon |
+| Zero conversations (detail) | Outline mark 88 · **Start a new task** 24 semibold · **Click the button below to begin. Your new task will appear in Recents.** · 84 pt + circle · **Or press ↩ Return** |
+| Chat, no backend | Outline 112 · **Connect a model server** · **Start LM Studio, Ollama, or oMLX on this Mac, then open Settings → Connection and Test.** · **Detected on this Mac** rows (**Use**) · **Open Connection settings** |
+| Chat, backend, no selection | **Pick a model to start** · **Use the model chip in the composer (bottom-right) to select a tool-capable coding model.** |
+| Chat, model ready | **What are we working on?** · **Bind a project folder, describe a task, and the agent will plan, edit, and verify on your machine.** |
+| Projects | **Looking to start a project?** + `folder.fill.badge.plus` + **New Project** capsule |
+| Notes | **No notes yet** / **Click + to create one. Notes are markdown — …** |
+| Scheduled | **No schedules yet** + in-app-only caveat + **New schedule** |
+| Models | **No models reported. Start Ollama or oMLX (or another backend), then Refresh.** |
+| Palette | **No matching commands** |
+| Settings search | **No matching settings** |
 
-For unknown families, badges read "unverified" — no false confidence.
+Retired empty copy: “No conversations yet. ⌘N to start one.” / “No projects bound.” / “182 bundled skills.” / “No models downloaded yet. [Browse catalog]”.
 
-**Download lifecycle in both tabs:**
+### 4.7 Models pane
 
-- Click Download → row transitions to in-progress state with Cancel + Pause buttons
-- Download progress shown as filled bar with bytes/total + ETA
-- Chunked, parallel (4 chunks per file for big files), SHA-256 verified on completion
-- Pause/resume survives app restart (resume data persisted)
-- Failed downloads: row turns `semantic.error`, error message inline, Retry button
-- Completed downloads: row moves from in-progress section to DOWNLOADED in Library
+`ModelsLandingView` — **not** Library / Discover / HuggingFace.
 
-**Sources policy:**
+- Header **Models** + **Refresh**. Blurb: models come from the active HTTP backend.
+- Active-backend card + selected id. Rows: display name, wire id, **Use** / **Active**.
+- Catalog.json, GGUF download lifecycle, split-file SHA, hardware-fit badges: **not implemented**. Cluster/EXO catalog lives in `ClusterView` (unmounted nav).
 
-- Library curated entries come from `agentos.tools/catalog.json` (refreshed at app launch, stale-while-revalidate)
-- Discover hits the public HuggingFace API (`https://huggingface.co/api/models`)
-- No auth required for either; both work fully offline once models are downloaded
+### 4.8 Command palette
+
+⌘K / View → Command Palette. Dim 35% black, 520-wide, 12 pt continuous card, `bg.surface`, shadow 24/8. Placeholder **Search commands…**. Esc / click dim dismisses.
+
+**1.0.5 baseline:** 12 flat items; Return runs the first match; category shown as a trailing capsule; no arrow highlight.
+
+**Wave U1 (current spec):** section headers by category, arrow-key selection + Enter, ~22 items.
+
+| Category | Items |
+|---|---|
+| Chat | New Conversation · Clear Conversation · Compact Conversation · Session Info · Fork Conversation · Export conversation · Stop agent |
+| Safety | Enable/Disable Safe Mode · Cycle Permission Mode (⇧Tab) · Plan Mode |
+| App | Open Settings · Projects · Scheduled Tasks · Notes · Models · New project |
+| Model | Choose Model |
+| Navigation | Previous task · Next task |
+| Appearance | Toggle theme |
+
+Filter: substring on title, subtitle, category, keywords. Empty query lists all, grouped.
+
+Sources: `App/Views/RootView.swift`, `App/Views/Sidebar/ZCodeSidebar.swift`, `App/Views/ChatView.swift`, `App/Views/Settings/SettingsViewV2.swift`, `App/Views/CommandPalette/CommandPaletteView.swift`, `App/Views/Chat/NewTaskLandingViewV2.swift`, `App/Views/Common/BrandMarkOutline.swift`, `App/VibeCoderApp.swift`
 
 ---
 
 ## 5. States — empty / loading / error / success
 
-For every interactive surface, the four states are explicit.
-
 ### 5.1 Model picker chip
 
 | State | Visual |
 |---|---|
-| **No model selected** | `fg.tertiary` dot, "no model" in mono small, `fg.tertiary` |
-| **Loading (% progress)** | `accent` dot animated rotation, "Qwen2.5-Coder 32B · loading 73%" in mono small. Background subtly fills `accent.subtle` from left → right matching progress. |
-| **Ready** | `semantic.success` dot, single `pulse` animation on transition, then static. Model name only. |
-| **Active (currently streaming)** | `semantic.success` dot with subtle continuous pulse |
-| **Unreachable** | `semantic.error` dot, "backend unreachable" in `semantic.error`. Click → opens Connection settings. |
+| Nothing available | **No model**, `fg.tertiary` |
+| Available, none selected | **Select model** + chevron |
+| Selected | Pretty name (`.gguf` / split-file / quant trimmed) |
+| Two-model orchestration | Read-only pill `orch → worker` (picker hidden) |
+| Unreachable | Surfaces as the empty-chat hero / Connection Test, not a chip error string |
+
+No animated “loading 73%” fill on the chip. oMLX load failure is the red banner under the header.
 
 ### 5.2 Chat transcript
 
 | State | Visual |
 |---|---|
-| **Empty (new conversation)** | Centered: "What are we working on?" Geist Sans 24pt regular `fg.secondary`. No buttons. Input bar is focused. |
-| **Loading (first response streaming)** | Last message bubble shows streaming chunks `stream` animation. Status line: "Iteration 1/30 · model thinking…" |
-| **Tool dispatch in progress** | Status line: "Iteration 4/30 · running read_file" with mini-spinner |
-| **Build verifying** | Status line: "Iteration 4/30 · verifying build" with mini-spinner |
-| **Build pass** | Status line momentarily: "✓ build passed" in `semantic.success`, then resumes normal |
-| **Build fail** | Status line: "✗ build failed — agent will retry" in `semantic.error` |
-| **Stalled** | Yellow banner above input: "Agent is repeating itself. Continue, revise, or stop?" with action buttons |
-| **Finished** | Status line: "Finished: stop" in `fg.secondary` |
+| Empty | §4.6 hero (title depends on backend/model) |
+| First tokens | `PendingAssistantBubble`: **Working for Ns** (shimmer) → **Thinking…** (or playful phrase every 4.2 s if `playfulWaitingLabels`) → reasoning → activity/edits → answer |
+| Tools live | Activity stack auto-expands; edit cards auto-open |
+| User stopped | `TurnEndedByUserLabel` under the assistant |
+| Model load error | Red banner, dismiss × |
+| Goal stall / pause | Top `GoalStatusBanner` |
+| Finished | Working header flips to **Worked for …**; no docked “Finished: stop” line (`statusLine` / `ProcessingStatusBar` are not mounted) |
+
+`humanStatus` maps “Iteration N…” → **Working…**; turn-limit → **Stopped — turn limit reached**.
 
 ### 5.3 InputBar
 
 | State | Visual |
 |---|---|
-| **Empty + focused** | Placeholder "Ask the agent…" in `fg.tertiary`, cursor blinks |
-| **Empty + unfocused** | Same placeholder, no cursor |
-| **Has content** | Body text in `fg.primary`, send button enabled |
-| **Running** | Editor still editable (queue next message), send button replaced by Stop button (red) |
-| **Disabled (no model)** | Editor `fg.tertiary`, placeholder "Pick a model to start.", send button disabled |
+| Idle, empty | Placeholder **Ask for follow-up changes**; send muted / disabled |
+| Has content | `fg.primary`; send accent circle enabled |
+| Running | Placeholder **Keep typing to queue a follow-up…**; red Stop; extra Send = **interjection** (applied on next step) |
+| No model | Field stays editable; empty hero carries the “pick a model” guidance — the field does **not** say “Pick a model to start.” |
 
 ### 5.4 Sidebar
 
 | State | Visual |
 |---|---|
-| **Conversations empty** | §4.6 empty state |
-| **Loading conversations** | Skeleton rows (3) with `bg.muted` shimmer for 200 ms or until load finishes (whichever first) |
-| **Filtering by project** | "Showing 8 of 42 conversations" caption above list, "Clear filter" plain button |
+| Empty tasks | **No tasks yet** |
+| Unloadable JSON | Warning banner + Show in Finder |
+| Running row | Green 6 pt glow |
+| Error row | Warning triangle |
+| Selected | `bg.hover` fill, no accent bar |
 
-### 5.5 Settings sheets
+No skeleton shimmer, no “Showing N of M” project filter.
 
-| State | Visual |
-|---|---|
-| **Test connection: idle** | Button "Test connection" |
-| **Test connection: testing** | Button "Testing…" with mini-spinner, disabled |
-| **Test connection: success** | Button text reverts; inline `semantic.success` checkmark + "Connected. 3 models." for 4 seconds, then fades |
-| **Test connection: fail** | Inline `semantic.error` X + "Could not connect — timed out." Stays until next action. |
-
-### 5.6 Patch Review Sheet
+### 5.5 Settings — Test connection
 
 | State | Visual |
 |---|---|
-| **All hunks pending** | Header: "0 of N decided" |
-| **Mixed decided/pending** | "5 of 12 decided · 4 accepted · 1 rejected" |
-| **All decided, ready to apply** | "12 of 12 decided" + primary Apply button at bottom |
-| **Conflict (hunk no longer applies)** | Conflict icon on hunk, "File changed since patch was generated — refresh" inline |
+| Idle | **Test Connection** (LM Studio / oMLX / Ollama / Unsloth / Custom). EXO uses **Connect** |
+| Testing | **Testing…**, disabled |
+| Success | **Connected — N models** (or EXO pins the typed id) |
+| Fail | Inline `semantic.error` message until the next action |
+
+### 5.6 Patch Review
+
+| State | Visual |
+|---|---|
+| Pending | `K of N files decided` in secondary |
+| Mixed | Same counter; badges Accepted / Rejected |
+| Ready | Counter in `semantic.success`; **Apply selected** enabled |
+| Zero accepted | Apply disabled |
+
+No “hunk no longer applies” conflict chrome.
+
+Sources: `App/Views/Chat/PendingAssistantBubble.swift`, `App/Views/Chat/InputBarViewV2.swift`, `App/Views/Chat/ModelPickerButton.swift`, `App/Views/Settings/ConnectionSettingsView.swift`
 
 ---
 
 ## 6. User flows
 
-The six journeys the user will take most often. Each described as click-by-click.
-
 ### 6.1 First launch → first conversation
 
-1. App opens → Onboarding Screen 1 (Welcome + Hardware)
-2. Click Continue → Onboarding Screen 2 (Pick model)
-3. Click Download on a card → background download starts, button changes to progress
-4. Click Continue → Main window opens with welcome message, model picker chip shows download progress
-5. User waits or types into input bar (queued until model ready)
-6. Model ready → chip pulses, status line: "Model ready"
-7. User hits Send (⌘⏎)
-8. Streaming starts immediately; status line updates per iteration
-9. Conversation auto-saves; new entry appears in sidebar
+App opens on `RootView` (no Welcome, no starter cards). Empty chat: **Connect a model server** with loopback **Use** rows or **Open Connection settings**. Test → pick from the composer chip → hero becomes **What are we working on?** → Return. 2–3 clicks if a local server is already up. Downloads are out of band (Ollama / LM Studio / oMLX) — no in-app catalog.
 
-**Total clicks to first conversation: 3** (Continue, Download, Continue, then type + Send).
+### 6.2 Bind project → agentic task
 
-### 6.2 Bind project → agentic coding task
+Projects → **New Project** (scratch or existing) or task menu **Move to project**. Opening a project shows `ProjectFolderLandingView` (**Start a new chat in this project**). Send creates a bound conversation, then Chat takes over. Worktree / export live in the title menu — no header “Bind project” chip. @-mentions search that tree.
 
-1. In an existing conversation, click "📁 Bind project" in chat header
-2. NSOpenPanel opens, user picks a folder, hits Bind
-3. Chat header now shows project name as a chip
-4. User types "audit the codebase, find any TODOs, summarize what's missing"
-5. Send. Agent reads MEMORY.md/DECISIONS.md from project, loads skills, starts iterating
-6. Tools dispatch, results appear inline as tool result cards
-7. After completion, agent's final message + status line "Finished"
-8. User can immediately ask follow-up — context preserved
+### 6.3 Worktree + patch review
 
-### 6.3 Worktree mode + patch review
+Title menu → **Isolate work in git worktree**. In **Ask** mode, `apply_patch` opens **Review patch** (file Accept/Reject → **Apply selected**). Toggle worktree off → **Worktree review** (**Continue** / **Discard** / **Merge into main**). Plan never opens the sheet; Auto / Full apply without it.
 
-1. Toggle worktree icon in chat header (shield)
-2. Banner appears: "Worktree mode on. Agent will work in agentos/a4f2c3."
-3. User asks for a code change
-4. Agent makes the change in the worktree; on `apply_patch`, Patch Review Sheet appears
-5. User reviews hunks: Accept some, Reject one, click Apply
-6. Sheet dismisses; tool result shows "Patched X (2 hunks applied, 1 rejected)"
-7. After agent finishes, click worktree shield → Worktree Review Sheet
-8. Click Merge into main; commit message prompt; merge happens
-9. Worktree shield turns off, banner: "Merged a4f2c3 into main."
+### 6.4 Settings: backend + sampling
 
-### 6.4 Settings: change model load parameters
+⌘, → Connection (Test / Connect / **Use this backend**) then Model & Backend (engine strip, optional Two-Model). 2026-06 load/sampling sliders **do not exist**. Context window + compact live under **Context**.
 
-1. ⌘, → Settings sheet
-2. Click Models tab
-3. Model dropdown: already on active model
-4. Drag Context length slider from 32,768 → 65,536
-5. Reload banner appears: "Reload model to apply load changes"
-6. Click "Reload now"
-7. Banner replaced with progress: "Reloading model…" with mini-spinner
-8. After ~10s: "Model ready" success flash
-9. Close sheet (Done or ⌘W)
-10. Back in chat — context usage chip now shows "/ 65,536" denominator
+### 6.5 Connect Xcode via Local API
 
-### 6.5 Connect Xcode to NEW DAY
+Settings → Connection → **Local API Server**: **Run on app launch**, optional agent-loop, port 11435, **Start Server**, **Copy URL** (`http://localhost:{port}/v1`). Same pane: **Enable Xcode MCP tools**. Not a separate tab.
 
-1. Settings → Connection (or System Prompt? — Local API lives in §4.3 Tab 2 Connection sub-section)
-2. Toggle "Run OpenAI-compatible server on app launch" on
-3. Confirmation: "Server running on http://localhost:11435/v1"
-4. Click "Copy Xcode setup steps" — copies a snippet
-5. Open Xcode → Settings → Intelligence → Add provider
-6. Paste; Save
-7. Xcode now uses NEW DAY's **Local API proxy** for inline completions (backend chat only — not the full in-app agent tool loop)
+### 6.6 License activation — removed
 
-### 6.6 License activation
+No trial lock, no activation sheet, no key field. Privacy is export / import / clear. Do not reintroduce.
 
-1. Trial expired → main window locked, single sheet appears: "Your trial has expired."
-2. Sheet offers: "Enter license key" / "Buy a license" / "Continue trial" (greyed, "0 days left")
-3. User clicks Buy → browser opens to agentos.tools/buy with prefilled discount code if any
-4. User completes purchase, gets license via email
-5. Back in NEW DAY, click "I have a license"
-6. Paste key, click Activate
-7. Verification (offline, ~50ms), success → sheet dismisses, app unlocks
-8. Settings → Privacy & License now shows license status
+Sources: `App/VibeCoderApp.swift`, `App/Views/Projects/ProjectsView.swift`, `App/Views/Projects/ProjectFolderLandingView.swift`, `App/Views/Settings/ConnectionSettingsView.swift`, `App/Views/Chat/ChatTitleDropdown.swift`
 
 ---
 
 ## 7. Microcopy
 
-Every primary-action label and important status message locked here.
-
 ### 7.1 Buttons
 
-| Action | Label |
-|---|---|
-| Send message | "Send" (icon `arrow.up`) |
-| Cancel running agent | "Stop" (icon `stop.fill`) |
-| New conversation | "New" / ⌘N |
-| Continue from onboarding | "Continue" |
-| Download model | "Download" |
-| Bind project folder | "Bind project" |
-| Toggle worktree | "Worktree" |
-| Toggle Safe Mode | "Safe Mode" |
-| Apply patch | "Apply" |
-| Reject all hunks | "Reject all" |
-| Reload model | "Reload now" |
-| Apply on next start | "Apply on restart" |
-| Test backend connection | "Test connection" |
-| Delete conversation | "Delete" (destructive) |
-| Merge worktree | "Merge into main" |
-| Discard worktree | "Discard" (destructive) |
-| Buy a license | "Buy a license" |
-| Enter license key | "Activate" |
+**Send** / **Stop** / **Send interjection** · **New conversation** / **New Task** · **Settings** / **Close** · attach panel **Attach files or folders** · patch **Reject all** / **Accept all** / **Reject** / **Accept** / **Apply selected** / **Always allow folder** / **Cancel** · worktree **Continue** / **Discard** / **Merge into main** / **Expand all** · plan **Stay in Plan** / **Approve & Run** · approval **Once** / **Always** / **Never** / **Deny** / Wave U1 **Allow for session** · connection **Test Connection** / **Connect** / **Use this backend** / **Start Server** / **Copy URL** · models **Refresh** / **Use** · **New Project** / **New schedule** · alert **Delete all tasks?** / **Delete All** · hero **Use** / **Open Connection settings**.
 
 ### 7.2 Placeholders
 
 | Field | Placeholder |
 |---|---|
-| Input bar (model ready) | "Ask the agent…" |
-| Input bar (no model) | "Pick a model to start." |
-| Conversation title (editing) | "Untitled" |
-| System prompt override | "Inherits global prompt — type to override" |
-| License key | "AGENTOS-XXXX-XXXX-XXXX" |
-| Search conversations | "Search conversations" |
+| Composer, idle | **Ask for follow-up changes** |
+| Composer, running | **Keep typing to queue a follow-up…** |
+| Palette | **Search commands…** |
+| Settings search | **Search settings** |
+| Untitled task | **Untitled** |
+| Worktree commit | **Commit message…** |
+| ask_user field | **Type your answer…** / **Or type a custom answer…** |
+| @ popup header | **@ context — ↑/↓ Enter pin · Esc dismiss** |
 
-### 7.3 Status line phrases
+Removed: “Ask the agent…”, “Pick a model to start.” (field), “Search conversations”, license-key mask.
 
-Rotated through during long pauses (Claude.ai-style):
+### 7.3 Status phrases
 
-- "Thinking…"
-- "Reading the project…"
-- "Planning the next step…"
-- "Verifying the build…"
-- "Calling tools…"
-- "Composing the response…"
-- "Searching the codebase…"
-- "Applying the patch…"
-- "Checking memory…"
+**Thinking…** (optional 4.2 s playful rotation, off by default) · **Working for Ns** / **Working for N minutes** · **Worked for …** · **Thinking · Ns** / **Thought for Ns** / **Thought** · **Plan approved — continuing in Ask mode…** · **Staying in Plan mode — revise the plan or Approve when ready.** · **Interjection sent — applied on next step.** · **Cancelling…** · **Stopped — turn limit reached**. Hidden `statusLine` maps “Iteration N…” → **Working…**. Do not invent a “Reading the project…” rotation.
 
-Pick one based on actual state (don't randomize when state is known). Random rotation only when "thinking" without active tool.
-
-### 7.4 Error messages
-
-Never blame the user. Suggest the fix.
+### 7.4 Error + destructive copy
 
 | Scenario | Message |
 |---|---|
-| Backend unreachable | "Couldn't reach the model server at localhost:1234. Is LM Studio running?" |
-| Build fail injected as tool result | "BuildGuard: build failed. The agent will read the errors and try to fix them." (in tool card) |
-| Tool throws unexpected | "Tool `<name>` returned an error: <message>. The agent will see this and decide what to do." |
-| Stall detected | "The agent is repeating the same action. You can continue (give it another try), revise (edit the last message), or stop." |
-| License invalid | "That license key doesn't look right. Double-check the email it came in." |
-| License expired | "This license expired on <date>. Renew at agentos.tools/buy." |
-| Trial expired | "Your 14-day trial is over. Continue with a license, or close the window." |
-| Disk full | "Disk is nearly full. NEW DAY can't write conversation history. Free up some space." |
+| Unloadable JSON | **N conversation(s) couldn't be loaded** · **Show in Finder** |
+| Delete all | **This will permanently remove all N tasks.** |
+| Dangerous shell | **Dangerous commands are never remembered — Always acts as Once.** |
+| Worktree discard | **All uncommitted changes in the worktree will be permanently removed.** |
+| Worktree fail | alert **Worktree error** |
+| Models empty | **No models reported. Start Ollama or oMLX (or another backend), then Refresh.** |
+| No backend on send | **No models from {backend} — open Settings → Connection…** |
+
+Never blame the user. Suggest the running server or Settings → Connection.
+
+Sources: `App/Views/Chat/InputBarViewV2.swift`, `App/Views/ChatView.swift`, `App/Views/Chat/WorkingHeader.swift`, `App/Views/Chat/ReasoningBlockView.swift`, `App/ViewModels/ChatViewModel.swift`
 
 ---
 
-## 8. Accessibility baseline
+## 8. Accessibility
 
-v1 commitments:
+**Shipped:** VoiceOver labels on send/stop, New Task, Delete all, Settings, unloadable banner, web/Chat-Agent, Working header, Undo. Status is never color-only (glow **dot**, **triangle**, verb+icon, `+`/`−`). Shortcuts: ⌘N, ⌘,, ⌘K, ⌘., Esc, Return, ⇧Tab, Shift+Return, ↑/↓. Text selection on pills, prose, code, approval detail.
 
-- **Reduced motion respected** (§2.5).
-- **Increased contrast respected** — color tokens swap to higher-contrast variants when `NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast` is on.
-- **VoiceOver labels** for every interactive control. Custom rotor for navigating conversation messages.
-- **Full keyboard access** — every action has a kbd shortcut or is reachable via Tab.
-- **No color-only signaling** — status uses icon + color, never color alone.
-- **Min text size 13 pt** in any control; user can scale up via Settings → General.
-- **Focus rings** always visible (2 pt `accent` ring at 6 pt radius).
+**Deliberate: focus rings hidden.** `hidesSystemFocusRing()` → `focusEffectDisabled()` on the `WindowGroup` and composer; `WindowChromeAdjuster` sets AppKit `focusRingType = .none`. Rationale: designed hover / open-menu / hairline already mark focus; the system blue ring is not part of the UI. Composer focus is a stronger **neutral** hairline + shadow, not an orange ring.
 
-Not v1: full WCAG AAA audit, screen reader scripting tests, low-vision UI alternate. v1.1 polish.
+**Open items:** reduced motion (`Theme.Motion` always runs; no `accessibilityDisplayShouldReduceMotion`); increased contrast (no token swap); visible FKA ring (conflicts with hide-rings — revisit if testing demands a 2 pt accent ring); conversation rotor; WCAG AAA.
+
+Sources: `App/Theme/ViewExtensions.swift`, `App/VibeCoderApp.swift`, `App/Views/Chat/InputBarViewV2.swift`
 
 ---
 
 ## 9. Dark mode parity rules
 
-Three rules, no exceptions:
+1. **Every color token has a dark counterpart** in `Theme.Palette` (`dynamicLight` / `dynamicDark`, or fixed RGB for semantics/diffs). No raw marketing hex in views.
+2. **No setting exists only in light.** Appearance is System / Light / Dark (`colorScheme`); both palettes cover every role.
+3. **Hierarchy is role, not lightness.** Primary chrome is `accent` in both modes — the *which orange* changes (`#E37A38` light / `#E48B46` dark), the *role* does not. User pills stay neutral 6% in both.
+4. **Sidebar and composer share `bg.subtle`** so the two columns feel like one plane (dark `#2B2B2B`).
+5. **Text is soft gray in dark (`#D2D2D2`)**, not label-white.
 
-1. **Every color token has a dark-mode counterpart.** No raw hex literals in code; everything reads from the design token table.
-2. **No setting exists only in light mode.** If a feature looks wrong in dark, redesign it for both — don't ship light-only.
-3. **Visual hierarchy is preserved by token roles, not by lightness.** A primary button is `accent` in both modes; the *which orange* changes, the *role* doesn't.
+User preference is Settings → Appearance. Applied via `RootView` `.preferredColorScheme`.
 
-Test policy: every screen has a dark-mode snapshot test in the test suite. Dark drift fails CI.
+Sources: `App/Theme/Theme.swift`, `App/Views/Settings/AppearanceSettingsView.swift`
 
 ---
 
 ## 10. Responsive behavior
 
-Window size: minimum 960 × 620 pt, opens at 1280 × 800 pt, fully resizable up to screen size.
+Two-column only. The window chrome does **not** grow a third column and does **not** collapse the sidebar to icons.
 
-| Window width | Sidebar | Detail | Notes |
-|---|---|---|---|
-| < 1080 pt | collapsed (icon-only) | full | Sidebar tabs become a compact icon strip |
-| 1080–1400 pt | 260 pt | flex | Default layout |
-| 1400–1920 pt | 280 pt | flex | Sidebar gets slightly wider |
-| > 1920 pt | 320 pt | flex with max content width 1080 pt | Prevents stupidly-wide message bubbles |
+| Constraint | Value |
+|---|---|
+| Window min | 960 × 620 |
+| Default open size | **unset** (system default) |
+| Sidebar | 240–360, ideal 280. No breakpoint at 1080 / 1400 / 1920 |
+| Icon-only sidebar | **Removed from spec** — not implemented; do not add width-based auto-collapse |
+| Chat column | `contentWidth = min(1040, pane − 2×gutter)`; gutter = clamp(6% pane, 24, 96); floor 320 when it fits |
+| User pill | wrap at 560, independent of column |
+| Settings sheet | 920–1100 × 620–820 |
+| Patch sheet | min 760 × 540 |
+| Worktree sheet | 720 × 600 |
+| Palette | 520 wide, list max 320 tall |
+| Plan overlay | 200–320, tracks column |
 
-Patch Review sheet and Worktree Review sheet: independently resizable to any size up to screen.
+Hide Sidebar is the system split control (animated spring), not an icon strip.
+
+Sources: `App/VibeCoderApp.swift`, `App/Views/RootView.swift`, `App/Theme/Theme.swift` (`ChatLayout`)
 
 ---
 
 ## 11. Sign-off
 
-Read §1 (principles) first. If those four locked decisions still feel right, the rest follows.
+Read §1 first. The locked identity is **orange + SF**, local-model-first, two-column `NavigationSplitView`.
 
-The single most consequential section: **§2.3 (color)** — Azure as the accent color. Lock it now or lock something else now, but it has to lock before any chrome work begins. Changing accent later means revisiting every screen.
+Most consequential sections:
 
-Second-most: **§3 (components)**. If any component shape is wrong, downstream screens get it wrong too.
+1. **§2.3 color** — `#E48B46` family. Azure / Cobalt / Ember-send are historical only.
+2. **§3 components** — ActivityRow + InlineEditCard + file-level PatchFile + TextField composer. Do not re-spec ToolStub, in-transcript PlanCard, or per-hunk Accept.
+3. **§4.3 / §4.8** — 11-tab settings (plus Wave U1 Hooks) and the command palette are real surfaces; they were missing or wrong in the 2026-06 draft.
 
-Once §1, §2.3, and §3 are signed off, the rest is execution.
+Once §1, §2.3, and §3 match the running app, the rest is execution.
 
 ### Amendments log
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
-| 2026-06-02 | (initial) | Drafted | First version, locked four design decisions via sign-off question |
-| 2026-06-02 | §2.3 | Accent color: Ember (warm orange) → Azure (modern blue, `#2563EB` light / `#60A5FA` dark) | User preference for blue accent over warm orange |
-| 2026-06-02 | §4.7 (new) | Models sidebar tab spec with Library/Discover sub-tabs (LM-Studio-style HF browser + curated catalog) | DEV PLAN's catalog-only approach was too restrictive; hybrid pattern serves both safe-default and power-user audiences |
-| 2026-06-02 | §4.1, §4.7 | Removed "recommended for your Mac" framing — Library shows only downloaded models; onboarding cards presented as equals with honest one-line descriptors | Patronizing to senior-dev audience; conflicts with BRAND voice; reduces support burden ("why isn't X recommended?") |
-| 2026-06-02 | §2.3 | Palette adoption from DEV PLAN: primary accent Azure (`#2563EB`) → Cobalt (`#3385F2`); added Ember orange (`#E75D3C`) for send button, plus 5 semantic chromatic tokens (green/amber/red/blue/violet) and three-tone Claude.ai-style surfaces (canvas / sidebar / input) | DEV PLAN's palette is proven, looks polished + warm. NEW DAY's iteration-1 palette was correct in concept but visually sparse. Full adoption produces immediate visual richness without sacrificing the locked decisions. |
+| 2026-06-02 | (initial) | Drafted | First version; four design decisions via sign-off question |
+| 2026-06-02 | §2.3 | Accent Ember → Azure (`#2563EB` / `#60A5FA`) | Then-current preference for blue |
+| 2026-06-02 | §4.7 (new) | Models Library / Discover (HF browser + catalog) | Hybrid catalog + power-user browse |
+| 2026-06-02 | §4.1, §4.7 | Removed “recommended for your Mac” framing | Voice / support burden |
+| 2026-06-02 | §2.3 | Azure → Cobalt (`#3385F2`) + Ember send (`#E75D3C`) + extra semantics | DEV PLAN palette pass — **superseded** |
+| 2026-08-16 | **all** | **Rewritten to match shipped 1.0.5 code; identity confirmed as orange accent + SF (was Azure/Geist spec). Wave U1 additions recorded: syntax-highlighted chat code blocks; turn-end change-summary card with Undo; session-scoped permission grant + keyboard nav in approval sheet; command palette sections/arrow-key selection (~22 items); Settings → Hooks editor tab.** | UI parity wave — live app is source of truth. Also recorded as **removed** (do not resurrect): onboarding, license/trial, Geist, Azure/Cobalt, 4-icon sidebar, icon-only collapse, 1280×800 default, per-hunk Accept/Reject, ToolStub, in-transcript PlanCard, Library/Discover, load sliders, visible focus rings, docked status bar |
+
+**Intentionally not in this spec (compiled leftovers):** `SidebarShell` engine strip, `ToolCallView` / `ThoughtProcessBlock` / `StepperRailSpec`, `ProcessingStatusBar` / `ZCodeStatusBar`, `PermissionsSheetView`, `ConversationListViewModel`, `NavigationState`, `EmptyDetailView`. Do not treat them as UX requirements.

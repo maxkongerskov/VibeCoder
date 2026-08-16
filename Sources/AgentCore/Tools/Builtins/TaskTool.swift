@@ -6,6 +6,8 @@
 //  Set `run_in_background` / `background` true to register with
 //  BackgroundJobManager and return task_id immediately — parent continues
 //  and uses get_task_output / wait_tasks / kill_task.
+//  Multiple independent `task` calls in one assistant message run concurrently.
+//  `resume_agent_id` resumes a completed mailbox agent instead of spawning.
 //
 
 import Foundation
@@ -25,7 +27,7 @@ public struct TaskTool: Tool {
             properties: [
                 "prompt": .init(
                     type: "string",
-                    description: "The full task prompt for the subagent to execute."
+                    description: "Self-contained task prompt. A new task starts fresh and does not see the parent transcript — include all context the subagent needs."
                 ),
                 "description": .init(
                     type: "string",
@@ -53,6 +55,10 @@ public struct TaskTool: Tool {
                     type: "boolean",
                     description: "Alias for run_in_background."
                 ),
+                "resume_agent_id": .init(
+                    type: "string",
+                    description: "If set, skip a new spawn and resume this agent_<uuid> when the mailbox requested resume. Uses drained coordinator messages as the prompt."
+                ),
             ],
             required: ["prompt", "description", "subagent_type"]
         )
@@ -69,6 +75,13 @@ public struct TaskTool: Tool {
             )
         }
 
+        if let resumeRaw = arguments.stringOptional("resume_agent_id") {
+            let resumeId = resumeRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !resumeId.isEmpty {
+                return await Self.resumeExisting(agentId: resumeId)
+            }
+        }
+
         let prompt = arguments.stringOptional("prompt")?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         guard !prompt.isEmpty else {
@@ -83,9 +96,6 @@ public struct TaskTool: Tool {
         let type = SubagentType.parse(typeRaw)
         let capability = SubagentCapabilityMode.parse(arguments.stringOptional("capability_mode"))
         let isolation = SubagentIsolationMode.parse(arguments.stringOptional("isolation"))
-        // Grok-compatible run_in_background; also accept shell-style `background`.
-        let runInBackground = arguments.bool("run_in_background", default: false)
-            || arguments.bool("background", default: false)
 
         guard let backend = context.inferenceBackend else {
             return ToolResult(
@@ -163,8 +173,24 @@ public struct TaskTool: Tool {
             }
         }
 
+        let profile = customAgent?.profileSettings ?? .empty
+        let typeDefaultMax = (customAgent == nil && (type == .explore || type == .plan)) ? 12 : 15
+        let applied = SubAgentRunner.applyProfileSettings(
+            profile,
+            defaultMaxIterations: typeDefaultMax,
+            parentBackground: Self.parentBackgroundFlag(from: arguments),
+            parentExecutionMode: context.executionMode,
+            parentModel: model
+        )
+        let runInBackground = applied.runInBackground
+        let maxIterations = applied.maxIterations
+        let childModel = applied.model
+        let childThinking = applied.thinking
+        let childExecutionMode = applied.executionMode
+
         let subagentUUID = UUID()
-        let subagentId = subagentUUID.uuidString.lowercased()
+        let mailboxAgentId = AgentMailbox.makeAgentId(subagentUUID)
+        let subagentId = mailboxAgentId
         let jobDescription = "\(resolvedTypeLabel): \(description)"
         do {
             _ = try await BackgroundJobManager.shared.registerSubagent(
@@ -176,23 +202,27 @@ public struct TaskTool: Tool {
                 content: "Failed to register subagent job: \(error.localizedDescription)",
                 isError: true)
         }
+        await AgentMailbox.shared.markRunning(mailboxAgentId)
 
-        let maxIterations = (type == .explore || type == .plan) ? 12 : 15
         // Capture Sendable inputs for the runner (ToolContext is not always
         // captured whole into the background Task).
         let projectRoot = context.projectRoot
         let safeMode = context.safeMode
-        let executionMode = context.executionMode
+        let executionMode = childExecutionMode
         let patchReviewer = context.patchReviewer
         let shellApprovalCoordinator = context.shellApprovalCoordinator
         let authorization = context.authorization
         let conversationID = context.conversationID
         let isolationCreated = createdIsolation
         let isolationWorktreeRoot = worktreeRoot
-        let allowedTools = allowed
+        let allowedTools = allowed.subtracting(context.disabledToolNames)
         let systemPromptCapture = systemPrompt
         let typeLabel = resolvedTypeLabel
         let descCapture = description
+        let mailboxIdCapture = mailboxAgentId
+        let profileCapture = profile
+        let thinkingCapture = childThinking
+        let modelCapture = childModel
 
         if runInBackground {
             // Detach runner: parent returns task_id immediately.
@@ -203,7 +233,7 @@ public struct TaskTool: Tool {
                     systemPrompt: systemPromptCapture,
                     allowedTools: allowedTools,
                     backend: backend,
-                    model: model,
+                    model: modelCapture,
                     projectRoot: projectRoot,
                     worktreeRoot: isolationWorktreeRoot,
                     safeMode: safeMode,
@@ -213,7 +243,10 @@ public struct TaskTool: Tool {
                     authorization: authorization,
                     maxIterations: maxIterations,
                     parentConversationID: conversationID,
-                    createdIsolation: isolationCreated
+                    createdIsolation: isolationCreated,
+                    thinking: thinkingCapture,
+                    profileSettings: profileCapture,
+                    mailboxAgentId: mailboxIdCapture
                 )
             }
             await BackgroundJobManager.shared.updateSubagentOutput(
@@ -223,6 +256,7 @@ public struct TaskTool: Tool {
             Background subagent started.
             task_id: \(subagentUUID.uuidString)
             id: \(subagentId)
+            agent_id: \(mailboxAgentId)
             type: \(typeLabel)
             description: \(descCapture)
             Use get_task_output / wait_tasks / kill_task.
@@ -230,6 +264,7 @@ public struct TaskTool: Tool {
             <subagent_meta>
             id: \(subagentId)
             task_id: \(subagentUUID.uuidString)
+            agent_id: \(mailboxAgentId)
             type: \(typeLabel)
             description: \(descCapture)
             background: true
@@ -251,7 +286,7 @@ public struct TaskTool: Tool {
             systemPrompt: systemPromptCapture,
             allowedTools: allowedTools,
             backend: backend,
-            model: model,
+            model: modelCapture,
             projectRoot: projectRoot,
             worktreeRoot: isolationWorktreeRoot,
             safeMode: safeMode,
@@ -261,7 +296,10 @@ public struct TaskTool: Tool {
             authorization: authorization,
             maxIterations: maxIterations,
             parentConversationID: conversationID,
-            createdIsolation: isolationCreated
+            createdIsolation: isolationCreated,
+            thinking: thinkingCapture,
+            profileSettings: profileCapture,
+            mailboxAgentId: mailboxIdCapture
         )
 
         let durationMs = Int(Date().timeIntervalSince(start) * 1000)
@@ -271,6 +309,7 @@ public struct TaskTool: Tool {
         <subagent_meta>
         id: \(subagentId)
         task_id: \(subagentUUID.uuidString)
+        agent_id: \(mailboxAgentId)
         type: \(typeLabel)
         description: \(descCapture)
         iterations: \(outcome.iterations)
@@ -326,7 +365,10 @@ public struct TaskTool: Tool {
         authorization: AuthorizationConfig,
         maxIterations: Int,
         parentConversationID: UUID?,
-        createdIsolation: CreatedWorktree?
+        createdIsolation: CreatedWorktree?,
+        thinking: ThinkingRequestConfig? = nil,
+        profileSettings: AgentProfileSettings = .empty,
+        mailboxAgentId: String? = nil
     ) async -> RunOutcome {
         let result = await SubAgentRunner.run(
             prompt: prompt,
@@ -346,7 +388,10 @@ public struct TaskTool: Tool {
             maxIterations: maxIterations,
             parentConversationID: parentConversationID,
             trace: Optional<AgentTraceService>.none,
-            jobID: subagentUUID
+            jobID: subagentUUID,
+            thinking: thinking,
+            profileSettings: profileSettings,
+            mailboxAgentId: mailboxAgentId
         )
 
         // Parent / job snapshot: summary only (truncate full transcript noise).
@@ -396,5 +441,47 @@ public struct TaskTool: Tool {
             worktreeDiscarded: worktreeDiscarded,
             scrubReport: result.scrubReport
         )
+    }
+
+    /// Parent `run_in_background` / `background` when the model set the flag.
+    /// `nil` means the parent omitted it (profile `background:` may apply).
+    static func parentBackgroundFlag(from arguments: ToolArguments) -> Bool? {
+        let set = arguments.raw["run_in_background"] != nil
+            || arguments.raw["background"] != nil
+        guard set else { return nil }
+        return arguments.bool("run_in_background", default: false)
+            || arguments.bool("background", default: false)
+    }
+
+    private static func resumeExisting(agentId: String) async -> ToolResult {
+        let outcome = await SubAgentRunner.resumeIfRequested(agentId: agentId)
+        if !outcome.resumed {
+            return ToolResult(content: outcome.message, isError: true)
+        }
+        let jobID = outcome.jobID
+        var body = """
+        Background resume started.
+        id: \(outcome.agentId)
+        agent_id: \(outcome.agentId)
+        """
+        if let jobID {
+            body += "\ntask_id: \(jobID.uuidString)"
+        }
+        body += """
+
+        Use get_task_output / wait_tasks / kill_task.
+
+        <subagent_meta>
+        id: \(outcome.agentId)
+        agent_id: \(outcome.agentId)
+        background: true
+        status: running
+        resumed: true
+        """
+        if let jobID {
+            body += "\ntask_id: \(jobID.uuidString)"
+        }
+        body += "\n</subagent_meta>"
+        return ToolResult(content: body, isError: false)
     }
 }

@@ -7,11 +7,45 @@
 
 import Foundation
 
+/// A conversation JSON file that `list()` could not decode.
+public struct ConversationLoadFailure: Sendable, Equatable, Identifiable {
+    public let url: URL
+    public let filename: String
+    public let reason: String
+    public var id: String { url.path }
+
+    public init(url: URL, reason: String) {
+        self.url = url
+        self.filename = url.lastPathComponent
+        self.reason = reason
+    }
+}
+
+/// One pass over the conversations directory: healthy rows plus files that
+/// failed to decode. `list()` stays `[Conversation]` for existing callers.
+public struct ConversationDirectoryListing: Sendable {
+    public var conversations: [Conversation]
+    public var unloadable: [ConversationLoadFailure]
+
+    public init(conversations: [Conversation], unloadable: [ConversationLoadFailure]) {
+        self.conversations = conversations
+        self.unloadable = unloadable
+    }
+}
+
 public protocol ConversationStoring: Sendable {
     func load(id: UUID) async throws -> Conversation?
     func save(_ conversation: Conversation) async throws
     func list() async throws -> [Conversation]
+    func listDirectory() async throws -> ConversationDirectoryListing
     func delete(id: UUID) async throws
+}
+
+extension ConversationStoring {
+    /// Stores that only implement `list()` report no unloadable files.
+    public func listDirectory() async throws -> ConversationDirectoryListing {
+        ConversationDirectoryListing(conversations: try await list(), unloadable: [])
+    }
 }
 
 public actor ConversationStore: ConversationStoring {
@@ -46,16 +80,29 @@ public actor ConversationStore: ConversationStoring {
     }
 
     public func list() async throws -> [Conversation] {
-        let files = try FileManager.default.contentsOfDirectory(at: directory,
-                                                                includingPropertiesForKeys: [.contentModificationDateKey])
+        try await listDirectory().conversations
+    }
+
+    public func listDirectory() async throws -> ConversationDirectoryListing {
+        let files = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey])
         var out: [Conversation] = []
+        var unloadable: [ConversationLoadFailure] = []
         for file in files where file.pathExtension == "json" {
-            if let data = try? Data(contentsOf: file),
-               let convo = try? JSONDecoder.iso8601.decode(Conversation.self, from: data) {
-                out.append(convo)
+            do {
+                let data = try Data(contentsOf: file)
+                out.append(try JSONDecoder.iso8601.decode(Conversation.self, from: data))
+            } catch {
+                unloadable.append(ConversationLoadFailure(url: file, reason: error.localizedDescription))
+                Diagnostics.warn(
+                    "ConversationStore.list: skipped unloadable \(file.lastPathComponent)",
+                    detail: error.localizedDescription)
             }
         }
-        return out.sorted { $0.updatedAt > $1.updatedAt }
+        return ConversationDirectoryListing(
+            conversations: out.sorted { $0.updatedAt > $1.updatedAt },
+            unloadable: unloadable.sorted { $0.filename < $1.filename })
     }
 
     public func delete(id: UUID) async throws {

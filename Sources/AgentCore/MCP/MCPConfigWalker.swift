@@ -146,6 +146,7 @@ public enum MCPConfigWalker {
     /// repo-root-first → cwd-last (so nearer files win on name conflict).
     /// If no git root is found, checks `cwd/.mcp.json` only.
     public static func discoverProjectConfigFiles(cwd: URL) -> [URL] {
+        guard PathConfinement.isUsableWorkspaceRoot(cwd) else { return [] }
         let gitRoot = discoverGitRoot(from: cwd)
         guard let root = gitRoot else {
             // No repo — only check cwd directly.
@@ -216,7 +217,7 @@ public enum MCPConfigWalker {
     ///   not already filled by file-discovered configs, but don't override them.
     /// - Returns: A merged list of `MCPServerConfig` ready for the pool to connect.
     public static func resolveMcpServers(
-        cwd: URL,
+        cwd: URL?,
         appSettingsServers: [MCPServerConfig]
     ) -> [MCPServerConfig] {
         // Use an ordered dictionary so insertion order = precedence.
@@ -258,11 +259,14 @@ public enum MCPConfigWalker {
 
         // Layer 3: project-local .mcp.json files (cwd → git root walk).
         // Nearer files (later in the array) replace farther ones entirely.
-        for fileURL in discoverProjectConfigFiles(cwd: cwd) {
-            if let entries = loadConfigFile(at: fileURL) {
-                for (name, entry) in entries.mcpServers.sorted(by: { $0.key < $1.key }) {
-                    if let config = entryToConfig(name: name, entry: entry) {
-                        upsert(name, config)
+        // Skip filesystem root / unbound cwd — never walk `/.mcp.json`.
+        if let cwd = PathConfinement.usableWorkspaceRoot(cwd) {
+            for fileURL in discoverProjectConfigFiles(cwd: cwd) {
+                if let entries = loadConfigFile(at: fileURL) {
+                    for (name, entry) in entries.mcpServers.sorted(by: { $0.key < $1.key }) {
+                        if let config = entryToConfig(name: name, entry: entry) {
+                            upsert(name, config)
+                        }
                     }
                 }
             }
@@ -351,7 +355,7 @@ public enum MCPConfigWalker {
         if let g = globalConfigURL {
             sources.append("Global: \(g.path)")
         }
-        if let cwd {
+        if let cwd = PathConfinement.usableWorkspaceRoot(cwd) {
             let project = discoverProjectConfigFiles(cwd: cwd)
             for f in project {
                 sources.append("Project: \(f.path)")

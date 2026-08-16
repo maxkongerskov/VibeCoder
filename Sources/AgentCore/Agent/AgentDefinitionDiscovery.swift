@@ -4,6 +4,8 @@
 //
 //  Phase B PB5: tools / allowed-tools / allowed_tools frontmatter;
 //  unknown tool names are stripped at spawn time (see AgentToolAllowlist).
+//  ZCode profile fields: model, thoughtLevel/effort, permissionMode,
+//  maxTurns, background (see AgentProfileSettings).
 //
 
 import Foundation
@@ -20,13 +22,45 @@ public struct DiscoveredAgentDefinition: Sendable, Equatable, Identifiable {
     public var tools: [String]
     public var fileURL: URL?
 
+    /// Optional model id from frontmatter (`model:`).
+    public var model: String?
+    /// Optional thought / effort string (`thoughtLevel` or `effort`).
+    public var thoughtLevel: String?
+    /// Mapped permission mode (`acceptEdits`→edit, `bypassPermissions`→yolo).
+    public var permissionMode: ExecutionMode?
+    /// Optional child iteration cap (`maxTurns`).
+    public var maxTurns: Int?
+    /// Optional default background spawn (`background:`).
+    public var background: Bool?
+
     public init(name: String, description: String, systemPrompt: String,
-                tools: [String] = [], fileURL: URL? = nil) {
+                tools: [String] = [], fileURL: URL? = nil,
+                model: String? = nil,
+                thoughtLevel: String? = nil,
+                permissionMode: ExecutionMode? = nil,
+                maxTurns: Int? = nil,
+                background: Bool? = nil) {
         self.name = name
         self.description = description
         self.systemPrompt = systemPrompt
         self.tools = tools
         self.fileURL = fileURL
+        self.model = model
+        self.thoughtLevel = thoughtLevel
+        self.permissionMode = permissionMode
+        self.maxTurns = maxTurns
+        self.background = background
+    }
+
+    /// Typed bag for `SubAgentRunner` / `AgentDefinition.profileSettings`.
+    public var profileSettings: AgentProfileSettings {
+        AgentProfileSettings(
+            model: model,
+            thoughtLevel: thoughtLevel,
+            permissionMode: permissionMode,
+            maxTurns: maxTurns,
+            background: background
+        )
     }
 
     /// Resolve a spawn allowlist for this definition against known tools.
@@ -84,6 +118,11 @@ public enum AgentDefinitionDiscovery {
         var name = fileURL?.deletingPathExtension().lastPathComponent ?? "agent"
         var description = ""
         var tools: [String] = []
+        var model: String?
+        var thoughtLevel: String?
+        var permissionMode: ExecutionMode?
+        var maxTurns: Int?
+        var background: Bool?
         var body = markdown
 
         if markdown.hasPrefix("---") {
@@ -99,19 +138,61 @@ public enum AgentDefinitionDiscovery {
                 if let t = firstToolsValue(fields) {
                     tools = parseToolsList(t)
                 }
+                model = AgentProfileSettings.nonEmpty(
+                    firstField(fields, keys: Self.modelFrontmatterKeys))
+                thoughtLevel = AgentProfileSettings.parseThoughtLevel(
+                    thoughtLevel: firstField(fields, keys: Self.thoughtLevelFrontmatterKeys),
+                    effort: firstField(fields, keys: Self.effortFrontmatterKeys))
+                permissionMode = AgentProfileSettings.parsePermissionMode(
+                    firstField(fields, keys: Self.permissionModeFrontmatterKeys))
+                maxTurns = AgentProfileSettings.parseMaxTurns(
+                    firstField(fields, keys: Self.maxTurnsFrontmatterKeys))
+                background = AgentProfileSettings.parseBackground(
+                    firstField(fields, keys: Self.backgroundFrontmatterKeys))
             }
         }
         let prompt = body.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !prompt.isEmpty else { return nil }
         return DiscoveredAgentDefinition(
             name: name, description: description, systemPrompt: prompt,
-            tools: tools, fileURL: fileURL)
+            tools: tools, fileURL: fileURL,
+            model: model, thoughtLevel: thoughtLevel,
+            permissionMode: permissionMode, maxTurns: maxTurns,
+            background: background)
     }
 
     // MARK: - Frontmatter (minimal YAML-ish)
 
     /// Keys that declare a tool allowlist (first hit wins).
     public static let toolsFrontmatterKeys = ["tools", "allowed-tools", "allowed_tools"]
+    public static let modelFrontmatterKeys = ["model"]
+    public static let thoughtLevelFrontmatterKeys = ["thoughtLevel", "thought_level", "thought-level"]
+    public static let effortFrontmatterKeys = ["effort"]
+    public static let permissionModeFrontmatterKeys = [
+        "permissionMode", "permission_mode", "permission-mode",
+    ]
+    public static let maxTurnsFrontmatterKeys = ["maxTurns", "max_turns", "max-turns"]
+    public static let backgroundFrontmatterKeys = ["background"]
+
+    /// First non-empty value among exact keys, then case-insensitive key match.
+    static func firstField(_ fields: [String: String], keys: [String]) -> String? {
+        for key in keys {
+            if let v = fields[key], !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return v
+            }
+        }
+        var lower: [String: String] = [:]
+        for (k, v) in fields where lower[k.lowercased()] == nil {
+            lower[k.lowercased()] = v
+        }
+        for key in keys {
+            if let v = lower[key.lowercased()],
+               !v.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return v
+            }
+        }
+        return nil
+    }
 
     static func firstToolsValue(_ fields: [String: String]) -> String? {
         for key in toolsFrontmatterKeys {

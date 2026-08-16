@@ -66,6 +66,13 @@ public enum SafeBash: Sendable {
         "package",
     ]
 
+    /// Inspect-only `swift package` subcommands. `update` / `add-dependency`
+    /// / `reset` mutate the graph and must not auto-approve as RO.
+    private static let readOnlySwiftPackageActions: Set<String> = [
+        "describe", "show", "dump-package", "dump-symbol-graph",
+        "completion", "show-dependencies", "tools-version",
+    ]
+
     /// Cargo check/clippy only — `build` / `test` write `target/`.
     private static let readOnlyCargoSubs: Set<String> = ["check", "clippy"]
 
@@ -347,8 +354,13 @@ public enum SafeBash: Sendable {
             return readOnlyGitSubs.contains(sub)
         case "swift":
             guard tokens.count >= 2 else { return false }
-            // `swift package` only (describe/show/…); not build/test/run.
-            return readOnlySwiftSubs.contains(tokens[1])
+            guard readOnlySwiftSubs.contains(tokens[1]) else { return false }
+            // Bare `swift package` is inspect (prints help). Mutating
+            // actions need a third token that is not on the inspect list.
+            if tokens.count < 3 { return true }
+            let action = tokens[2]
+            if action.hasPrefix("-") { return true } // flags / help
+            return readOnlySwiftPackageActions.contains(action)
         case "cargo":
             guard tokens.count >= 2 else { return false }
             return readOnlyCargoSubs.contains(tokens[1])

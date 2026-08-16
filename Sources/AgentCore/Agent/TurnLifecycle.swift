@@ -93,7 +93,10 @@ public enum SystemReminder: Sendable {
     /// the model (user-role so OpenAI tool pairing stays intact) but must
     /// never render as a chat bubble or count as a user turn.
     public static func isWireOnly(_ content: String) -> Bool {
-        content.trimmingCharacters(in: .whitespacesAndNewlines)
-            .hasPrefix("# System reminder")
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("# System reminder") { return true }
+        if trimmed.hasPrefix("[system] Background job update") { return true }
+        if trimmed.hasPrefix("[Background job completed]") { return true }
+        return false
     }
 }

@@ -185,6 +185,14 @@ final class PhaseCMemoryDreamTests: XCTestCase {
         XCTAssertFalse(dream.didRun)
         XCTAssertEqual(dream.reason, "logs_too_thin")
         XCTAssertNil(storage.readMemory(scope: .workspace))
+        // Thin skip must not stamp the lock — a later fat log should still dream.
+        _ = try storage.writeSessionLog(
+            sessionId: "fat",
+            content: String(repeating: "Decision: use worktrees for isolation.\n", count: 8))
+        let later = try await backend.dreamIfNeeded(minSessions: 1, minHours: 1)
+        XCTAssertTrue(
+            later.didRun,
+            "thin skip must not lock out a later consolidation: \(later.reason)")
     }
 
     func testExtractiveNoSignalReturnsNO_REPLY() {

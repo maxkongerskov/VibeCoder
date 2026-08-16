@@ -42,6 +42,13 @@ struct ChatView: View {
     @State private var isSending: Bool = false
     /// User hid the floating plan panel (✕). Reappears when the plan identity changes.
     @State private var planPanelDismissedIdentity: String? = nil
+    @State private var detectedLoopback: [LoopbackDetectHit] = []
+
+    /// Find in task (⌘F) — overlay + current match in this transcript.
+    @State private var showFindInTask = false
+    @State private var findQuery = ""
+    @State private var findCurrentIndex = 0
+    @State private var findFocusNonce = 0
 
     // MARK: - Derived header state
 
@@ -99,6 +106,28 @@ struct ChatView: View {
 
             chatColumn(columnWidth: columnWidth)
                 .frame(width: geo.size.width, height: geo.size.height)
+                .overlay(alignment: .top) {
+                    if showFindInTask {
+                        FindInTaskOverlay(
+                            query: $findQuery,
+                            currentIndex: safeFindIndex,
+                            matchCount: findHits.count,
+                            focusNonce: findFocusNonce,
+                            onPrevious: findGoPrevious,
+                            onNext: findGoNext,
+                            onClear: {
+                                findQuery = ""
+                                findCurrentIndex = 0
+                            },
+                            onClose: closeFindInTask
+                        )
+                        .frame(maxWidth: columnWidth)
+                        .padding(.top, 8)
+                        .padding(.horizontal, sideGutter)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .zIndex(60)
+                    }
+                }
                 .overlay(alignment: .topTrailing) {
                     floatingPlanPanel(columnWidth: columnWidth)
                         .padding(.top, 52)
@@ -110,6 +139,25 @@ struct ChatView: View {
             // Only export when this chat is the target (or object is nil).
             if let id = note.object as? UUID, id != viewModel.conversation.id { return }
             exportMarkdownToFile()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .findInTaskRequested)) { _ in
+            withAnimation(.easeOut(duration: 0.15)) {
+                showFindInTask = true
+            }
+            findFocusNonce += 1
+        }
+        .onChange(of: findQuery) { _, _ in
+            findCurrentIndex = 0
+        }
+        .onChange(of: viewModel.conversation.id) { _, _ in
+            findCurrentIndex = 0
+        }
+        .onChange(of: findHits.count) { _, count in
+            if count == 0 {
+                findCurrentIndex = 0
+            } else if findCurrentIndex >= count {
+                findCurrentIndex = 0
+            }
         }
         // Worktree review sheet — real `git diff` / status from the worktree.
         .sheet(isPresented: $showWorktreeReview) {
@@ -202,7 +250,7 @@ struct ChatView: View {
                 title: viewModel.conversation.title.isEmpty
                     ? "New conversation"
                     : viewModel.conversation.title,
-                projectName: nil,
+                projectName: viewModel.conversation.projectRoot?.lastPathComponent,
                 capabilities: headerCapabilities,
                 // Real worktree state — pill lights when a worktree branch
                 // is persisted on the conversation. Toggling routes to
@@ -254,6 +302,16 @@ struct ChatView: View {
             // No hairline under the title chrome — canvas is continuous.
             EngineLoadBar(isLoading: isEngineBusy || app.isLoadingModel)
                 .background(Theme.Palette.canvas)
+
+            StatusCapsuleView(
+                cwd: viewModel.conversation.worktreeRootURL
+                    ?? viewModel.conversation.projectRoot,
+                conversationID: viewModel.conversation.id,
+                isRunning: viewModel.isRunning,
+                changeSummary: latestCompletedTurnChanges,
+                todoDone: statusCapsuleTodoDone,
+                todoTotal: statusCapsuleTodoTotal
+            )
 
             // oMLX / backend load failure when the user picks a model.
             if let loadErr = app.modelLoadError, !loadErr.isEmpty {
@@ -610,6 +668,7 @@ struct ChatView: View {
             }
         )
         .padding(.top, Theme.ChatLayout.beforeAssistant)
+        .findInTaskCurrentMatch(isCurrentFindPending)
         .id("pending")
     }
 
@@ -658,7 +717,24 @@ struct ChatView: View {
                 },
                 cleanModelChrome: app.settings.cleanModelChrome
             )
+            .findInTaskCurrentMatch(isCurrentFindMatch(block))
             .id(block.id)
+
+            let changeSummary = Self.turnChangeSummary(
+                for: block,
+                messages: viewModel.conversation.messages
+            )
+            if !changeSummary.isEmpty {
+                TurnChangeSummaryView(
+                    summary: changeSummary,
+                    conversationID: viewModel.conversation.id,
+                    reviewLinesByPath: Self.reviewLines(
+                        block: block,
+                        priorFiles: priorFiles
+                    )
+                )
+                .padding(.top, 6)
+            }
         }
 
         if block.displayMessage.role == .user,
@@ -717,8 +793,23 @@ struct ChatView: View {
                     if showBrandHero {
                         EmptyChatBrandHero(
                             title: emptyHeroTitle,
-                            subtitle: emptyHeroSubtitle
+                            subtitle: emptyHeroSubtitle,
+                            detected: detectedLoopback,
+                            onUseDetected: { target in
+                                app.activateBackend(target.backend)
+                                Task { await app.refreshModels() }
+                            },
+                            onOpenSettings: {
+                                NotificationCenter.default.post(
+                                    name: .settingsRequested, object: "connection")
+                            }
                         )
+                        .task {
+                            let snap = app.settings
+                            detectedLoopback = await Task.detached {
+                                LoopbackServerProbe.scan(settings: snap)
+                            }.value
+                        }
                             .frame(maxWidth: .infinity)
                             .frame(minHeight: 220)
                             .padding(.top, 48)
@@ -779,6 +870,13 @@ struct ChatView: View {
                 stickToBottom = true
                 scrollToLatest(proxy: proxy, animated: false)
             }
+            .onChange(of: findNavigateToken) { _, _ in
+                guard showFindInTask, let id = findScrollAnchorID() else { return }
+                stickToBottom = false
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo(id, anchor: .center)
+                }
+            }
             .onChange(of: viewModel.conversation.messages.count) { _, _ in
                 // Sending a new user turn always re-pins (ChatGPT behavior).
                 if viewModel.conversation.messages.last?.appearsInTranscript == true,
@@ -817,6 +915,68 @@ struct ChatView: View {
         }
     }
 
+    /// Latest *completed* assistant turn — skip the in-flight last block
+    /// so the capsule does not pick up a still-running turn.
+    private var latestCompletedTurnChanges: TurnChangeSummary {
+        let blocks = renderBlocks
+        let running = viewModel.isRunning
+        let messages = viewModel.conversation.messages
+        for (index, block) in blocks.enumerated().reversed() {
+            let isLiveAssistant = running
+                && index == blocks.count - 1
+                && block.displayMessage.role == .assistant
+            if isLiveAssistant { continue }
+            guard block.displayMessage.role == .assistant else { continue }
+            return Self.turnChangeSummary(for: block, messages: messages)
+        }
+        return .empty
+    }
+
+    private var statusCapsuleTodoDone: Int {
+        guard let plan = viewModel.activePlan else { return 0 }
+        return plan.todos.filter { $0.status == .done || $0.status == .skipped }.count
+    }
+
+    private var statusCapsuleTodoTotal: Int {
+        viewModel.activePlan?.todos.count ?? 0
+    }
+
+    /// File changes for a completed assistant turn (ZCode turn-end card).
+    private static func turnChangeSummary(
+        for block: RenderBlock,
+        messages: [ChatMessage]
+    ) -> TurnChangeSummary {
+        guard block.displayMessage.role == .assistant else { return .empty }
+        let summaries = TurnChangeSummary.summarizeEachTurn(in: messages)
+        if let start = block.runStartMessageID,
+           let startIdx = messages.firstIndex(where: { $0.id == start }) {
+            let userID = messages[..<startIdx].last(where: {
+                $0.role == .user && !$0.isWireOnlySystemReminder
+            })?.id
+            if let userID, let match = summaries.first(where: { $0.userMessageID == userID }) {
+                return match
+            }
+        }
+        return TurnChangeSummary.summarize(turnMessages: block.assistantTurnMessages)
+    }
+
+    /// Inline Review diffs — reuse the same parse as edit cards.
+    private static func reviewLines(
+        block: RenderBlock,
+        priorFiles: [String: String]
+    ) -> [String: [CodeDiffLine]] {
+        let parts = ChatToolPartition.split(
+            block.aggregatedToolCalls,
+            seedContents: priorFiles
+        )
+        var map: [String: [CodeDiffLine]] = [:]
+        for edit in parts.edits {
+            let key = TurnChangeSummary.pathKey(edit.path)
+            map[key, default: []].append(contentsOf: edit.lines)
+        }
+        return map
+    }
+
     /// Scroll policy (only called when `stickToBottom` is true, except
     /// forced paths like conversation switch / first appear):
     /// - Streaming → follow the pending assistant bubble (bottom).
@@ -842,6 +1002,91 @@ struct ChatView: View {
         } else {
             run()
         }
+    }
+
+    // MARK: - Find in task
+
+    private var findHits: [FindInTaskHit] {
+        FindInTaskSearch.hits(
+            query: findQuery,
+            messages: viewModel.conversation.messages,
+            streamingContent: viewModel.streamingContent
+        )
+    }
+
+    private var safeFindIndex: Int {
+        let count = findHits.count
+        guard count > 0 else { return 0 }
+        return min(max(findCurrentIndex, 0), count - 1)
+    }
+
+    private var currentFindHit: FindInTaskHit? {
+        let hits = findHits
+        guard hits.indices.contains(safeFindIndex) else { return nil }
+        return hits[safeFindIndex]
+    }
+
+    /// Changes when the active hit or overlay visibility changes so ScrollViewReader can follow.
+    private var findNavigateToken: String {
+        guard showFindInTask else { return "" }
+        guard let hit = currentFindHit else { return "open-empty" }
+        return "\(hit.id)#\(safeFindIndex)"
+    }
+
+    private func findGoNext() {
+        findCurrentIndex = FindInTaskSearch.nextIndex(findCurrentIndex, count: findHits.count)
+    }
+
+    private func findGoPrevious() {
+        findCurrentIndex = FindInTaskSearch.previousIndex(findCurrentIndex, count: findHits.count)
+    }
+
+    private func closeFindInTask() {
+        withAnimation(.easeOut(duration: 0.12)) {
+            showFindInTask = false
+        }
+    }
+
+    private func findBlockContains(_ block: RenderBlock, messageID: UUID) -> Bool {
+        block.id == messageID
+            || block.displayMessage.id == messageID
+            || block.assistantTurnMessages.contains { $0.id == messageID }
+    }
+
+    private func isCurrentFindMatch(_ block: RenderBlock) -> Bool {
+        guard showFindInTask, let hit = currentFindHit else { return false }
+        if hit.id == FindInTaskSearch.pendingHitID { return false }
+        guard let messageID = hit.messageID else { return false }
+        return findBlockContains(block, messageID: messageID)
+    }
+
+    private var isCurrentFindPending: Bool {
+        guard showFindInTask, let hit = currentFindHit else { return false }
+        if hit.id == FindInTaskSearch.pendingHitID { return true }
+        guard viewModel.isRunning,
+              let messageID = hit.messageID,
+              let last = renderBlocks.last,
+              last.displayMessage.role == .assistant else { return false }
+        return findBlockContains(last, messageID: messageID)
+    }
+
+    private func findScrollAnchorID() -> AnyHashable? {
+        guard let hit = currentFindHit else { return nil }
+        if hit.id == FindInTaskSearch.pendingHitID {
+            return FindInTaskSearch.pendingHitID
+        }
+        guard let messageID = hit.messageID else { return hit.id }
+        let blocks = renderBlocks
+        if viewModel.isRunning,
+           let last = blocks.last,
+           last.displayMessage.role == .assistant,
+           findBlockContains(last, messageID: messageID) {
+            return FindInTaskSearch.pendingHitID
+        }
+        if let block = blocks.first(where: { findBlockContains($0, messageID: messageID) }) {
+            return block.id
+        }
+        return messageID
     }
 
     // MARK: - Send
