@@ -39,6 +39,25 @@ final class ConversationIOTests: XCTestCase {
         XCTAssertEqual(rebound.projectRoot?.path, "/new/work")
     }
 
+    func testHydrateSessionReadsSeedsTracker() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("pb6-hydrate-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let file = dir.appendingPathComponent("src.swift")
+        try "let x = 1\n".write(to: file, atomically: true, encoding: .utf8)
+        var convo = Conversation(title: "eval", modelID: "mock", projectRoot: dir)
+        convo.sessionReadPaths = [file.path]
+
+        await SessionReadTracker.shared.clear(conversationID: convo.id)
+        await ConversationIO.hydrateSessionReads(convo)
+        let hit = await SessionReadTracker.shared.hasRead(
+            path: file.path, conversationID: convo.id)
+        XCTAssertTrue(hit, "eval --resume must seed SessionReadTracker")
+        await SessionReadTracker.shared.clear(conversationID: convo.id)
+    }
+
     func testResumeMissingThrows() {
         do {
             _ = try ConversationIO.load(fromPath: "/tmp/definitely-missing-\(UUID().uuidString).json")

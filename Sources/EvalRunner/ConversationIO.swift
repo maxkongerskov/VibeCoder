@@ -27,8 +27,8 @@ public enum ConversationIO {
         }
     }
 
-    /// Seed SessionReadTracker after `--resume`. Sync `load` cannot await
-    /// the actor; the eval CLI still needs to call this (remaining gap).
+    /// Seed SessionReadTracker after `--resume`. Call from the eval CLI
+    /// after `load` (sync decode cannot await the actor).
     public static func hydrateSessionReads(_ conversation: Conversation) async {
         await SessionReadTracker.shared.seed(
             paths: conversation.sessionReadPaths,

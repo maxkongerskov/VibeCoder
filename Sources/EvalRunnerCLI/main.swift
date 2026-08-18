@@ -193,7 +193,9 @@ struct EvalRunnerMain {
             if conversation.modelID == nil {
                 conversation.modelID = model.id
             }
-            fputs("[eval-runner] resumed conversation id=\(conversation.id) messages=\(conversation.messages.count) from \(resumePath)\n", stderr)
+            // Sync load cannot await; seed the process-global tracker here.
+            await ConversationIO.hydrateSessionReads(conversation)
+            fputs("[eval-runner] resumed conversation id=\(conversation.id) messages=\(conversation.messages.count) reads=\(conversation.sessionReadPaths.count) from \(resumePath)\n", stderr)
         } else {
             conversation = Conversation(
                 title: "eval",
