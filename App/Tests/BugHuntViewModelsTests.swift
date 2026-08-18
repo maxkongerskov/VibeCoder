@@ -409,7 +409,11 @@ final class BugHuntViewModelsTests: XCTestCase {
             "bughunt-hooks-\(short)", isDirectory: true)
         let hooks = project.appendingPathComponent(".vibecoder/hooks", isDirectory: true)
         try fm.createDirectory(at: hooks, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(at: project) }
+        HookDispatcher.setHooksHomeDirectoryOverride(project)
+        defer {
+            HookDispatcher.setHooksHomeDirectoryOverride(nil)
+            try? fm.removeItem(at: project)
+        }
 
         let script = hooks.appendingPathComponent("deny-prompt.sh")
         try "#!/bin/sh\nexit 2\n".write(to: script, atomically: true, encoding: .utf8)

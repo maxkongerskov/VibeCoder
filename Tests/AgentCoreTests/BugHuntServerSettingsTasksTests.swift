@@ -263,6 +263,8 @@ final class BugHuntServerSettingsTasksTests: XCTestCase {
         let root = tempDir.appendingPathComponent("hooks-proj", isDirectory: true)
         let hooks = root.appendingPathComponent(".vibecoder/hooks", isDirectory: true)
         try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        HookDispatcher.setHooksHomeDirectoryOverride(root)
+        defer { HookDispatcher.setHooksHomeDirectoryOverride(nil) }
 
         let script = hooks.appendingPathComponent("deny-args.sh")
         try """

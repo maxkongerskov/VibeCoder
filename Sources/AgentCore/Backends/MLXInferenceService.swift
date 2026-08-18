@@ -236,7 +236,7 @@ public actor MLXInferenceService: InferenceBackend {
     public nonisolated func stream(request: ChatRequest) -> AsyncThrowingStream<ChatChunk, Error> {
         AsyncThrowingStream { continuation in
             continuation.finish(throwing: BackendError.unsupported(
-                "MLX inference requires the MLXBackend target. Enable mlx-swift in Package.swift to use this surface."
+                MLXBackendUnavailable.notShippedMessage
             ))
         }
     }
@@ -283,9 +283,7 @@ public actor MLXInferenceService: InferenceBackend {
                                 maxTokens: Int) async throws -> String {
         _ = messages; _ = tools; _ = temperature; _ = maxTokens
         _ = Self.resolvedModelId(model, fallback: fallbackModelId)
-        throw BackendError.unsupported(
-            "MLX chatCompletion requires the MLXBackend target. Enable mlx-swift in Package.swift."
-        )
+        throw BackendError.unsupported(MLXBackendUnavailable.notShippedMessage)
     }
 
     /// Streaming variant kept for parity. Always throws until
@@ -298,9 +296,7 @@ public actor MLXInferenceService: InferenceBackend {
                                       onDelta: @Sendable (String) -> Void) async throws {
         _ = messages; _ = tools; _ = temperature; _ = maxTokens; _ = onDelta
         _ = Self.resolvedModelId(model, fallback: fallbackModelId)
-        throw BackendError.unsupported(
-            "MLX streamChatCompletion requires the MLXBackend target. Enable mlx-swift in Package.swift."
-        )
+        throw BackendError.unsupported(MLXBackendUnavailable.notShippedMessage)
     }
 
     // MARK: Load-state plumbing

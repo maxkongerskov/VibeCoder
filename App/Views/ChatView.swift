@@ -47,6 +47,7 @@ struct ChatView: View {
     /// Find in task (⌘F) — overlay + current match in this transcript.
     @State private var showFindInTask = false
     @State private var findQuery = ""
+    @State private var findScope: FindInTaskScope = .messages
     @State private var findCurrentIndex = 0
     @State private var findFocusNonce = 0
 
@@ -110,6 +111,7 @@ struct ChatView: View {
                     if showFindInTask {
                         FindInTaskOverlay(
                             query: $findQuery,
+                            scope: $findScope,
                             currentIndex: safeFindIndex,
                             matchCount: findHits.count,
                             focusNonce: findFocusNonce,
@@ -147,6 +149,9 @@ struct ChatView: View {
             findFocusNonce += 1
         }
         .onChange(of: findQuery) { _, _ in
+            findCurrentIndex = 0
+        }
+        .onChange(of: findScope) { _, _ in
             findCurrentIndex = 0
         }
         .onChange(of: viewModel.conversation.id) { _, _ in
@@ -731,7 +736,8 @@ struct ChatView: View {
                     reviewLinesByPath: Self.reviewLines(
                         block: block,
                         priorFiles: priorFiles
-                    )
+                    ),
+                    highlightedPathKey: currentFindFilePathKey
                 )
                 .padding(.top, 6)
             }
@@ -1007,11 +1013,25 @@ struct ChatView: View {
     // MARK: - Find in task
 
     private var findHits: [FindInTaskHit] {
-        FindInTaskSearch.hits(
-            query: findQuery,
-            messages: viewModel.conversation.messages,
-            streamingContent: viewModel.streamingContent
-        )
+        switch findScope {
+        case .messages:
+            return FindInTaskSearch.hits(
+                query: findQuery,
+                messages: viewModel.conversation.messages,
+                streamingContent: viewModel.streamingContent
+            )
+        case .fileChanges:
+            return FindInTaskFileChangeSearch.hits(
+                query: findQuery,
+                messages: viewModel.conversation.messages
+            )
+        }
+    }
+
+    private var currentFindFilePathKey: String? {
+        guard showFindInTask, findScope == .fileChanges,
+              let hit = currentFindHit else { return nil }
+        return FindInTaskFileChangeSearch.pathKey(fromHitID: hit.id)
     }
 
     private var safeFindIndex: Int {
@@ -1054,7 +1074,7 @@ struct ChatView: View {
     }
 
     private func isCurrentFindMatch(_ block: RenderBlock) -> Bool {
-        guard showFindInTask, let hit = currentFindHit else { return false }
+        guard showFindInTask, findScope == .messages, let hit = currentFindHit else { return false }
         if hit.id == FindInTaskSearch.pendingHitID { return false }
         guard let messageID = hit.messageID else { return false }
         return findBlockContains(block, messageID: messageID)
@@ -1072,6 +1092,9 @@ struct ChatView: View {
 
     private func findScrollAnchorID() -> AnyHashable? {
         guard let hit = currentFindHit else { return nil }
+        if FindInTaskFileChangeSearch.isFileChangeHitID(hit.id) {
+            return hit.id
+        }
         if hit.id == FindInTaskSearch.pendingHitID {
             return FindInTaskSearch.pendingHitID
         }
@@ -1113,6 +1136,17 @@ struct ChatView: View {
             }
             draftInput = ""
             isSending = false
+            return
+        }
+        if case .expandToMessage(let expanded) = result {
+            draftInput = ""
+            Task { @MainActor in
+                let accepted = viewModel.send(expanded)
+                if !accepted {
+                    draftInput = text
+                }
+                isSending = false
+            }
             return
         }
 

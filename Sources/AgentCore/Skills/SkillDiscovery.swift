@@ -29,8 +29,10 @@ public struct DiscoveredSkill: Sendable, Equatable, Identifiable {
     /// (Slash registration is a separate surface; this flag is parsed for
     /// control-plane parity and future `/skill` wiring.)
     public var userInvocable: Bool
-    /// Optional tool allowlist from frontmatter (`allowed-tools`). Stored for
-    /// later gating; not enforced by discovery/load today.
+    /// Optional tool allowlist from frontmatter (`allowed-tools`). Empty means
+    /// no extra restriction. After a successful `load_skill`, a non-empty list
+    /// is enforced in-session by `SkillToolGate` (last load wins; not persisted).
+    /// `load_skill` itself remains allowed so another skill can replace the gate.
     public var allowedTools: [String]
     /// When true, only name/description/path were loaded; call
     /// `SkillDiscovery.ensureBody` (or `byName`) before using `body`.
@@ -614,6 +616,19 @@ public enum SkillDiscovery {
     static func boolishFrontmatterValue(_ fields: [String: String], keys: [String]) -> Bool? {
         guard let raw = firstFrontmatterValue(fields, keys: keys) else { return nil }
         return parseBoolish(raw)
+    }
+
+    /// Trimmed unique names from a skill’s `allowed-tools`. `nil` means no
+    /// extra session restriction (empty list). Does not add `load_skill`;
+    /// `SkillToolGate.record` unions that name when storing.
+    public static func sessionToolAllowlist(from allowedTools: [String]) -> Set<String>? {
+        var seen = Set<String>()
+        for raw in allowedTools {
+            let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !name.isEmpty else { continue }
+            seen.insert(name)
+        }
+        return seen.isEmpty ? nil : seen
     }
 
     /// `allowed-tools` as YAML-ish list or comma/space-separated string.

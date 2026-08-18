@@ -26,18 +26,29 @@ public struct ShellApprovalRequest: Sendable, Identifiable, Equatable {
     public let reason: String
     public let command: String?
     public let detail: String
+    /// Used when the App coordinator evaluates PermissionRequest itself.
+    public let projectRoot: URL?
+    public let worktreeRoot: URL?
+    /// True when `ShellApproval.resolveAsk` already ran PermissionRequest.
+    public let permissionRequestAlreadyEvaluated: Bool
 
     public init(
         id: UUID = UUID(),
         toolName: String,
         reason: String,
         command: String? = nil,
-        detail: String? = nil
+        detail: String? = nil,
+        projectRoot: URL? = nil,
+        worktreeRoot: URL? = nil,
+        permissionRequestAlreadyEvaluated: Bool = false
     ) {
         self.id = id
         self.toolName = toolName
         self.reason = reason
         self.command = command
+        self.projectRoot = projectRoot
+        self.worktreeRoot = worktreeRoot
+        self.permissionRequestAlreadyEvaluated = permissionRequestAlreadyEvaluated
         if let detail, !detail.isEmpty {
             self.detail = detail
         } else if let command, !command.isEmpty {
@@ -96,7 +107,10 @@ public enum ShellApproval {
     public static func makeRequest(
         toolName: String,
         arguments: ToolArguments,
-        reason: String
+        reason: String,
+        projectRoot: URL? = nil,
+        worktreeRoot: URL? = nil,
+        permissionRequestAlreadyEvaluated: Bool = false
     ) -> ShellApprovalRequest {
         let command = arguments.stringOptional("command")
         var detail = command ?? toolName
@@ -115,7 +129,10 @@ public enum ShellApproval {
             toolName: toolName,
             reason: reason,
             command: command,
-            detail: detail
+            detail: detail,
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot,
+            permissionRequestAlreadyEvaluated: permissionRequestAlreadyEvaluated
         )
     }
 
@@ -125,10 +142,28 @@ public enum ShellApproval {
         reason: String,
         context: ToolContext
     ) async throws {
+        let payload = arguments.stringOptional("command")
+            ?? arguments.stringOptional("description")
+            ?? reason
+        if let deny = HookDispatcher.permissionRequestDenial(
+            toolName: toolName,
+            payload: payload,
+            projectRoot: context.projectRoot,
+            worktreeRoot: context.worktreeRoot
+        ) {
+            throw ToolError.permissionDenied(deny)
+        }
         guard let coordinator = context.shellApprovalCoordinator else {
             throw ToolError.permissionDenied(reason)
         }
-        let request = makeRequest(toolName: toolName, arguments: arguments, reason: reason)
+        let request = makeRequest(
+            toolName: toolName,
+            arguments: arguments,
+            reason: reason,
+            projectRoot: context.projectRoot,
+            worktreeRoot: context.worktreeRoot,
+            permissionRequestAlreadyEvaluated: true
+        )
         let decision = await coordinator.review(request)
         let key = grantKey(toolName: toolName, arguments: arguments, context: context)
         let command = arguments.stringOptional("command")

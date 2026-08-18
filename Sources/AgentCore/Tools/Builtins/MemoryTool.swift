@@ -136,8 +136,13 @@ public struct MemoryTool: Tool {
             return ToolResult(content: "Error appending to \(url.path): \(error.localizedDescription)",
                               isError: true)
         }
-        return ToolResult(
+        var note = decision
+        if !rationale.isEmpty { note += "\nRationale: \(rationale)" }
+        if !avoid.isEmpty { note += "\nAvoid: \(avoid)" }
+        return MemoryUpdateReminder.result(
             content: "Decision logged to \(url.path).",
+            action: "log_decision",
+            body: note,
             mutatedPaths: [relativePath(url, base: base)]
         )
     }
@@ -187,8 +192,10 @@ public struct MemoryTool: Tool {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                     withIntermediateDirectories: true)
             try content.write(to: url, atomically: true, encoding: .utf8)
-            return ToolResult(
+            return MemoryUpdateReminder.result(
                 content: "Session handoff written to \(url.path).",
+                action: "write_handoff",
+                body: summary,
                 mutatedPaths: [relativePath(url, base: base)]
             )
         } catch {
@@ -237,7 +244,11 @@ public struct MemoryTool: Tool {
             if let rationale = arguments.stringOptional("rationale"), !rationale.isEmpty {
                 _ = logDecision(arguments: arguments, base: base)
             }
-            return ToolResult(content: "Remembered in workspace memory (\(text.prefix(80))…).")
+            return MemoryUpdateReminder.result(
+                content: "Remembered in workspace memory (\(text.prefix(80))…).",
+                action: "remember",
+                body: text
+            )
         } catch {
             return ToolResult(content: "Error remembering: \(error.localizedDescription)", isError: true)
         }

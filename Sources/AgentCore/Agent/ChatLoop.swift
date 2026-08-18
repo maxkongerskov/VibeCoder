@@ -777,6 +777,132 @@ public enum ChatLoop {
     Skip this if your work was straightforward (no real choice was made). Don't log obvious things like "added a unit test" or "fixed a typo". Quality over quantity.
     """
 
+    // MARK: - Parity reminder cadence (ZCode mid-turn)
+
+    /// Plan-mode reminder every N human turns while execution mode is plan.
+    public static let planModeReminderHumanTurns = 5
+
+    /// Todo/plan nudge after N human turns with no `create_plan` / `update_todo`.
+    public static let todoNudgeHumanTurns = 8
+
+    /// After the first todo nudge, wait this many human turns before nagging again.
+    public static let todoNudgeRepeatHumanTurns = 8
+
+    /// Tool names that satisfy the todo/plan cadence (not `revise_plan`).
+    public static let todoPlanCadenceTools: Set<String> = [
+        "create_plan", "update_todo"
+    ]
+
+    /// User-role message that is not a harness system-reminder.
+    public static func isHumanTurn(_ message: ChatMessage) -> Bool {
+        message.role == .user && !SystemReminder.isSystemReminder(message.content)
+    }
+
+    /// Count of real user turns. Skips BuildGuard / AutoVerify / hook /
+    /// interjection / background-job system-reminder rows.
+    public static func humanTurnCount(messages: [ChatMessage]) -> Int {
+        messages.reduce(0) { $0 + (isHumanTurn($1) ? 1 : 0) }
+    }
+
+    /// True when this conversation already authored a plan or todo list.
+    public static func hasCalledCreatePlanOrUpdateTodo(messages: [ChatMessage]) -> Bool {
+        messages.contains { message in
+            message.toolCalls.contains { todoPlanCadenceTools.contains($0.name) }
+        }
+    }
+
+    /// True on human turns 5, 10, 15, … while execution mode is plan.
+    public static func shouldRemindPlanMode(
+        messages: [ChatMessage],
+        executionMode: ExecutionMode?,
+        interval: Int = planModeReminderHumanTurns
+    ) -> Bool {
+        guard executionMode == .plan, interval > 0 else { return false }
+        let turns = humanTurnCount(messages: messages)
+        return turns > 0 && turns % interval == 0
+    }
+
+    /// True on human turns `threshold`, `threshold + repeatEvery`, …
+    /// without `create_plan` or `update_todo`. Does not re-fire every
+    /// subsequent turn. `hasLivePlan` is PlanStore (survives compact).
+    public static func shouldNudgeTodoPlan(
+        messages: [ChatMessage],
+        threshold: Int = todoNudgeHumanTurns,
+        repeatEvery: Int = todoNudgeRepeatHumanTurns,
+        hasLivePlan: Bool = false
+    ) -> Bool {
+        guard threshold > 0 else { return false }
+        guard !hasLivePlan else { return false }
+        guard !hasCalledCreatePlanOrUpdateTodo(messages: messages) else { return false }
+        let turns = humanTurnCount(messages: messages)
+        guard turns >= threshold else { return false }
+        let interval = repeatEvery > 0 ? repeatEvery : 1
+        return (turns - threshold) % interval == 0
+    }
+
+    /// Join already-formatted skill index + project-instruction blocks.
+    /// Returns nil when there is nothing to re-inject.
+    public static func postCompactRefreshBody(
+        skillIndex: String?,
+        projectInstructions: String?
+    ) -> String? {
+        var sections: [String] = []
+        if let skills = skillIndex?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !skills.isEmpty {
+            sections.append(skills)
+        }
+        if let instructions = projectInstructions?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !instructions.isEmpty {
+            sections.append(instructions)
+        }
+        guard !sections.isEmpty else { return nil }
+        return sections.joined(separator: "\n\n")
+    }
+
+    /// Cadence nudges for one model request. Pure: AgentLoop only appends
+    /// the returned strings to `pendingNudges`.
+    ///
+    /// - `emitTurnCadence`: plan-mode + todo checks (first iteration of a
+    ///   human turn). Mid-turn tool loops pass false so we do not spam.
+    /// - `didPersistCompact`: reactive compact wrote `convo.messages`.
+    ///   Reloads skill index / project instructions unless overrides are set.
+    public static func cadenceReminders(
+        messages: [ChatMessage],
+        executionMode: ExecutionMode?,
+        didPersistCompact: Bool,
+        emitTurnCadence: Bool = true,
+        projectRoot: URL? = nil,
+        worktreeRoot: URL? = nil,
+        skillIndex: String? = nil,
+        projectInstructions: String? = nil,
+        hasLivePlan: Bool = false
+    ) -> [String] {
+        var nudges: [String] = []
+        if emitTurnCadence {
+            if shouldRemindPlanMode(messages: messages, executionMode: executionMode) {
+                nudges.append(SystemReminder.planModeCadence)
+            }
+            if shouldNudgeTodoPlan(messages: messages, hasLivePlan: hasLivePlan) {
+                nudges.append(SystemReminder.todoPlanNudge)
+            }
+        }
+        if didPersistCompact {
+            let skills = skillIndex ?? SkillDiscovery.indexBlock(
+                projectRoot: projectRoot,
+                worktreeRoot: worktreeRoot)
+            let instructions = projectInstructions
+                ?? loadProjectInstructions(projectRoot: projectRoot)
+            if let body = postCompactRefreshBody(
+                skillIndex: skills,
+                projectInstructions: instructions
+            ) {
+                nudges.append(SystemReminder.postCompactRefresh(body))
+            }
+        }
+        return nudges
+    }
+
     // MARK: - Recent decisions extraction
 
     /// One parsed entry from DECISIONS.md. The full Markdown body is

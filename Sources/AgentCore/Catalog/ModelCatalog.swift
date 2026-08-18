@@ -54,39 +54,12 @@ public struct MLXEntry: Codable, Sendable, Identifiable {
 
 public enum ModelCatalogLoader {
 
-    /// P0 seed catalog. Replaced by the bundled JSON in P2.
+    /// Historical seed. GGUF rows are empty: bundled llama.cpp is removed,
+    /// and the chat picker used to surface these filenames as selectable
+    /// Ollama models (they are not Ollama tags).
     public static func seed() -> ModelCatalog {
         ModelCatalog(
-            gguf: [
-                GGUFEntry(
-                    displayName: "Qwen2.5-Coder 32B Instruct (Q4_K_M)",
-                    repoId: "unsloth/Qwen2.5-Coder-32B-Instruct-GGUF",
-                    ggufFile: "Qwen2.5-Coder-32B-Instruct-Q4_K_M.gguf",
-                    splitFileParts: 1,
-                    downloadGB: 19.8,
-                    minRAMGB: 36,
-                    parameterCountB: 32,
-                    toolCapable: true,
-                    defaultContextLength: 32768,
-                    maxContextLength: 131072,
-                    recommendedSampling: .coder,
-                    stopSequences: ["<|im_end|>"]
-                ),
-                GGUFEntry(
-                    displayName: "Qwen2.5-Coder 7B Instruct (Q4_K_M)",
-                    repoId: "unsloth/Qwen2.5-Coder-7B-Instruct-GGUF",
-                    ggufFile: "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf",
-                    splitFileParts: 1,
-                    downloadGB: 4.7,
-                    minRAMGB: 10,
-                    parameterCountB: 7,
-                    toolCapable: true,
-                    defaultContextLength: 32768,
-                    maxContextLength: 131072,
-                    recommendedSampling: .coder,
-                    stopSequences: ["<|im_end|>"]
-                ),
-            ],
+            gguf: [],
             mlx: [
                 MLXEntry(
                     displayName: "Qwen2.5-Coder 7B Instruct (MLX 4bit)",
@@ -145,7 +118,7 @@ public enum ModelCatalogLoader {
                     recommendedSampling: .medium
                 ),
             ],
-            version: "p0-seed+qwen3"
+            version: "p0-seed+qwen3-no-gguf"
         )
     }
 }

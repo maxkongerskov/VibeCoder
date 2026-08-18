@@ -17,6 +17,8 @@ struct TurnChangeSummaryView: View {
     var conversationID: UUID? = nil
     /// Diff lines keyed by `TurnChangeSummary.pathKey`.
     var reviewLinesByPath: [String: [CodeDiffLine]] = [:]
+    /// Find-in-task file-changes highlight (`TurnChangeSummary.pathKey`).
+    var highlightedPathKey: String? = nil
 
     @State private var isExpanded = false
     @State private var reviewingKeys: Set<String> = []
@@ -42,6 +44,17 @@ struct TurnChangeSummaryView: View {
         )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(headerAccessibilityLabel)
+        .onAppear { expandIfHighlighted() }
+        .onChange(of: highlightedPathKey) { _, _ in expandIfHighlighted() }
+    }
+
+    private func expandIfHighlighted() {
+        guard let key = highlightedPathKey,
+              summary.files.contains(where: { TurnChangeSummary.pathKey($0.path) == key })
+        else { return }
+        if !isExpanded {
+            isExpanded = true
+        }
     }
 
     // MARK: - Header
@@ -171,6 +184,8 @@ struct TurnChangeSummaryView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .findInTaskCurrentMatch(highlightedPathKey == key)
+            .id(FindInTaskFileChangeSearch.hitID(path: file.path))
 
             if reviewing {
                 if lines.isEmpty {

@@ -165,30 +165,38 @@ public actor ToolRegistry {
         arguments: ToolArguments,
         context: ToolContext
     ) -> (ok: ToolArguments?, deny: ToolResult?) {
-        let pre = HookDispatcher.preToolDetailed(
+        let applied = HookDispatcher.applyPreToolDetailed(
             toolName: name,
             argumentsSummary: String(describing: arguments),
             projectRoot: context.projectRoot,
             worktreeRoot: context.worktreeRoot)
-        let decision = pre.permissionDecision?.lowercased()
-        if !pre.allow || decision == "deny" {
-            return (nil, ToolResult(content: pre.message ?? "Denied by hook", isError: true))
+        if let msg = applied.denyMessage {
+            return (nil, ToolResult(content: msg, isError: true))
         }
-        if decision == "ask" {
-            return (nil, ToolResult(
-                content: pre.message ?? "Hook requested user approval before this tool can run.",
-                isError: true))
-        }
-        if let json = pre.updatedInputJSON, !json.isEmpty,
+        if let json = applied.updatedInputJSON, !json.isEmpty,
            let rewritten = try? ToolArguments(json: json) {
             return (rewritten, nil)
         }
         return (arguments, nil)
     }
 
+    /// Skill `allowed-tools` + Settings disable list. Fail closed before
+    /// permission, hooks, or the tool body so a restricted session cannot
+    /// execute an out-of-allowlist name.
+    private func skillAllowlistDenial(name: String, context: ToolContext) async -> ToolResult? {
+        await SkillToolGate.shared.denialResult(
+            toolName: name,
+            conversationID: context.conversationID,
+            disabledToolNames: context.disabledToolNames
+        )
+    }
+
     /// Resolve and execute a tool by name. Centralized permission check
     /// happens here so individual tools don't reimplement it.
     public func execute(name: String, arguments: ToolArguments, context: ToolContext) async throws -> ToolResult {
+        if let denied = await skillAllowlistDenial(name: name, context: context) {
+            return denied
+        }
         guard let meta = metadata[name] else {
             let available = metadata.keys.sorted().joined(separator: ", ")
             throw ToolError.unavailable("Unknown tool: \(name). Available: \(available)")
@@ -207,20 +215,24 @@ public actor ToolRegistry {
                 context: context)
         }
         let result: ToolResult
-        if let executor = dynamicExecutors[name] {
-            result = try await executor(effectiveArgs, context)
-        } else {
-            guard let factory = factories[name] else {
-                throw ToolError.unavailable("Unknown tool: \(name)")
+        do {
+            if let executor = dynamicExecutors[name] {
+                result = try await executor(effectiveArgs, context)
+            } else {
+                guard let factory = factories[name] else {
+                    throw ToolError.unavailable("Unknown tool: \(name)")
+                }
+                let tool = factory()
+                result = try await tool.execute(arguments: effectiveArgs, context: context)
             }
-            let tool = factory()
-            result = try await tool.execute(arguments: effectiveArgs, context: context)
+        } catch {
+            HookDispatcher.notifyPostToolUseFailure(
+                toolName: name,
+                errorSummary: error.localizedDescription,
+                projectRoot: context.projectRoot,
+                worktreeRoot: context.worktreeRoot)
+            throw error
         }
-        let post = HookDispatcher.postTool(
-            toolName: name,
-            resultSummary: String(result.content.prefix(200)),
-            projectRoot: context.projectRoot,
-            worktreeRoot: context.worktreeRoot)
         // Origin classification only. Mutating tools already insert a full
         // TrackedHunk via HunkTracker.record — do not append thin siblings.
         if !result.mutatedPaths.isEmpty {
@@ -228,17 +240,11 @@ public actor ToolRegistry {
                 await HunkTracker.shared.recordAgentPath(path)
             }
         }
-        // Post hooks run after the tool body; explicit deny flags the result
-        // so the model sees the policy failure (side effects may already exist).
-        if !post.allow {
-            let msg = post.message ?? "Denied by post-tool hook"
-            return ToolResult(
-                content: result.content.isEmpty ? msg : "\(result.content)\n\n[PostTool hook deny] \(msg)",
-                isError: true,
-                mutatedPaths: result.mutatedPaths
-            )
-        }
-        return result
+        return HookDispatcher.decorateWithPostToolHooks(
+            toolName: name,
+            result: result,
+            projectRoot: context.projectRoot,
+            worktreeRoot: context.worktreeRoot)
     }
 
     /// Schemas for the active tool subset. Used to build the
@@ -321,6 +327,10 @@ public actor ToolRegistry {
         work.reserveCapacity(invocations.count)
 
         for (index, inv) in invocations.enumerated() {
+            if let denied = await skillAllowlistDenial(name: inv.name, context: context) {
+                work.append(WorkItem(index: index, run: { denied }))
+                continue
+            }
             guard let meta = metadata[inv.name] else {
                 work.append(WorkItem(index: index, run: {
                     ToolResult(content: "Tool error: Unknown tool: \(inv.name)", isError: true)
@@ -358,23 +368,17 @@ public actor ToolRegistry {
                 work.append(WorkItem(index: index, run: {
                     do {
                         let result = try await executor(args, context)
-                        let post = HookDispatcher.postTool(
+                        return HookDispatcher.decorateWithPostToolHooks(
                             toolName: toolName,
-                            resultSummary: String(result.content.prefix(200)),
+                            result: result,
                             projectRoot: context.projectRoot,
                             worktreeRoot: context.worktreeRoot)
-                        if !post.allow {
-                            let msg = post.message ?? "Denied by post-tool hook"
-                            return ToolResult(
-                                content: result.content.isEmpty
-                                    ? msg
-                                    : "\(result.content)\n\n[PostTool hook deny] \(msg)",
-                                isError: true,
-                                mutatedPaths: result.mutatedPaths
-                            )
-                        }
-                        return result
                     } catch {
+                        HookDispatcher.notifyPostToolUseFailure(
+                            toolName: toolName,
+                            errorSummary: error.localizedDescription,
+                            projectRoot: context.projectRoot,
+                            worktreeRoot: context.worktreeRoot)
                         return ToolResult(content: "Tool error: \(error.localizedDescription)", isError: true)
                     }
                 }))
@@ -385,23 +389,17 @@ public actor ToolRegistry {
                     do {
                         let tool = factory()
                         let result = try await tool.execute(arguments: args, context: context)
-                        let post = HookDispatcher.postTool(
+                        return HookDispatcher.decorateWithPostToolHooks(
                             toolName: toolName,
-                            resultSummary: String(result.content.prefix(200)),
+                            result: result,
                             projectRoot: context.projectRoot,
                             worktreeRoot: context.worktreeRoot)
-                        if !post.allow {
-                            let msg = post.message ?? "Denied by post-tool hook"
-                            return ToolResult(
-                                content: result.content.isEmpty
-                                    ? msg
-                                    : "\(result.content)\n\n[PostTool hook deny] \(msg)",
-                                isError: true,
-                                mutatedPaths: result.mutatedPaths
-                            )
-                        }
-                        return result
                     } catch {
+                        HookDispatcher.notifyPostToolUseFailure(
+                            toolName: toolName,
+                            errorSummary: error.localizedDescription,
+                            projectRoot: context.projectRoot,
+                            worktreeRoot: context.worktreeRoot)
                         return ToolResult(content: "Tool error: \(error.localizedDescription)", isError: true)
                     }
                 }))

@@ -86,12 +86,25 @@ public enum SubAgentRunner {
         public let stallReason: String?
         /// P8: allowlist scrub from this spawn (nil for early error returns).
         public let scrubReport: AgentToolAllowlist.ScrubReport?
+        /// Sum of every `ChatChunk.usage` seen this run. Cache fields stay 0
+        /// until a backend owner extends `ChatChunk`.
+        public let usage: SubagentUsage
+        /// Dispatched tool invocations this run (not synthetic closeToolCalls).
+        public let toolCount: Int
+        /// Last `ChatChunk.done` finishReason. Not a loop terminator.
+        public let finishReason: String?
+        /// Wall-clock ms from run start to finish.
+        public let durationMs: Int
 
         public init(finalText: String, transcript: Conversation,
                     iterations: Int, hitCap: Bool,
                     wasCancelled: Bool = false,
                     stallReason: String? = nil,
-                    scrubReport: AgentToolAllowlist.ScrubReport? = nil) {
+                    scrubReport: AgentToolAllowlist.ScrubReport? = nil,
+                    usage: SubagentUsage = .zero,
+                    toolCount: Int = 0,
+                    finishReason: String? = nil,
+                    durationMs: Int = 0) {
             self.finalText = finalText
             self.transcript = transcript
             self.iterations = iterations
@@ -99,6 +112,10 @@ public enum SubAgentRunner {
             self.wasCancelled = wasCancelled
             self.stallReason = stallReason
             self.scrubReport = scrubReport
+            self.usage = usage
+            self.toolCount = toolCount
+            self.finishReason = finishReason
+            self.durationMs = durationMs
         }
     }
 
@@ -278,7 +295,42 @@ public enum SubAgentRunner {
         var convo = Conversation(title: "[subagent]", modelID: childModel.id)
         convo.messages.append(.init(role: .system, content: systemPrompt))
         convo.messages.append(.init(role: .user, content: trimmedPrompt))
-        await publishThread(jobID: jobID, convo)
+        let runStarted = Date()
+        var usage = SubagentUsage.zero
+        var lastFinishReason: String? = nil
+        var toolCount = 0
+        var iterations = 0
+        let persistAgentId = mailboxId ?? jobID.map { AgentMailbox.makeAgentId($0) }
+        let persist: SessionPersist?
+        if let parentConversationID, let persistAgentId {
+            persist = SessionPersist(
+                parent: parentConversationID,
+                agentId: persistAgentId,
+                taskId: jobID,
+                modelId: childModel.id,
+                started: runStarted
+            )
+            await SubagentSessionStore.shared.begin(
+                parentConversationID: parentConversationID,
+                agentId: persistAgentId,
+                taskId: jobID,
+                modelId: childModel.id
+            )
+            await persistProgress(
+                persist,
+                usage: usage,
+                toolCount: toolCount,
+                iterations: iterations,
+                finishReason: lastFinishReason,
+                started: runStarted
+            )
+        } else {
+            persist = nil
+        }
+        await publishThread(
+            jobID: jobID, convo, persist: persist,
+            usage: usage, toolCount: toolCount, iterations: iterations,
+            finishReason: lastFinishReason, started: runStarted)
 
         // Use parent conversation ID when available so nested background
         // shells / checkpoints / kill ownership stay under the parent chat.
@@ -298,7 +350,6 @@ public enum SubAgentRunner {
         )
 
         let effectiveStallWindow = max(2, stallWindow)
-        var iterations = 0
         var hitCap = false
         var lastTextReply = ""
         var wasCancelled = false
@@ -320,7 +371,10 @@ public enum SubAgentRunner {
                 let note = await drainAndFormatCoordinatorMessages(agentId: mailboxId)
                 if !note.isEmpty {
                     convo.messages.append(.init(role: .user, content: note))
-                    await publishThread(jobID: jobID, convo)
+                    await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                 }
             }
 
@@ -377,8 +431,19 @@ public enum SubAgentRunner {
                         streamAccumulator.ingestToolCallDelta(
                             index: index, id: id, name: name, argumentsAppend: argsAppend)
                         shouldPublishDraft = true
-                    case .usage, .done:
-                        continue
+                    case .usage(let promptTokens, let completionTokens):
+                        usage.add(prompt: promptTokens, completion: completionTokens)
+                        await persistProgress(
+                            persist,
+                            usage: usage,
+                            toolCount: toolCount,
+                            iterations: iterations,
+                            finishReason: lastFinishReason,
+                            started: runStarted
+                        )
+                    case .done(let reason):
+                        // Record only — do not halt the loop or skip tool dispatch.
+                        lastFinishReason = reason
                     }
                     if shouldPublishDraft {
                         await publishDraftThreadIfDue(
@@ -411,9 +476,15 @@ public enum SubAgentRunner {
                 )
                 return await finishMailbox(
                     agentId: mailboxId,
+                    persist: persist,
                     result: errorResult(
                         message: "Sub-agent failed: \(error.localizedDescription)",
-                        scrubReport: scrubReport))
+                        scrubReport: scrubReport,
+                        usage: usage,
+                        toolCount: toolCount,
+                        finishReason: lastFinishReason,
+                        durationMs: Int(Date().timeIntervalSince(runStarted) * 1000)),
+                    messages: convo.messages)
             }
 
             // Mid-stream cancel: keep prose only; DROP partial tool_calls
@@ -425,7 +496,10 @@ public enum SubAgentRunner {
                         content: assistantContent,
                         reasoningContent: reasoningText.isEmpty ? nil : reasoningText
                     ))
-                    await publishThread(jobID: jobID, convo)
+                    await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                 }
                 lastTextReply = "Sub-agent cancelled."
                 break
@@ -445,7 +519,10 @@ public enum SubAgentRunner {
                 toolCalls: invocations
             )
             convo.messages.append(assistantMsg)
-            await publishThread(jobID: jobID, convo)
+            await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
 
             await recordTrace(
                 trace: trace,
@@ -486,7 +563,10 @@ public enum SubAgentRunner {
                     ) {
                         let halt = "stalled — \(reason)"
                         closeToolCalls(invocations, reason: halt, convo: &convo)
-                        await publishThread(jobID: jobID, convo)
+                        await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                         stallReason = halt
                         lastTextReply = "Sub-agent halted: \(halt)"
                         break
@@ -505,7 +585,10 @@ public enum SubAgentRunner {
                         remaining,
                         reason: "Cancelled by user before execution.",
                         convo: &convo)
-                    await publishThread(jobID: jobID, convo)
+                    await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                     lastTextReply = "Sub-agent cancelled."
                     break
                 }
@@ -550,7 +633,11 @@ public enum SubAgentRunner {
                         }
                         convo.messages.append(.init(
                             role: .tool, content: result.content, toolCallID: inv.id))
-                        await publishThread(jobID: jobID, convo)
+                        toolCount += 1
+                        await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                         if await isCancelled(jobID: jobID) {
                             wasCancelled = true
                             let remaining = Array(invocations[dispatchIndex...])
@@ -559,7 +646,10 @@ public enum SubAgentRunner {
                                     remaining,
                                     reason: "Cancelled by user before execution.",
                                     convo: &convo)
-                                await publishThread(jobID: jobID, convo)
+                                await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                             }
                             lastTextReply = "Sub-agent cancelled."
                             break
@@ -592,9 +682,13 @@ public enum SubAgentRunner {
                             }
                             convo.messages.append(.init(
                                 role: .tool, content: result.content, toolCallID: inv.id))
+                            toolCount += 1
                         }
                     }
-                    await publishThread(jobID: jobID, convo)
+                    await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                     continue
                 }
 
@@ -638,7 +732,11 @@ public enum SubAgentRunner {
                 convo.messages.append(.init(role: .tool,
                                             content: result.content,
                                             toolCallID: inv.id))
-                await publishThread(jobID: jobID, convo)
+                toolCount += 1
+                await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                 if wasCancelled {
                     let remaining = Array(invocations[dispatchIndex...])
                     if !remaining.isEmpty {
@@ -646,7 +744,10 @@ public enum SubAgentRunner {
                             remaining,
                             reason: "Cancelled by user before execution.",
                             convo: &convo)
-                        await publishThread(jobID: jobID, convo)
+                        await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
                     }
                     lastTextReply = "Sub-agent cancelled."
                     break
@@ -683,24 +784,99 @@ public enum SubAgentRunner {
             finalText = "Sub-agent finished without producing a final response."
         }
 
-        await publishThread(jobID: jobID, convo)
+        await publishThread(
+                        jobID: jobID, convo, persist: persist,
+                        usage: usage, toolCount: toolCount, iterations: iterations,
+                        finishReason: lastFinishReason, started: runStarted)
+        let durationMs = Int(Date().timeIntervalSince(runStarted) * 1000)
         return await finishMailbox(
             agentId: mailboxId,
+            persist: persist,
             result: RunResult(finalText: finalText,
                               transcript: convo,
                               iterations: iterations,
                               hitCap: hitCap,
                               wasCancelled: wasCancelled,
                               stallReason: stallReason,
-                              scrubReport: scrubReport))
+                              scrubReport: scrubReport,
+                              usage: usage,
+                              toolCount: toolCount,
+                              finishReason: lastFinishReason,
+                              durationMs: durationMs),
+            messages: convo.messages)
     }
 
     /// Push the live child transcript so the inspector can render a thread.
-    private static func publishThread(jobID: UUID?, _ convo: Conversation) async {
-        guard let jobID else { return }
-        await SubagentThreadStore.shared.publish(jobID: jobID, messages: convo.messages)
-        await BackgroundJobManager.shared.updateSubagentTranscript(
-            id: jobID, messages: convo.messages)
+    /// `persist` writes committed messages + mid-run metadata — drafts omit it.
+    private static func publishThread(
+        jobID: UUID?,
+        _ convo: Conversation,
+        persist: SessionPersist? = nil,
+        usage: SubagentUsage = .zero,
+        toolCount: Int = 0,
+        iterations: Int = 0,
+        finishReason: String? = nil,
+        started: Date? = nil
+    ) async {
+        if let jobID {
+            await SubagentThreadStore.shared.publish(jobID: jobID, messages: convo.messages)
+            await BackgroundJobManager.shared.updateSubagentTranscript(
+                id: jobID, messages: convo.messages)
+        }
+        if let persist {
+            await SubagentSessionStore.shared.appendCommitted(
+                parentConversationID: persist.parent,
+                agentId: persist.agentId,
+                messages: convo.messages
+            )
+            await persistProgress(
+                persist,
+                usage: usage,
+                toolCount: toolCount,
+                iterations: iterations,
+                finishReason: finishReason,
+                started: started ?? persist.started
+            )
+        }
+    }
+
+    private static func persistProgress(
+        _ persist: SessionPersist?,
+        usage: SubagentUsage,
+        toolCount: Int,
+        iterations: Int,
+        finishReason: String?,
+        started: Date
+    ) async {
+        guard let persist else { return }
+        await SubagentSessionStore.shared.updateProgress(
+            parentConversationID: persist.parent,
+            agentId: persist.agentId,
+            usage: usage,
+            toolCount: toolCount,
+            durationMs: Int(Date().timeIntervalSince(started) * 1000),
+            finishReason: finishReason,
+            iterations: iterations,
+            status: "running",
+            taskId: persist.taskId,
+            modelId: persist.modelId
+        )
+    }
+
+    private struct SessionPersist: Sendable {
+        let parent: UUID
+        let agentId: String
+        let taskId: UUID?
+        let modelId: String
+        let started: Date
+
+        init(parent: UUID, agentId: String, taskId: UUID?, modelId: String, started: Date = Date()) {
+            self.parent = parent
+            self.agentId = agentId
+            self.taskId = taskId
+            self.modelId = modelId
+            self.started = started
+        }
     }
 
     /// Throttled in-flight snapshot: thought / prose / emerging tools.
@@ -878,16 +1054,24 @@ public enum SubAgentRunner {
 
     // MARK: - Helpers
 
-        private static func errorResult(
+    private static func errorResult(
         message: String,
-        scrubReport: AgentToolAllowlist.ScrubReport? = nil
+        scrubReport: AgentToolAllowlist.ScrubReport? = nil,
+        usage: SubagentUsage = .zero,
+        toolCount: Int = 0,
+        finishReason: String? = nil,
+        durationMs: Int = 0
     ) -> RunResult {
         let convo = Conversation(title: "[subagent — error]",
                                  messages: [.init(role: .assistant, content: message)])
         return RunResult(finalText: message, transcript: convo,
                          iterations: 0, hitCap: false,
                          wasCancelled: false, stallReason: nil,
-                         scrubReport: scrubReport)
+                         scrubReport: scrubReport,
+                         usage: usage,
+                         toolCount: toolCount,
+                         finishReason: finishReason,
+                         durationMs: durationMs)
     }
 
     // MARK: - Profile + mailbox
@@ -1082,7 +1266,41 @@ public enum SubAgentRunner {
         await SpawnRegistry.shared.reset()
     }
 
-    private static func finishMailbox(agentId: String?, result: RunResult) async -> RunResult {
+    private static func finishMailbox(
+        agentId: String?,
+        persist: SessionPersist? = nil,
+        result: RunResult,
+        messages: [ChatMessage] = []
+    ) async -> RunResult {
+        if let persist {
+            let status: String
+            if result.wasCancelled {
+                status = "cancelled"
+            } else if result.stallReason != nil {
+                status = "stalled"
+            } else if result.hitCap {
+                status = "failed"
+            } else if result.finalText.hasPrefix("Error:")
+                        || result.finalText.hasPrefix("Sub-agent failed") {
+                status = "failed"
+            } else {
+                status = "completed"
+            }
+            await SubagentSessionStore.shared.finish(
+                parentConversationID: persist.parent,
+                agentId: persist.agentId,
+                output: result.finalText,
+                usage: result.usage,
+                toolCount: result.toolCount,
+                durationMs: result.durationMs,
+                finishReason: result.finishReason,
+                iterations: result.iterations,
+                status: status,
+                taskId: persist.taskId,
+                modelId: persist.modelId,
+                messages: messages
+            )
+        }
         if let agentId {
             await AgentMailbox.shared.markCompleted(agentId)
         }

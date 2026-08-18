@@ -431,7 +431,7 @@ private struct MCPServerRow: View {
     }
 
     private var transportBadge: some View {
-        Text(server.transport == .stdio ? "STDIO" : "HTTP")
+        Text(transportBadgeLabel)
             .font(.system(size: 9, weight: .bold))
             .foregroundColor(Theme.Palette.tertiary)
             .padding(.horizontal, 4)
@@ -442,11 +442,19 @@ private struct MCPServerRow: View {
             )
     }
 
+    private var transportBadgeLabel: String {
+        switch server.transport {
+        case .stdio: return "STDIO"
+        case .streamableHttp: return "HTTP"
+        case .sse: return "SSE"
+        }
+    }
+
     private var transportDescription: String {
         switch server.transport {
         case .stdio:
             return server.command ?? "(no command)"
-        case .streamableHttp:
+        case .streamableHttp, .sse:
             return server.url ?? "(no URL)"
         }
     }
@@ -484,13 +492,14 @@ private struct MCPServerEditorSheet: View {
             // Transport selector.
             Picker("Transport", selection: $server.transport) {
                 Text("Streamable HTTP").tag(MCPServerTransport.streamableHttp)
+                Text("SSE (legacy GET)").tag(MCPServerTransport.sse)
                 Text("Stdio (local subprocess)").tag(MCPServerTransport.stdio)
             }
             .pickerStyle(.segmented)
 
             // Transport-specific fields.
             switch server.transport {
-            case .streamableHttp:
+            case .streamableHttp, .sse:
                 httpFields
             case .stdio:
                 stdioFields
@@ -744,9 +753,9 @@ private struct MCPServerEditorSheet: View {
             nameError = err
             return
         }
-        if server.transport == .streamableHttp,
+        if (server.transport == .streamableHttp || server.transport == .sse),
            (server.url ?? "").isEmpty {
-            nameError = "HTTP servers require a URL"
+            nameError = "HTTP/SSE servers require a URL"
             return
         }
         if server.transport == .stdio,

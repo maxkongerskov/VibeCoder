@@ -129,7 +129,7 @@ final class ParityHookConfigStoreTests: XCTestCase {
 
         try HookConfigStore.save(config, projectRoot: root)
 
-        let dir = try XCTUnwrap(HookDispatcher.hooksDir(projectRoot: root))
+        let dir = try XCTUnwrap(HookDispatcher.projectHooksDir(projectRoot: root))
         let loaded = HookDispatcher.loadConfig(hooksDir: dir)
         XCTAssertEqual(loaded, config)
 
@@ -158,7 +158,7 @@ final class ParityHookConfigStoreTests: XCTestCase {
         ]
         try HookConfigStore.saveEntries(entries, projectRoot: root)
 
-        let dir = try XCTUnwrap(HookDispatcher.hooksDir(projectRoot: root))
+        let dir = try XCTUnwrap(HookDispatcher.projectHooksDir(projectRoot: root))
         let loaded = HookDispatcher.loadConfig(hooksDir: dir)
         XCTAssertEqual(loaded.post.count, 1)
         XCTAssertEqual(loaded.post[0].matcher, "edit_file")
@@ -184,7 +184,7 @@ final class ParityHookConfigStoreTests: XCTestCase {
         ]
         try HookConfigStore.saveEntries(entries, projectRoot: root)
 
-        let dir = try XCTUnwrap(HookDispatcher.hooksDir(projectRoot: root))
+        let dir = try XCTUnwrap(HookDispatcher.projectHooksDir(projectRoot: root))
         let loaded = HookDispatcher.loadConfig(hooksDir: dir)
         XCTAssertEqual(loaded.pre.count, 1)
         XCTAssertEqual(loaded.pre[0].handlers.map(\.command), ["live.sh"])
@@ -219,7 +219,7 @@ final class ParityHookConfigStoreTests: XCTestCase {
         XCTAssertTrue(stored.contains { $0.event == "CustomLocaleEvent" && $0.command == "i18n.sh" })
         XCTAssertTrue(stored.contains { $0.event == HookDispatcher.eventSessionStart })
 
-        let dir = try XCTUnwrap(HookDispatcher.hooksDir(projectRoot: root))
+        let dir = try XCTUnwrap(HookDispatcher.projectHooksDir(projectRoot: root))
         let dispatched = HookDispatcher.loadConfig(hooksDir: dir)
         XCTAssertEqual(dispatched.sessionStart.count, 1)
         XCTAssertEqual(dispatched.pre.count, 0)
@@ -289,9 +289,9 @@ final class ParityHookConfigStoreTests: XCTestCase {
     }
 
     func testSaveCreatesVibecoderHooksDir() throws {
-        XCTAssertNil(HookDispatcher.hooksDir(projectRoot: root))
+        XCTAssertNil(HookDispatcher.projectHooksDir(projectRoot: root))
         try HookConfigStore.save(.empty, projectRoot: root)
-        let dir = try XCTUnwrap(HookDispatcher.hooksDir(projectRoot: root))
+        let dir = try XCTUnwrap(HookDispatcher.projectHooksDir(projectRoot: root))
         XCTAssertTrue(dir.path.hasSuffix(".vibecoder/hooks"))
         XCTAssertTrue(FileManager.default.fileExists(atPath: HookConfigStore.configURL(projectRoot: root).path))
     }

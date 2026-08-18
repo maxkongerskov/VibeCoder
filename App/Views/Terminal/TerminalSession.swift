@@ -12,6 +12,18 @@ enum TerminalPtyError: Error, Equatable {
     case fork
 }
 
+/// DECSET 2004 wrap. Pure so tests can lock it without `forkpty`.
+enum TerminalPasteEncoding {
+    static func payload(for string: String, bracketedPaste: Bool) -> Data {
+        guard !string.isEmpty else { return Data() }
+        let body = Data(string.utf8)
+        if bracketedPaste {
+            return Data("\u{1b}[200~".utf8) + body + Data("\u{1b}[201~".utf8)
+        }
+        return body
+    }
+}
+
 /// Serial PTY I/O. Reads never run on the main actor.
 final class TerminalPty: @unchecked Sendable {
     private let queue = DispatchQueue(label: "tools.vibecoder.terminal.pty")
@@ -58,6 +70,8 @@ final class TerminalPty: @unchecked Sendable {
                         _ = chdir(cwdC)
                         setenv("PWD", cwdC, 1)
                         setenv("TERM", "xterm-256color", 1)
+                        setenv("COLORTERM", "truecolor", 1)
+                        setenv("TERM_PROGRAM", "VibeCoder", 1)
                         setenv("SHELL", shellC, 1)
                         execv(shellC, &argv)
                         _exit(127)
@@ -251,6 +265,9 @@ private enum WaitStatus {
 final class TerminalSession: ObservableObject {
     @Published private(set) var display = NSAttributedString()
     @Published private(set) var isAlive = false
+    @Published private(set) var isAlternateScreen = false
+    @Published private(set) var cursorVisible = true
+    @Published private(set) var applicationCursorKeys = false
     @Published private(set) var cwd: URL
     @Published private(set) var lastExitCode: Int32?
 
@@ -259,6 +276,7 @@ final class TerminalSession: ObservableObject {
     private var cwdIdentity: String
     private var columns = 80
     private var rows = 24
+    private var displayPending = false
 
     init(cwd: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.cwd = cwd
@@ -282,35 +300,65 @@ final class TerminalSession: ObservableObject {
         pty.teardown()
         cwd = url
         cwdIdentity = identity
-        emulator = TerminalEmulator()
+        emulator = TerminalEmulator(columns: columns, rows: rows)
         lastExitCode = nil
+        isAlternateScreen = false
         spawn()
         refreshDisplay()
     }
 
     func send(_ data: Data) {
+        if !isAlive {
+            restart()
+        }
         pty.write(data)
+    }
+
+    func paste(_ string: String) {
+        let payload = TerminalPasteEncoding.payload(
+            for: string,
+            bracketedPaste: emulator.buffer.bracketedPaste
+        )
+        guard !payload.isEmpty else { return }
+        send(payload)
     }
 
     func terminate() {
         pty.terminate()
     }
 
+    /// Spawn a new login shell after the previous one exited.
+    func restart() {
+        guard !isAlive else { return }
+        if emulator.buffer.usesAlternateScreen {
+            emulator = TerminalEmulator(columns: columns, rows: rows)
+        } else if lastExitCode != nil {
+            emulator.note("exit \(lastExitCode ?? 0)")
+        }
+        lastExitCode = nil
+        spawn()
+        refreshDisplay()
+    }
+
     func setPixelSize(_ size: CGSize) {
-        let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-        let cellW = max(font.maximumAdvancement.width, 1)
-        let cellH = max(font.ascender - font.descender + font.leading, 1)
-        let newCols = max(20, Int((size.width / cellW).rounded(.down)))
-        let newRows = max(4, Int((size.height / cellH).rounded(.down)))
-        guard newCols != columns || newRows != rows else { return }
-        columns = newCols
-        rows = newRows
+        let grid = TerminalMetrics.grid(for: size)
+        guard grid.cols != columns || grid.rows != rows else { return }
+        columns = grid.cols
+        rows = grid.rows
+        emulator.resize(columns: columns, rows: rows)
         pty.resize(columns: columns, rows: rows)
+        refreshDisplay()
     }
 
     func refreshDisplay() {
         let appearance = NSApp.effectiveAppearance
-        display = emulator.buffer.attributedString(appearance: appearance, fontSize: 12)
+        isAlternateScreen = emulator.buffer.usesAlternateScreen
+        cursorVisible = emulator.buffer.cursorVisible
+        applicationCursorKeys = emulator.buffer.applicationCursorKeys
+        display = emulator.buffer.attributedString(
+            appearance: appearance,
+            fontSize: TerminalMetrics.fontSize
+        )
     }
 
     private func spawn() {
@@ -342,10 +390,26 @@ final class TerminalSession: ObservableObject {
         if pty.isRunning { return }
         isAlive = false
         lastExitCode = code
+        if emulator.buffer.usesAlternateScreen {
+            emulator.forceLeaveAlternateScreen()
+        }
+        refreshDisplay()
     }
 
     private func append(_ data: Data) {
         emulator.ingest(data)
-        refreshDisplay()
+        for reply in emulator.takeReplies() {
+            pty.write(reply)
+        }
+        // TUI apps (Grok Build) emit many PTY chunks per frame; paint once
+        // per turn of the main run loop so the dock does not rebuild the
+        // attributed string for every 4 KB read.
+        if displayPending { return }
+        displayPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.displayPending = false
+            self.refreshDisplay()
+        }
     }
 }

@@ -87,16 +87,33 @@ struct ZCodeSidebar: View {
     @AppStorage("sidebarRecentsCollapsed") private var recentsCollapsed: Bool = false
     @AppStorage("sidebarPinnedCollapsed") private var pinnedCollapsed: Bool = false
     @State private var pendingRenameID: UUID? = nil
+    @State private var pendingGroupRenameID: UUID? = nil
     @State private var showDeleteAllAlert = false
     @State private var taskSearchQuery: String = ""
+    @State private var taskListFilter: SidebarTaskListFilter = .active
+    @ObservedObject private var groupStore = TaskGroupStore.shared
+    @EnvironmentObject private var app: AppViewModel
+
+    /// Active / archived / all catalog before the search field.
+    private var catalogConversations: [Conversation] {
+        Self.catalog(
+            injectedActive: conversations,
+            allConversations: app.conversations,
+            filter: taskListFilter
+        )
+    }
 
     /// Conversations shown in the task tree after applying the search field.
     private var visibleConversations: [Conversation] {
         Self.filteredConversations(
-            conversations,
+            catalogConversations,
             query: taskSearchQuery,
             cleanModelChrome: cleanModelChrome
         )
+    }
+
+    private var archivedCount: Int {
+        app.conversations.filter(\.archived).count
     }
 
     private var primaryNav: [SidebarTab] {
@@ -153,6 +170,10 @@ struct ZCodeSidebar: View {
 
                 taskSearchField
                     .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
+
+                taskListFilterBar
+                    .padding(.horizontal, 8)
                     .padding(.bottom, 6)
 
                 if !unloadableConversations.isEmpty {
@@ -162,13 +183,16 @@ struct ZCodeSidebar: View {
                 }
 
                 if !recentsCollapsed {
-                    if conversations.isEmpty {
+                    if catalogConversations.isEmpty {
                         VStack(spacing: 8) {
-                            Text("No tasks yet")
+                            Text(Self.emptyCatalogCopy(filter: taskListFilter))
                                 .font(.system(size: 12))
                                 .foregroundStyle(Theme.Palette.tertiary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 16)
+                                .accessibilityIdentifier(taskListFilter == .archived
+                                    ? "sidebar-no-archived-tasks"
+                                    : "sidebar-no-tasks-yet")
                         }
                         Spacer(minLength: 0)
                     } else if visibleConversations.isEmpty {
@@ -198,10 +222,21 @@ struct ZCodeSidebar: View {
                                 }
 
                                 if !unpinned.isEmpty {
-                                    ForEach(grouped(unpinned)) { group in
-                                        sectionHeader(group.label)
-                                        ForEach(group.conversations) { conv in
-                                            taskRow(conv)
+                                    ForEach(TaskGroupLayout.sections(
+                                        unpinned: unpinned,
+                                        snapshot: groupStore.snapshot
+                                    )) { section in
+                                        switch section.kind {
+                                        case .namedGroup(let id, let name, let color):
+                                            namedGroupHeader(id: id, name: name, color: color)
+                                            ForEach(section.conversations) { conv in
+                                                taskRow(conv)
+                                            }
+                                        case .timeBucket(let label):
+                                            sectionHeader(label)
+                                            ForEach(section.conversations) { conv in
+                                                taskRow(conv)
+                                            }
                                         }
                                     }
                                 }
@@ -255,6 +290,32 @@ struct ZCodeSidebar: View {
                 recentsCollapsed = false
             }
         }
+        .onChange(of: selectedConversationID) { _, newID in
+            markSelectedRead(newID)
+        }
+        .onChange(of: conversations.map(\.id)) { _, ids in
+            groupStore.prune(existingIDs: Set(ids))
+        }
+        .onAppear {
+            markSelectedRead(selectedConversationID)
+            groupStore.prune(existingIDs: Set(conversations.map(\.id)))
+        }
+    }
+
+    private func markSelectedRead(_ id: UUID?) {
+        guard let id,
+              let conv = app.conversations.first(where: { $0.id == id })
+                ?? conversations.first(where: { $0.id == id })
+        else { return }
+        groupStore.markRead(conversationID: id, updatedAt: conv.updatedAt)
+    }
+
+    private func setArchived(_ id: UUID, _ archived: Bool) {
+        var list = app.conversations
+        guard let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        list[idx].archived = archived
+        app.conversations = list
+        app.chatViewModel(for: id).setArchived(archived)
     }
 
     /// Compact in-sidebar filter. Placeholder matches ZCode `searchTasksPlaceholder`.
@@ -292,6 +353,39 @@ struct ZCodeSidebar: View {
                 .stroke(Theme.Palette.divider, lineWidth: 0.5)
         )
         .accessibilityIdentifier("sidebar-search-tasks")
+    }
+
+    private var taskListFilterBar: some View {
+        HStack(spacing: 4) {
+            ForEach(SidebarTaskListFilter.allCases, id: \.self) { filter in
+                Button {
+                    taskListFilter = filter
+                    if filter != .active { recentsCollapsed = false }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(filter.title)
+                        if filter == .archived, archivedCount > 0 {
+                            Text("\(archivedCount)")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Theme.Palette.tertiary)
+                        }
+                    }
+                    .font(.system(size: 11, weight: taskListFilter == filter ? .semibold : .regular))
+                    .foregroundStyle(taskListFilter == filter ? Theme.Palette.primary : Theme.Palette.tertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(taskListFilter == filter ? Theme.Palette.hover : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(filter.title)
+                .accessibilityAddTraits(taskListFilter == filter ? .isSelected : [])
+                .accessibilityIdentifier("sidebar-filter-\(filter.rawValue)")
+            }
+            Spacer(minLength: 0)
+        }
     }
 
     private var unloadableBanner: some View {
@@ -491,7 +585,14 @@ struct ZCodeSidebar: View {
                     relativeTime: Self.relativeTime(conv.updatedAt),
                     status: status,
                     isSelected: isSelected,
+                    isUnread: groupStore.isUnread(
+                        conversationID: conv.id,
+                        updatedAt: conv.updatedAt
+                    ),
                     onTap: {
+                        if conv.archived {
+                            setArchived(conv.id, false)
+                        }
                         selectedConversationID = conv.id
                         if !selectedTab.isWorkspaceTab {
                             selectedTab = .chat
@@ -514,19 +615,67 @@ struct ZCodeSidebar: View {
                 pendingRenameID = conv.id
             } label: { Label("Rename", systemImage: "pencil") }
 
-            Button {
-                onArchiveConversation(conv.id)
-            } label: { Label("Archive", systemImage: "archivebox") }
+            if conv.archived {
+                Button {
+                    setArchived(conv.id, false)
+                } label: { Label("Unarchive", systemImage: "archivebox") }
+            } else {
+                Button {
+                    onArchiveConversation(conv.id)
+                } label: { Label("Archive", systemImage: "archivebox") }
+            }
 
             Button(role: .destructive) {
+                groupStore.unassign(conversationID: conv.id)
                 onDeleteConversation(conv.id)
             } label: { Label("Delete", systemImage: "trash") }
+
+            Divider()
+
+            taskGroupMenu(for: conv)
+
+            if !groupStore.isUnread(conversationID: conv.id, updatedAt: conv.updatedAt) {
+                Button {
+                    groupStore.markUnread(conversationID: conv.id, updatedAt: conv.updatedAt)
+                } label: { Label("Mark as unread", systemImage: "circle.fill") }
+            }
 
             Divider()
 
             Button {
                 onMoveDown(conv.id)
             } label: { Label("Move down", systemImage: "arrow.down") }
+        }
+    }
+
+    @ViewBuilder
+    private func taskGroupMenu(for conv: Conversation) -> some View {
+        Button {
+            let group = groupStore.createGroup(assigning: conv.id)
+            pendingGroupRenameID = group.id
+        } label: { Label("New Group", systemImage: "folder.badge.plus") }
+
+        let groups = groupStore.snapshot.orderedGroups()
+        if !groups.isEmpty {
+            Menu("Add to Group") {
+                ForEach(groups) { group in
+                    Button {
+                        groupStore.assign(conversationID: conv.id, to: group.id)
+                    } label: {
+                        if groupStore.snapshot.membership[conv.id] == group.id {
+                            Label(group.name, systemImage: "checkmark")
+                        } else {
+                            Text(group.name)
+                        }
+                    }
+                }
+            }
+        }
+
+        if groupStore.snapshot.membership[conv.id] != nil {
+            Button {
+                groupStore.unassign(conversationID: conv.id)
+            } label: { Label("Ungroup", systemImage: "folder.badge.minus") }
         }
     }
 
@@ -572,6 +721,79 @@ struct ZCodeSidebar: View {
             .padding(.top, 8)
             .padding(.bottom, 2)
     }
+
+    @ViewBuilder
+    private func namedGroupHeader(id: UUID, name: String, color: TaskGroupColor) -> some View {
+        if pendingGroupRenameID == id {
+            InlineRenameRow(
+                initialTitle: name,
+                isActive: false,
+                onCommit: { newName in
+                    _ = groupStore.renameGroup(id: id, to: newName)
+                    pendingGroupRenameID = nil
+                },
+                onCancel: { pendingGroupRenameID = nil }
+            )
+        } else {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(color.swatch)
+                    .frame(width: 8, height: 8)
+                Text(name)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 2)
+            .contentShape(Rectangle())
+            .contextMenu { groupHeaderMenu(id: id) }
+            .accessibilityIdentifier("sidebar-task-group-\(id.uuidString)")
+        }
+    }
+
+    @ViewBuilder
+    private func groupHeaderMenu(id: UUID) -> some View {
+        Button {
+            pendingGroupRenameID = id
+        } label: { Label("Rename Group", systemImage: "pencil") }
+
+        Menu("Color") {
+            ForEach(TaskGroupColor.allCases, id: \.self) { color in
+                Button {
+                    _ = groupStore.setColor(id: id, color: color)
+                } label: {
+                    if groupStore.snapshot.group(id: id)?.color == color {
+                        Label(color.title, systemImage: "checkmark")
+                    } else {
+                        Text(color.title)
+                    }
+                }
+            }
+        }
+
+        Button(role: .destructive) {
+            _ = groupStore.deleteGroup(id: id)
+        } label: { Label("Delete Group", systemImage: "trash") }
+    }
+}
+
+extension TaskGroupColor {
+    /// Existing Theme tokens only — not a restyle.
+    var swatch: Color {
+        switch self {
+        case .gray: return Theme.Palette.tertiary
+        case .red: return Theme.Palette.error
+        case .orange: return Theme.Palette.accent
+        case .yellow: return Theme.Palette.warning
+        case .green: return Theme.Palette.success
+        case .blue: return Theme.Palette.info
+        case .purple: return Theme.Palette.violet
+        }
+    }
 }
 
 // MARK: - Task status
@@ -612,6 +834,7 @@ private struct ZCodeTaskRow: View {
     let relativeTime: String
     let status: ZCodeTaskStatus
     let isSelected: Bool
+    var isUnread: Bool = false
     let onTap: () -> Void
 
     @State private var hovering = false
@@ -628,7 +851,7 @@ private struct ZCodeTaskRow: View {
             }
         } label: {
             HStack(alignment: .top, spacing: 8) {
-                // Running / error indicator
+                // Running / error / unread indicator
                 Group {
                     if status == .running {
                         Circle()
@@ -639,6 +862,10 @@ private struct ZCodeTaskRow: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 8))
                             .foregroundColor(Theme.Palette.error)
+                    } else if isUnread {
+                        Circle()
+                            .fill(Theme.Palette.primary)
+                            .frame(width: 6, height: 6)
                     } else {
                         Color.clear.frame(width: 6, height: 6)
                     }
@@ -648,10 +875,10 @@ private struct ZCodeTaskRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 12.5, weight: showActive ? .medium : .regular))
+                        .font(.system(size: 12.5, weight: (showActive || isUnread) ? .medium : .regular))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .foregroundColor(showActive ? Theme.Palette.primary : Theme.Palette.secondary)
+                        .foregroundColor((showActive || isUnread) ? Theme.Palette.primary : Theme.Palette.secondary)
                     if !preview.isEmpty {
                         Text(preview)
                             .font(.system(size: 11))
@@ -685,7 +912,48 @@ private struct ZCodeTaskRow: View {
 
 // MARK: - Preview / relative time helpers
 
+enum SidebarTaskListFilter: String, CaseIterable, Sendable, Equatable {
+    case active
+    case archived
+    case all
+
+    var title: String {
+        switch self {
+        case .active: return "Active"
+        case .archived: return "Archived"
+        case .all: return "All"
+        }
+    }
+}
+
 extension ZCodeSidebar {
+    static func catalog(
+        injectedActive: [Conversation],
+        allConversations: [Conversation],
+        filter: SidebarTaskListFilter
+    ) -> [Conversation] {
+        switch filter {
+        case .active:
+            return injectedActive
+        case .archived:
+            return allConversations
+                .filter(\.archived)
+                .sorted { $0.updatedAt > $1.updatedAt }
+        case .all:
+            return allConversations.sorted { a, b in
+                if a.pinned != b.pinned { return a.pinned }
+                return a.updatedAt > b.updatedAt
+            }
+        }
+    }
+
+    static func emptyCatalogCopy(filter: SidebarTaskListFilter) -> String {
+        switch filter {
+        case .archived: return "No archived tasks"
+        case .active, .all: return "No tasks yet"
+        }
+    }
+
     /// Case-insensitive title + preview substring. Trimmed-empty query returns `items`.
     static func filteredConversations(
         _ items: [Conversation],
@@ -789,43 +1057,3 @@ private struct InlineRenameRow: View {
     }
 }
 
-// MARK: - Time grouping (ported from old sidebar)
-
-private struct ConvGroup: Identifiable {
-    let label: String
-    let conversations: [Conversation]
-    var id: String { label }
-}
-
-private func grouped(_ convs: [Conversation]) -> [ConvGroup] {
-    guard !convs.isEmpty else { return [] }
-    let cal = Calendar.current
-    let now = Date()
-    var today:     [Conversation] = []
-    var yesterday: [Conversation] = []
-    var week:      [Conversation] = []
-    var month:     [Conversation] = []
-    var older:     [Conversation] = []
-
-    for c in convs {
-        if cal.isDateInToday(c.updatedAt) {
-            today.append(c)
-        } else if cal.isDateInYesterday(c.updatedAt) {
-            yesterday.append(c)
-        } else if let d = cal.dateComponents([.day], from: c.updatedAt, to: now).day, d < 7 {
-            week.append(c)
-        } else if let d = cal.dateComponents([.day], from: c.updatedAt, to: now).day, d < 30 {
-            month.append(c)
-        } else {
-            older.append(c)
-        }
-    }
-
-    var result: [ConvGroup] = []
-    if !today.isEmpty     { result.append(.init(label: "Today",        conversations: today)) }
-    if !yesterday.isEmpty { result.append(.init(label: "Yesterday",    conversations: yesterday)) }
-    if !week.isEmpty      { result.append(.init(label: "Past 7 days",  conversations: week)) }
-    if !month.isEmpty     { result.append(.init(label: "Past 30 days", conversations: month)) }
-    if !older.isEmpty     { result.append(.init(label: "Older",        conversations: older)) }
-    return result
-}

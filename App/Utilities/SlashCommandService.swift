@@ -17,6 +17,8 @@ enum SlashCommandResult: Equatable {
     /// The text was consumed as a command. `message` is optional
     /// feedback shown in the status line.
     case handled(message: String?)
+    /// Markdown custom command expanded — send this string as the user turn.
+    case expandToMessage(String)
     /// The text was NOT a slash command — send it as a normal message.
     case notACommand
 }
@@ -279,7 +281,12 @@ enum SlashCommandService {
 
     /// Filter commands whose name/alias/description match the draft after `/`.
     /// Empty filter (just `/`) returns the full catalog.
-    static func matchingCommands(draft: String, limit: Int = 12) -> [SlashCommand] {
+    static func matchingCommands(
+        draft: String,
+        limit: Int = 12,
+        projectRoot: URL? = nil,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [SlashCommand] {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.hasPrefix("/") else { return [] }
 
@@ -290,14 +297,15 @@ enum SlashCommandService {
             return []
         }
 
+        let catalog = allCommands + customSlashCommands(projectRoot: projectRoot, home: home)
         let filter = String(trimmed.dropFirst()).lowercased() // drop leading /
         if filter.isEmpty {
-            return Array(allCommands.prefix(limit))
+            return Array(catalog.prefix(limit))
         }
 
         // Prefer prefix matches on name/aliases, then substring, then description.
         var scored: [(Int, SlashCommand)] = []
-        for cmd in allCommands {
+        for cmd in catalog {
             let names = cmd.allNames.map { $0.lowercased() }
             if let best = names.map({ score(query: filter, against: $0) }).min(),
                best < Int.max {
@@ -496,5 +504,89 @@ enum SlashCommandService {
             status = "Skill \"\(skill.name)\" loaded for next message."
         }
         return .loaded(skillName: skill.name, envelope: envelope, statusMessage: status)
+    }
+
+    // MARK: - Markdown custom commands
+
+    /// Workspace `.vibecoder/commands` first (wins on name clash), then user.
+    /// Built-in slash names are never overridden.
+    static func discoverCustomCommands(
+        projectRoot: URL?,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [CommandProfileDraft] {
+        var roots: [URL] = []
+        if let projectRoot {
+            roots.append(CommandProfilePaths.projectRoot(projectRoot))
+        }
+        roots.append(CommandProfilePaths.userRoot(home: home))
+
+        var seen = Set<String>()
+        var found: [CommandProfileDraft] = []
+        for root in roots {
+            for draft in CommandProfileCodec.loadDirectory(root) {
+                let key = draft.name.lowercased()
+                guard seen.insert(key).inserted else { continue }
+                if command(named: "/" + draft.name) != nil { continue }
+                found.append(draft)
+            }
+        }
+        return found
+    }
+
+    static func customSlashCommands(
+        projectRoot: URL?,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [SlashCommand] {
+        discoverCustomCommands(projectRoot: projectRoot, home: home).map { draft in
+            SlashCommand(
+                name: "/" + draft.name,
+                description: draft.description.isEmpty ? "Custom command" : draft.description,
+                argumentHint: draft.argumentHint,
+                category: "Custom"
+            )
+        }
+    }
+
+    /// Expand `/name args` against a discovered markdown command.
+    /// Returns nil when no matching custom command exists.
+    static func expandCustomCommand(
+        name: String,
+        args: String,
+        projectRoot: URL?,
+        home: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> String? {
+        let slug = name.hasPrefix("/") ? String(name.dropFirst()) : name
+        let key = slug.lowercased()
+        guard let draft = discoverCustomCommands(projectRoot: projectRoot, home: home)
+            .first(where: { $0.name.lowercased() == key })
+        else { return nil }
+        let body = expandTemplate(draft.prompt, arguments: args)
+        return formatCustomCommandMessage(name: draft.name, body: body)
+    }
+
+    /// `$ARGUMENTS` = full remainder. `$N` = whitespace-split token N (1-based).
+    /// Longer indices are replaced first so `$10` is not eaten by `$1`.
+    /// Unmatched `$N` become empty. `` `!` `` / `$ARGUMENTS` are not shell-expanded.
+    static func expandTemplate(_ template: String, arguments: String) -> String {
+        let args = arguments
+        let tokens = tokenizeArguments(args)
+        var result = template.replacingOccurrences(of: "$ARGUMENTS", with: args)
+
+        let indices = Set(tokens.indices.map { $0 + 1 })
+        let maxIndex = max(tokens.count, 99)
+        for n in stride(from: maxIndex, through: 1, by: -1) {
+            let token = indices.contains(n) ? tokens[n - 1] : ""
+            result = result.replacingOccurrences(of: "$\(n)", with: token)
+        }
+        return result
+    }
+
+    static func tokenizeArguments(_ arguments: String) -> [String] {
+        arguments.split(whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    static func formatCustomCommandMessage(name: String, body: String) -> String {
+        let slash = name.hasPrefix("/") ? name : "/" + name
+        return "Run custom command \(slash)\n\n\(body)"
     }
 }

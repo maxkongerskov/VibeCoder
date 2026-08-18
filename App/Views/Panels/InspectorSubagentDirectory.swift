@@ -53,6 +53,7 @@ struct InspectorSubagentEntry: Identifiable, Equatable {
     var startedAt: Date?
     var finishedAt: Date?
     var threadItems: [SubagentThreadItem] = []
+    var extras: InspectorSubagentExtras = .empty
 
     var canKill: Bool { status == .running && taskId != nil }
 
@@ -67,6 +68,90 @@ struct InspectorSubagentEntry: Identifiable, Equatable {
     }
 }
 
+// MARK: - Usage extras (subagent_meta + metadata.json)
+
+/// Tokens / tool count / duration from Wave-2 child telemetry.
+/// Missing keys stay nil so the inspector can hide empty cards.
+struct InspectorSubagentExtras: Equatable {
+    var agentId: String?
+    var promptTokens: Int?
+    var completionTokens: Int?
+    var totalTokens: Int?
+    var cacheReadTokens: Int?
+    var cacheWriteTokens: Int?
+    var toolCount: Int?
+    var durationMs: Int?
+
+    static let empty = InspectorSubagentExtras()
+
+    var hasTokens: Bool {
+        let prompt = promptTokens ?? 0
+        let completion = completionTokens ?? 0
+        let total = totalTokens ?? (prompt + completion)
+        let cache = (cacheReadTokens ?? 0) + (cacheWriteTokens ?? 0)
+        return prompt > 0 || completion > 0 || total > 0 || cache > 0
+    }
+
+    var hasAny: Bool {
+        hasTokens || toolCount != nil || (durationMs ?? 0) > 0
+    }
+
+    /// Fill holes from `other`; keep existing non-nil values.
+    func merging(_ other: InspectorSubagentExtras) -> InspectorSubagentExtras {
+        let preferredAgent = Self.trimmed(other.agentId) ?? Self.trimmed(agentId)
+        return InspectorSubagentExtras(
+            agentId: preferredAgent,
+            promptTokens: other.promptTokens ?? promptTokens,
+            completionTokens: other.completionTokens ?? completionTokens,
+            totalTokens: other.totalTokens ?? totalTokens,
+            cacheReadTokens: other.cacheReadTokens ?? cacheReadTokens,
+            cacheWriteTokens: other.cacheWriteTokens ?? cacheWriteTokens,
+            toolCount: other.toolCount ?? toolCount,
+            durationMs: other.durationMs ?? durationMs
+        )
+    }
+
+    static func from(meta: InspectorSubagentResultMeta) -> InspectorSubagentExtras {
+        InspectorSubagentExtras(
+            agentId: Self.trimmed(meta.agentId),
+            promptTokens: meta.promptTokens,
+            completionTokens: meta.completionTokens,
+            totalTokens: meta.totalTokens,
+            cacheReadTokens: meta.cacheReadTokens,
+            cacheWriteTokens: meta.cacheWriteTokens,
+            toolCount: meta.toolCount,
+            durationMs: meta.durationMs
+        )
+    }
+
+    /// Disk session totals. Zero counts stay nil so they do not clobber
+    /// a richer `<subagent_meta>` line from the transcript.
+    static func from(session: SubagentSessionMetadata) -> InspectorSubagentExtras {
+        let usage = session.usage
+        let hasTokens = usage.inputTokens > 0
+            || usage.outputTokens > 0
+            || session.totalTokens > 0
+            || usage.cacheReadTokens > 0
+            || usage.cacheWriteTokens > 0
+        return InspectorSubagentExtras(
+            agentId: Self.trimmed(session.agentId),
+            promptTokens: hasTokens ? usage.inputTokens : nil,
+            completionTokens: hasTokens ? usage.outputTokens : nil,
+            totalTokens: hasTokens ? session.totalTokens : nil,
+            cacheReadTokens: hasTokens ? usage.cacheReadTokens : nil,
+            cacheWriteTokens: hasTokens ? usage.cacheWriteTokens : nil,
+            toolCount: session.totalToolUseCount > 0 ? session.totalToolUseCount : nil,
+            durationMs: session.totalDurationMs > 0 ? session.totalDurationMs : nil
+        )
+    }
+
+    private static func trimmed(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
 // MARK: - Result / args parse
 
 struct InspectorSubagentResultMeta: Equatable {
@@ -78,6 +163,12 @@ struct InspectorSubagentResultMeta: Equatable {
     var cancelled: Bool?
     var stalled: Bool?
     var durationMs: Int?
+    var promptTokens: Int?
+    var completionTokens: Int?
+    var totalTokens: Int?
+    var cacheReadTokens: Int?
+    var cacheWriteTokens: Int?
+    var toolCount: Int?
 
     var taskUUID: UUID? {
         guard let taskId else { return nil }
@@ -190,13 +281,17 @@ struct InspectorSubagentDirectory: Equatable {
     static let promptTitle = "Prompt"
     static let outputTitle = "SubAgent output"
     static let outputEmptyMessage = "No output yet"
+    static let tokensTitle = "Tokens"
+    static let toolsTitle = "Tools"
+    static let durationTitle = "Duration"
     static let endedPageSize = 20
     static let outputVisibleRows = 40
 
     static func build(
         conversation: Conversation?,
         jobs: [BackgroundJobSnapshot],
-        liveTaskStates: [ToolCallUIState] = []
+        liveTaskStates: [ToolCallUIState] = [],
+        sessionMetadata: [SubagentSessionMetadata] = []
     ) -> InspectorSubagentDirectory {
         var order: [String] = []
         var map: [String: InspectorSubagentEntry] = [:]
@@ -209,6 +304,16 @@ struct InspectorSubagentDirectory: Equatable {
 
         for job in jobs where job.kind == .subagent {
             overlay(job: job, order: &order, map: &map)
+        }
+
+        if !sessionMetadata.isEmpty {
+            for key in order {
+                guard var entry = map[key] else { continue }
+                if let session = matchingSession(for: entry, in: sessionMetadata) {
+                    entry.extras = entry.extras.merging(InspectorSubagentExtras.from(session: session))
+                    map[key] = entry
+                }
+            }
         }
 
         let entries = order.compactMap { map[$0] }
@@ -298,7 +403,19 @@ struct InspectorSubagentDirectory: Equatable {
             case "stalled":
                 meta.stalled = parseBool(value)
             case "duration_ms":
-                meta.durationMs = Int(value)
+                meta.durationMs = parseInt(value)
+            case "prompt_tokens", "input_tokens":
+                meta.promptTokens = parseInt(value)
+            case "completion_tokens", "output_tokens":
+                meta.completionTokens = parseInt(value)
+            case "total_tokens":
+                meta.totalTokens = parseInt(value)
+            case "cache_read_tokens", "cache_read":
+                meta.cacheReadTokens = parseInt(value)
+            case "cache_write_tokens", "cache_write":
+                meta.cacheWriteTokens = parseInt(value)
+            case "tool_count", "tool_use_count", "total_tool_use_count":
+                meta.toolCount = parseInt(value)
             default:
                 break
             }
@@ -329,6 +446,81 @@ struct InspectorSubagentDirectory: Equatable {
     static func outputFooter(visible: Int, total: Int) -> String? {
         guard total > visible, visible > 0 else { return nil }
         return "Latest \(visible) rows / \(total) total"
+    }
+
+    static func formatTokenLine(_ extras: InspectorSubagentExtras) -> String? {
+        guard extras.hasTokens else { return nil }
+        let prompt = extras.promptTokens ?? 0
+        let completion = extras.completionTokens ?? 0
+        let total = extras.totalTokens ?? (prompt + completion)
+        var parts = [
+            "\(formatCount(prompt)) in",
+            "\(formatCount(completion)) out",
+            "\(formatCount(total)) total",
+        ]
+        let cacheRead = extras.cacheReadTokens ?? 0
+        let cacheWrite = extras.cacheWriteTokens ?? 0
+        if cacheRead > 0 || cacheWrite > 0 {
+            parts.append("cache r \(formatCount(cacheRead)) / w \(formatCount(cacheWrite))")
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    static func formatToolLine(_ extras: InspectorSubagentExtras) -> String? {
+        guard let count = extras.toolCount else { return nil }
+        return count == 1 ? "1 tool" : "\(formatCount(count)) tools"
+    }
+
+    static func formatDurationLine(_ extras: InspectorSubagentExtras) -> String? {
+        guard let ms = extras.durationMs, ms > 0 else { return nil }
+        if ms < 1000 { return "\(ms)ms" }
+        return JobMonitor.formatElapsed(ms / 1000)
+    }
+
+    static func formatExtrasCompact(_ extras: InspectorSubagentExtras) -> String? {
+        var parts: [String] = []
+        if extras.hasTokens {
+            let prompt = extras.promptTokens ?? 0
+            let completion = extras.completionTokens ?? 0
+            let total = extras.totalTokens ?? (prompt + completion)
+            parts.append("\(formatCount(total)) tok")
+        }
+        if let tools = formatToolLine(extras) {
+            parts.append(tools)
+        }
+        if let duration = formatDurationLine(extras) {
+            parts.append(duration)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    static func matchingSession(
+        for entry: InspectorSubagentEntry,
+        in sessions: [SubagentSessionMetadata]
+    ) -> SubagentSessionMetadata? {
+        if let taskId = entry.taskId,
+           let hit = sessions.first(where: { $0.taskId == taskId }) {
+            return hit
+        }
+        if let agentId = entry.extras.agentId {
+            let key = AgentMailbox.normalizeAgentId(agentId).lowercased()
+            return sessions.first {
+                AgentMailbox.normalizeAgentId($0.agentId).lowercased() == key
+            }
+        }
+        return nil
+    }
+
+    static func formatCount(_ value: Int) -> String {
+        let n = max(0, value)
+        if n < 10_000 { return "\(n)" }
+        if n < 1_000_000 {
+            let tenths = Double(n) / 1000.0
+            if tenths >= 100 { return String(format: "%.0fk", tenths) }
+            return String(format: "%g", (tenths * 10).rounded() / 10) + "k"
+        }
+        let millions = Double(n) / 1_000_000.0
+        return String(format: "%g", (millions * 10).rounded() / 10) + "M"
     }
 
     static func splitJobCommand(_ command: String) -> (type: String, description: String) {
@@ -364,6 +556,7 @@ struct InspectorSubagentDirectory: Equatable {
             if let existing = map[key], !existing.status.isActive, status.isActive == false {
                 continue
             }
+            let extras = (map[key]?.extras ?? .empty).merging(InspectorSubagentExtras.from(meta: meta))
             upsert(
                 key: key,
                 order: &order,
@@ -378,7 +571,8 @@ struct InspectorSubagentDirectory: Equatable {
                     output: displayOutput(resultContent: state.output),
                     status: status,
                     startedAt: map[key]?.startedAt,
-                    finishedAt: status.isActive ? nil : Date()
+                    finishedAt: status.isActive ? nil : Date(),
+                    extras: extras
                 )
             )
         }
@@ -462,6 +656,7 @@ struct InspectorSubagentDirectory: Equatable {
             finished = start.addingTimeInterval(Double(duration) / 1000.0)
         }
 
+        let extras = (existing?.extras ?? .empty).merging(InspectorSubagentExtras.from(meta: meta))
         let entry = InspectorSubagentEntry(
             id: newKey,
             taskId: taskUUID ?? existing?.taskId,
@@ -472,7 +667,8 @@ struct InspectorSubagentDirectory: Equatable {
             output: displayOutput(resultContent: content),
             status: status,
             startedAt: startedAt ?? existing?.startedAt ?? timestamp,
-            finishedAt: finished
+            finishedAt: finished,
+            extras: extras
         )
 
         if oldKey != newKey {
@@ -629,5 +825,12 @@ struct InspectorSubagentDirectory: Equatable {
         case "false", "0", "no": return false
         default: return nil
         }
+    }
+
+    private static func parseInt(_ raw: String) -> Int? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let value = Int(trimmed) { return value }
+        let digits = trimmed.filter { $0.isNumber || $0 == "-" }
+        return Int(digits)
     }
 }

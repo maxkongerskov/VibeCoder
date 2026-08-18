@@ -22,19 +22,19 @@ Priorities: P0 = highest feel-impact, P1 next, P2 later, P3 = out-of-scope unles
 | # | Surface | ZCode | VibeCoder | Status |
 |---|---------|-------|-----------|--------|
 | 1 | Window layout | 3 regions: sidebar / chat + bottom terminal / right side pane; hidden titlebar, no status bar | 3 regions: sidebar / chat + bottom terminal / right inspector; hidden titlebar; File/View menu accelerators | 🟡 browser/whiteboard/split still out |
-| 2 | Sidebar | Tasks/Projects tabs, in-sidebar search, automations/skills/file-tree entries, colored groups | Workspace header + 5 text-nav rows + Tasks list (pin, time buckets); **no search** | 🟡 (U2) |
-| 3 | Composer | Lexical; `@` files, `$` skills, `#` sessions; queue-while-running w/ Steer·reorder; Compress btn; history 30 | TextField(axis:.vertical); `@` files/folders/symbols only; **interjection** instead of queue; history ✓ | 🟡 (U2) |
-| 4 | Message rendering | Streamdown + **Shiki** syntax, mermaid, KaTeX; user bubble right / assistant flat; hover copy·edit·like·**Fork** | Own line scanner, **no syntax highlighting**; same bubble layout ✓; copy only; fork via `/fork` | 🟡 (U1 + P2) |
-| 5 | Tool-call rendering | Per-family verbs, **Explore** grouping of read-only runs, status pills, expand I/O; SubAgent **Open in side pane** | `Verb · Status` + Tools grouping; edit cards w/ inline diffs (**stronger**); task rows **Open in side pane** (U4) | ✅ near-parity (label pass P2) |
-| 6 | Diff / patch / undo | Turn-end "N files changed +/−" card → per-file Review (unified patch viewer) → **Undo via checkpoints**; no per-hunk | Pre-apply PatchReviewSheet: per-file Accept/Reject, Apply selected (unique); worktree review sheet; `/rewind` exists but **no turn-end card, no Undo button** | 🟡 complementary — combine (U1) |
+| 2 | Sidebar | Tasks/Projects tabs, in-sidebar search, automations/skills/file-tree entries, colored groups | Workspace header + 5 text-nav rows + Tasks list + **Search tasks…** (U2); groups/colors still out | 🟡 P2 groups |
+| 3 | Composer | Lexical; `@` files, `$` skills, `#` sessions; queue-while-running w/ Steer·reorder; Compress btn; history 30 | `@` + `$`/`#` pins; visible **queue + Steer / Run now / Remove**; **no Edit**; Compress chip; history ✓ | ✅ near-parity (queue Edit + Lexical = leftover) |
+| 4 | Message rendering | Streamdown + **Shiki** syntax, mermaid, KaTeX; user bubble right / assistant flat; hover copy·edit·like·**Fork** | Line scanner + **keyword highlighter** (U1); same bubble layout; **mermaid/KaTeX not shipped** | 🟡 mermaid leftover |
+| 5 | Tool-call rendering | Per-family verbs, **Explore** grouping of read-only runs, status pills, expand I/O; SubAgent **Open in side pane** | `Verb · Status` + Tools grouping; edit cards; Open in side pane; inspector Duration/Tokens/Tools from `subagent_meta` + **mid-run `metadata.json`**; `cache_*` hidden | ✅ near-parity (verb copy P2) |
+| 6 | Diff / patch / undo | Turn-end "N files changed +/−" card → per-file Review → **Undo via checkpoints** | Pre-apply sheet **and** turn-end card + Undo (U1); worktree review | ✅ complementary (both shipped) |
 | 7 | Plan mode | In-flow approval: "Exit plan mode and start implementation."; Plans status panel | Floating sticky planner + **Approve & Run / Stay in Plan** (stronger) | ✅ VC stronger |
-| 8 | Permission prompts | Allow / Always allow / **Allow for session** / **Always allow in this project** / Deny / Always deny; Tab·arrows·Enter; prefix chips | Once / Always / Never / Deny sheet (Esc=deny); no session scope, no keyboard nav, no prefix chips | 🟡 (U1) |
-| 9 | Commands & palette | ~20 slash + `$skill` triggers; sectioned command palette (~30 cmds); **Find in task** ⌘F | 30+ slash ✓; palette only **12 items**, no arrow-key selection, **no in-chat search** | 🟡 (U1 palette / U2 find) |
-| 10 | Session management | Pin/archive/rename/**per-message fork**/split view/colored groups/unread markers | Pin/archive/rename/fork (whole history) / move-to-project; no groups/unread/split | 🟡 (U2 search; P2 rest) |
-| 11 | Interrupts & queue | Stop (Esc); queued messages held, **Steer** = inject now; pause/resume after stop | Stop (Esc) ✓; mid-turn **interjection** (VC semantics); no visible queue UI | 🟡 (U2) |
-| 12 | Status surfaces | Collapsible capsule: Git, Changes, Branch, Commit/Push, Goal, Plans, Todos, Terminals, Agents | Context meter + hover breakdown ✓ (close), goal banner, plan card, notice cards; **no git/branch capsule** | 🟡 (P2) |
-| 13 | Terminal & side pane | Bottom xterm dock + right pane tabs: Browser / Review / Code viewer / Whiteboard / Subagents | Bottom PTY dock + inspector **Files / Changes / Subagents** (live directory + Open in side pane). No browser / whiteboard | 🟡 U3+U4 (browser = P3) |
-| 14 | Settings | 14 sections in 2-pane: hooks **editor**, skills **manager**, subagent forms, commands editor, MCP (stdio/SSE/import), automations | 14 tabs: hooks editor, **skills manager**, **subagents manager** (U4); MCP richer (HTTP/stdio/OAuth); unique builtin-tool toggles / grants / context | 🟡 commands editor still P2 |
+| 8 | Permission prompts | Allow / Always / session / project / Deny / Always deny; Tab·arrows·Enter; prefix chips | Once / Always / **Session** / Never / Deny; Tab/Enter; prefix chip (U1) | ✅ near-parity (subagent origin line P2) |
+| 9 | Commands & palette | ~20 slash + `$skill` triggers; sectioned command palette (~30 cmds); **Find in task** ⌘F | 30+ slash; **Commands editor** + `$ARGUMENTS`/`$N`; palette + ↑/↓; Find **Messages + Files** | ✅ |
+| 10 | Session management | Pin/archive/rename/**per-message fork**/split view/colored groups/unread markers | Pin/archive/**archive list filter**/rename/fork (whole history) / sidebar search; no groups/unread/split | 🟡 P2 rest |
+| 11 | Interrupts & queue | Stop (Esc); queued messages held, **Steer** = inject now; pause/resume after stop | Stop + visible queue + Steer + Continue; **Edit not shipped** | 🟡 queue Edit leftover |
+| 12 | Status surfaces | Collapsible capsule: Git, Changes, Branch, Commit/Push, Goal, Plans, Todos, Terminals, Agents | Context meter + **git/branch/dirty/todos capsule** (U3) | ✅ near-parity (todos fold P2) |
+| 13 | Terminal & side pane | Bottom xterm dock + right pane tabs: Browser / Review / Code viewer / Whiteboard / Subagents | Bottom PTY dock + inspector Files / Changes / Subagents. CSI **33 tests** incl. Grok Build smoke. No browser / whiteboard | 🟡 browser/whiteboard = P3 |
+| 14 | Settings | 14 sections in 2-pane: hooks **editor**, skills **manager**, subagent forms, commands editor, MCP, automations | Hooks + skills + subagents + **Commands** editors; MCP stdio/HTTP/**GET sse**/OAuth; unique builtin toggles | ✅ near-parity |
 | 15 | Models & backends | Cloud provider catalog (GLM/Kimi/DeepSeek/Qwen…), per-model context/output limits, reasoning levels from catalog | 7 local-backend panes (LM Studio/EXO/oMLX/Ollama/Unsloth/Custom/Local API), engine strip, live model picker | ✅ different posture (local-first) — keep |
 | 16 | Theme & identity | `system`/`zai-dark`/`zai-light`; neutrals #161616/#202020/#2b2b2b, white primary | System/Light/Dark + font scale; dark #161616/#222222/#2B2B2B (**near-identical neutrals**), orange accent `#E48B46`, SF fonts | 🟡 identity decision (open) |
 | 17 | Onboarding / account | Welcome + OAuth + migration import wizard (Claude Code/Codex/etc.) | Retired by design; empty states guide model connection | ✅ different posture (local app) — keep |
@@ -60,7 +60,8 @@ panel; no OS-level footer. Menus: ZCode/File/Edit/View/Window/Help with real acc
 (sidebar + detail); toolbar has a single New-conversation button; menus: File(⌘N)/Settings ⌘,
 /View palette ⌘K + Stop Agent ⌘. (+3 DEBUG items). No panel toggles, no task nav shortcuts.
 
-**Gaps**: side pane (U3), terminal dock (U3), menu/shortcut pass incl. ⌘⇧[ ], prev/next task (P2).
+**Gaps (honest, post U3/U4/Wave 2):** in-app browser / whiteboard / split-pane tasks (P3).
+Side pane, terminal dock, ⌘J / ⌥⌘B, prev-next task ⌘⇧[ ⌘⇧] shipped.
 
 ## 2. Sidebar — 🟡
 
@@ -203,22 +204,24 @@ Todos with fold, Terminals, Agents running/stop) + context usage breakdown.
 breakdown ✓. Missing: git/branch/changes capsule and todos-in-status (todos show in plan
 card only when present). P2 `statuscapsule` agent after U3.
 
-## 13. Terminal & side pane — ❌ (U3, biggest structural gap)
+## 13. Terminal & side pane — 🟡 (CSI 33/33 incl. Grok Build smoke)
 
 **ZCode**: bottom xterm terminal dock (⌘J; real PTY, font settings) + independent right
 side pane with tabs: **Browser** (in-app webview), **Review/Diff**, **Code viewer**,
 **Terminal**, **Whiteboard**, **Repo wiki**, **Subagents** (live fan-out panel), Open file
 searcher. Tabs addable/closable, pane resize/restore.
 
-**VibeCoder**: nothing equivalent — background shell jobs show a banner in-transcript only;
-no inspector column. `ProjectFileTreeBuilder` exists but is test-only (unused by views).
+**VibeCoder (shipped):** bottom `forkpty` dock (⌘J, one session per cwd, Kill ≠ agent
+cancel) + inspector **Files / Changes / Subagents** (⌥⌘B; Open in side pane).
+**CSI (33 tests in `TerminalSessionUITests`, including
+`testGrokBuildAltScreenBracketedPasteSmoke`):** CUP, ED, SGR + truecolor, DEC 1 /
+25 / 1049 / 2004, DSR, IRM, IL/DL/ICH/DCH, bracketed paste, alt-screen restore,
+unknown CSI/OSC dropped. Still not xterm.js: no tabs/split, no inspector
+terminal tab.
 
-**Plan U3**: `sidepane` agent — macOS 14 `.inspector`: tabs v1 = **Files** (wire the existing
-`ProjectFileTreeBuilder`) + **Changes** (reused diff views); ⌥⌘B toggle. Then `terminal` agent
-— bottom dock with a PTY (forkpty + ANSI-aware NSTextView, single terminal per project cwd,
-⌘J). In-app browser → P3 (WKWebView wrap is easy but low value vs ZCode's cloud positioning).
+**Still out:** in-app browser, whiteboard, repo wiki (P3).
 
-## 14. Settings — 🟡 (U1 hooks, U2 managers)
+## 14. Settings — ✅ (Commands editor shipped)
 
 ZCode 14 sections vs VC 11 tabs. The gaps that matter for agent UX:
 
@@ -227,7 +230,7 @@ ZCode 14 sections vs VC 11 tabs. The gaps that matter for agent UX:
 | Hooks (7 events, matcher/command/args/timeout/background form) | **file-only**, no editor | **U1** `hooks-ui`: full editor UI over `.vibecoder/hooks.json` (new HooksConfigStore) |
 | Skills manager (list/filter/enable/import, per-skill diagnostics) | no UI (tool toggle only) | **U2** `settings-managers`: list from discovery API, enable + import/copy into project & user roots |
 | Subagents (user/built-in/plugin; form: prompt, model, color, tools, maxTurns) | no UI (`.md` agents supported in harness incl. new profile frontmatter) | **U2**: list + editor writing `.md` agent files (harness parses them) |
-| Commands (.md command form: name/prompt/description/arg hint + import) | custom `.md` commands work in harness; no UI | P2 (same store pattern as subagents) |
+| Commands (.md command form: name/prompt/description/arg hint + import) | **Commands** tab + `$ARGUMENTS`/`$N` execution | shipped |
 | MCP import from other tools / remote sync | richer form (HTTP/stdio/OAuth/timeouts) already; no import | P3 |
 | Automations (scheduled + idle-time off-peak) | Scheduled tab ✓ (near-parity for scheduled; off-peak = cloud, skip) | keep |
 | Browser / Indexing / Usage stats / plugin marketplace | n/a (local app) | P3 |
@@ -377,16 +380,53 @@ Settings Subagents lists general-purpose / explore / plan
 (`u4-settings-subagents.png`). File/View menus confirmed via Accessibility.
 Prefs reset; `/Applications/VibeCoder.app` left running.
 
+## Wave 2 (harness + terminal CSI) — ✅ DONE 2026-08-18 (docs flip)
+
+Code landed in AgentCore / App before this docs pass. Scorecards above match:
+
+- Mid-turn **reminder cadence** (system-reminder inject; `PlanStore` suppresses todo nudge).
+- **In-session** `SkillToolGate` (`allowed-tools`; not persisted).
+- **`sessionReadPaths` persist** + `AgentLoop` seed; Set-Codable SIGSEGV avoided.
+- Terminal **CSI subset frozen** + tests (see §13).
+- **Subagent usage + `transcript.jsonl`** (`SubagentSessionStore`).
+- **Inspector follow-up:** Duration / Tokens / Tools cards (`subagent_meta` +
+  `metadata.json`). `cache_*` stays 0 and hidden. **Later:** mid-run
+  `metadata.json` via `updateProgress` (see Latest docs flip).
+
+## Latest docs flip — 2026-08-18
+
+Verified in code this pass: MCP **GET `/sse`** (`MCPSSEClient`; alias POST
+rejected by tests); **Commands** settings editor + `$ARGUMENTS` slash
+execution; sidebar **archive list**; Find **Files** scope; mid-run
+`metadata.json`; terminal CSI **33** tests including Grok Build smoke;
+**default-IGNORE project hooks** (user-scope still runs); XCTest
+`ParityParentChildSpawnTests`.
+
+**Still unshipped:** `node_repl`, mermaid, `mlx-swift`, queue **Edit**.
+
+## Hooks events follow-up — ✅ DONE 2026-08-18 (docs flip)
+
+Harness **fires** `PermissionRequest` before the ask sheet,
+`PostToolUseFailure` on tool/MCP error, MCP PreToolUse via `preToolDetailed`.
+**Runtime default-ignores project hook files**; user `~/.vibecoder`/`~/.grok`
+hooks still run.
+
+## Wave 4 (harness `memory_update`) — ✅ DONE 2026-08-18 (docs flip)
+
+AgentCore only — no Memory-editor UI change. Successful `memory` writes emit a
+`memory_update` extra; `AgentLoop` injects it as a system-reminder nudge so the
+same turn's later iterations see the write. **Not** typed `user|feedback|project|reference`
+entries. **Not** embeddings.
+
 ## P2 backlog (not committed)
 
-Per-message Fork button (checkpoint-sliced) · tool-row verb copy pass ("Explore" buckets) ·
-Find file-changes scope · task groups + colors + unread markers · model-trajectory row menu ·
-custom-commands settings UI (`.md` form) · status capsule todos fold · model context/output
-limit editor in Model & Backend tab · View zoom in/out/actual (ZCode has it; we don't).
+**Named leftovers:** queue **Edit** · **mermaid** · `node_repl` · `mlx-swift`.
+Also open: per-message Fork · tool-row verb copy · task groups/colors/unread ·
+status capsule todos fold · View zoom.
 
 ## P3 — out of scope unless requested
 
-In-app browser pane · mermaid/KaTeX rendering · prompt-enhance button · SSH/WSL workspaces ·
+In-app browser pane · mermaid/KaTeX (still unshipped) · prompt-enhance button · SSH/WSL workspaces ·
 plugin marketplace UI · off-peak/idle-time tasks (cloud) · usage-stats panes (no billing in VC)
 · i18n zh-CN · like/dislike feedback.
 

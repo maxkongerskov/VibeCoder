@@ -99,4 +99,35 @@ public enum SystemReminder: Sendable {
         if trimmed.hasPrefix("[Background job completed]") { return true }
         return false
     }
+
+    /// Harness system-reminder predicate used when counting human turns.
+    /// Same set as `isWireOnly` — the cadence helpers name this explicitly.
+    public static func isSystemReminder(_ content: String) -> Bool {
+        isWireOnly(content)
+    }
+
+    /// Injected every `ChatLoop.planModeReminderHumanTurns` human turns
+    /// while execution mode is plan.
+    public static let planModeCadence = """
+        # System reminder — plan mode
+        You are still in plan mode (hard read-only). Inspect, search, and keep the session plan current with `create_plan` or `update_todo`. Do not edit application source, delete or move project files, or run mutating shell. When the plan is ready, ask the user to approve and switch to Ask, Auto, or Full.
+        """
+
+    /// Injected after `ChatLoop.todoNudgeHumanTurns` human turns with no
+    /// `create_plan` or `update_todo` in this conversation.
+    public static let todoPlanNudge = """
+        # System reminder — plan / todos
+        Several human turns have passed without `create_plan` or `update_todo`. If this task has more than one step, create or update a plan now so progress stays visible after compaction.
+        """
+
+    /// Re-inject skill index + project instructions after persisted compaction.
+    /// `body` is existing SkillDiscovery / `loadProjectInstructions` text.
+    public static func postCompactRefresh(_ body: String) -> String {
+        """
+        # System reminder — post-compaction
+        Conversation history was compacted. Re-ground on the current skill index and project instructions below. Call `load_skill` by exact listed name if a skill applies.
+
+        \(body)
+        """
+    }
 }

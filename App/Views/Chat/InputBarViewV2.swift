@@ -91,7 +91,11 @@ struct InputBarViewV2: View {
 
     /// Live slash-command matches for the current draft (empty when not drafting `/…`).
     private var slashMatches: [SlashCommand] {
-        SlashCommandService.matchingCommands(draft: text, limit: 10)
+        SlashCommandService.matchingCommands(
+            draft: text,
+            limit: 10,
+            projectRoot: app.openedProject?.url
+        )
     }
 
     private var showSlashMenu: Bool {
@@ -477,7 +481,11 @@ struct InputBarViewV2: View {
                     slashHighlightIndex = 0
                 } else {
                     // Keep highlight in range when filter shrinks.
-                    let count = SlashCommandService.matchingCommands(draft: newValue, limit: 10).count
+                    let count = SlashCommandService.matchingCommands(
+                        draft: newValue,
+                        limit: 10,
+                        projectRoot: app.openedProject?.url
+                    ).count
                     if slashHighlightIndex >= count {
                         slashHighlightIndex = max(0, count - 1)
                     }

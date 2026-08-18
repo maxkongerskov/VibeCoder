@@ -68,6 +68,10 @@ final class ShellApprovalCoordinatorService: ObservableObject {
 
     /// Called by AgentCore (off-main via Sendable wrapper).
     func review(_ request: ShellApprovalRequest) async -> ShellApprovalDecision {
+        // PermissionRequest must run before session grants skip the sheet.
+        if Self.permissionRequestDenied(request) {
+            return .deny
+        }
         if sessionAllows(request) {
             return .once
         }
@@ -168,6 +172,18 @@ final class ShellApprovalCoordinatorService: ObservableObject {
             command: request.command,
             originTag: nil
         ) == true
+    }
+
+    /// Fail closed when a PermissionRequest hook denies. Skipped when
+    /// `resolveAsk` already evaluated the same request.
+    static func permissionRequestDenied(_ request: ShellApprovalRequest) -> Bool {
+        if request.permissionRequestAlreadyEvaluated { return false }
+        return HookDispatcher.permissionRequestDenial(
+            toolName: request.toolName,
+            payload: request.command ?? request.detail,
+            projectRoot: request.projectRoot,
+            worktreeRoot: request.worktreeRoot
+        ) != nil
     }
 
     static func isDangerous(_ request: ShellApprovalRequest) -> Bool {

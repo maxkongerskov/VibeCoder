@@ -22,19 +22,19 @@ Scoring: ✅ parity · 🟡 partial (work described) · ❌ missing. Priorities 
 
 | # | Subsystem | ZCode | VibeCoder | Status |
 |---|-----------|-------|-----------|--------|
-| 1 | Turn loop & tool scheduling | unbounded, mid-stream RO tools, parallel groups (≤10) | capped loop, RO batches parallel, mutators serial | 🟡 P1 |
-| 2 | Context management / compaction | 95% auto + reactive + micro-compact, 9-section summary spec | budget 70%, extractive compactors, elision, no reactive | 🟡 **P0** |
+| 1 | Turn loop & tool scheduling | unbounded, mid-stream RO tools, parallel groups (≤10) | capped loop, RO batches parallel, mutators serial; mid-stream RO still missing | 🟡 P2 |
+| 2 | Context management / compaction | 95% auto + reactive + micro-compact, 9-section summary spec | budget 70%, FullReplace + Semantic + micro + reactive overflow retry | 🟡 P2 |
 | 3 | Wire protocol & prompt caching | Anthropic `tool_use` + `cache_control: ephemeral`, thinking budget | OpenAI fn-calling + inline-parser fallback, no cache_control | 🟡 P2 (design note) |
-| 4 | System prompt composition | 3 blocks; git-status snapshot, env block, autonomous-mode text | 15-section composer; no git snapshot; configurable host prompt | 🟡 **P0** |
-| 5 | Tool catalog (24 model tools) | see §5 map | 38 builtins + 6 PDF + MCP | 🟡 mostly ✅ (4 missing tools) |
-| 6 | Skills | SKILL.md + `Skill` tool + system-reminder listing, plugin namespace | index in prompt + `load_skill`, 4 roots, `/skill` | ✅ near-parity (small P2s) |
-| 7 | Subagents | profiles w/ rich frontmatter, parallel fan-out, SendMessage/resume, telemetry | task tool, 3 types + custom .md, worktree isolation, no messaging | 🟡 **P0/P1** |
-| 8 | Memory | per-project typed .md + extraction; `ReadSessionContext` cross-session tool | MEMORY/DECISIONS/HANDOFF + FTS recall + 3 memory tools, dream | ✅ Vibe richer; 🟡 cross-session tool P1 |
-| 9 | Permissions & modes | build/edit/plan/yolo; 13-step decision; command-prefix rules, suggested updates | plan/build/edit/yolo; 8-step pipeline; durable grants UI | ✅ near-parity (rule syntax P1) |
-| 10 | Hooks | 7 events; Stop-continue ≤3, input mutation, PermissionRequest | 6 events; exit-2 deny; fail-open | 🟡 P1 |
-| 11 | Sessions & persistence | SQLite (messages/parts/todos/permissions), model-io rollouts, resume w/ read-state | JSON per conversation, checkpoints, trace (opt-in) | 🟡 P2 |
-| 12 | Scheduling | Cron* model tools + off-peak runs | SchedulerService (UI only), `/loop` | 🟡 P1/P2 |
-| 13 | MCP | stdio/http/sse, plugin env-substitution, OAuth | stdio + streamable HTTP, OAuth PKCE | ✅ (SSE transport P2) |
+| 4 | System prompt composition | 3 blocks; git-status snapshot, env block, autonomous-mode text | 15-section composer + git snapshot + ZCode behavior + mid-turn reminder cadence | 🟡 P2 |
+| 5 | Tool catalog (24 model tools) | see §5 map | 38 builtins + 6 PDF + MCP | 🟡 mostly ✅ (node REPL still missing) |
+| 6 | Skills | SKILL.md + `Skill` tool + system-reminder listing, plugin namespace | index + `load_skill` + in-session `allowed-tools` + markdown `/commands` with `$ARGUMENTS` | ✅ near-parity (listing budget P2) |
+| 7 | Subagents | profiles w/ rich frontmatter, parallel fan-out, SendMessage/resume, telemetry | parallel `task` + profiles + mailbox + usage/JSONL; inspector Duration/Tokens/Tools; **mid-run `metadata.json`**; `cache_*` hidden | 🟡 P2 |
+| 8 | Memory | per-project typed .md + extraction; `ReadSessionContext` cross-session tool | MEMORY/DECISIONS/HANDOFF + FTS + 3 tools + `read_session_context` + mid-turn `memory_update` nudge | ✅ Vibe richer |
+| 9 | Permissions & modes | build/edit/plan/yolo; 13-step decision; command-prefix rules, suggested updates | plan/build/edit/yolo; 8-step pipeline; durable grants UI; prefix rules; PermissionRequest before ask sheet | ✅ near-parity |
+| 10 | Hooks | 7 events; Stop-continue ≤3, input mutation, PermissionRequest | 7 events wired; **default-IGNORE project files**; user `~/.vibecoder`/`~/.grok` hooks still run | ✅ near-parity |
+| 11 | Sessions & persistence | SQLite (messages/parts/todos/permissions), model-io rollouts, resume w/ read-state | JSON + checkpoints + `sessionReadPaths` resume + opt-in model-io | 🟡 P2 |
+| 12 | Scheduling | Cron* model tools + off-peak runs | `cron_*` tools + SchedulerService; no launchd re-arm | 🟡 P2 |
+| 13 | MCP | stdio/http/sse, plugin env-substitution, OAuth | stdio + streamable HTTP + **GET `/sse`** + OAuth PKCE; no `node_repl` | ✅ (`node_repl` P3) |
 | 14 | Remote control / surfaces | desktop + phone relay, CUA broker, Chrome import | LAN remote-control server, SwiftUI UI | ✅ different posture; CUA = P3 scope |
 
 **Where VibeCoder already beats ZCode (keep, don't regress):** `apply_patch` unified diff;
@@ -46,7 +46,7 @@ stall/governor/doom-loop guards; two-model orchestrator.
 
 ---
 
-## 1. Turn loop & tool scheduling — 🟡 (P0 reactive-compact piece, P1 rest)
+## 1. Turn loop & tool scheduling — 🟡 P2 (mid-stream RO still open)
 
 **ZCode** (`agent-loop.md`): unbounded `for(;;)`; per iteration: microcompact →
 auto-compact (95% of `ctx − outputReserve`, or preflight-v1) → model step.
@@ -67,7 +67,7 @@ batches via `executeReadOnlyBatch`, mutators serial; stall/governor/doom-loop gu
 - [x] P1 — Rapid-refill breaker: `RapidRefillBreaker` hard-stops after 3 consecutive persisted compacts with <3 tool turns between.
 - [ ] P2 — Mid-stream read-only tool execution (start RO tools as their JSON completes).
 
-## 2. Context management — 🟡 P0 (see §1 first item)
+## 2. Context management — 🟡 P2 (reactive + 9-section + micro shipped)
 
 **ZCode compactor prompt** (verbatim spec in `agent-loop.md` §6): text-only summarizer,
 response must be `<analysis>` + 9-section `<summary>` (Primary Request / Key Technical
@@ -107,7 +107,7 @@ elision that preserves tool_call_id pairing, `ToolResultCompressor` on wire copy
 - [ ] P3 — Provider-native web-search tool passthrough (ZCode maps local `WebSearch` to
   Anthropic native on its providers).
 
-## 4. System prompt composition — 🟡 P0 (two cheap wins, one quality port)
+## 4. System prompt composition — 🟡 P2 (cadence shipped; cache split open)
 
 **ZCode 3-block layout** (`system-prompt.md`): block0 identity prefix;
 block1 stable (identity + dual-use **security policy** + `# Harness` rules); block2 dynamic
@@ -118,14 +118,17 @@ block1 stable (identity + dual-use **security policy** + `# Harness` rules); blo
 
 **VibeCoder**: `AgentSystemPromptComposer` — 15 sections, hierarchical project rules
 (richer than ZCode), memory tails injected (richer), mode summary, runtime nudges.
-Chat mode sends **no** system prompt at all (ZCode always does).
+Chat mode sends **no** system prompt at all (ZCode always does). Mid-turn cadence
+arrives as system-reminder nudges (`ChatLoop.cadenceReminders`), not a second
+composer block.
 
 **Work:**
 - [x] **P0 — Inject a `git status` snapshot** via `GitStatusSnapshot` at first compose (cached per conversation).
 - [x] **P0 — Port ZCode's behavior sections verbatim** in `ZCodeBehaviorPrompt` (comms, autonomous-mode, context-management, pre-end-of-turn self-check).
-- [ ] P1 — Mid-turn reminder cadence like ZCode: plan-mode reminder every 5 human turns,
-  todo nudge after N turns without TodoWrite (VibeCoder has nudges infra — align cadence),
-  and skill/instructions refresh after compaction.
+- [x] P1 — Mid-turn reminder cadence: plan-mode reminder every 5 human turns;
+  todo nudge after 8 human turns without `create_plan` / `update_todo`, **suppressed
+  when `PlanStore` still has a live plan** (survives compact); skill/instructions
+  refresh after a persisted reactive compact. Wired in `AgentLoop` (`rawMode` skips).
 - [ ] P2 — Split composer output into stable vs dynamic blocks (prep for prompt caching).
 
 ## 5. Tool catalog — 🟡 (map + 4 gaps)
@@ -170,19 +173,25 @@ official plugins (browser-use, document-skills, android/ios-simulators, skill-cr
 **VibeCoder**: `SkillDiscovery` over `.vibecoder/.grok/.claude/.cursor` (project + home);
 metadata-only index (name + ≤160 chars, max 40) in system prompt; full body via
 `load_skill`; `/skill` user injection; frontmatter `disable-model-invocation`,
-`user-invocable`, `allowed-tools`.
+`user-invocable`, `allowed-tools`. A successful `load_skill` with a non-empty
+`allowed-tools` list installs an **in-session** `SkillToolGate` (last load wins;
+`load_skill` stays allowed so another skill can replace the gate). **Not persisted**
+— relaunch or `clear` is unrestricted until the next load.
 
 **Work:**
 - [ ] P2 — Raise the listing budget from 40 entries/160 chars toward ZCode's
   20k-char budget (truncation hurts model skill selection on busy setups); add
   `when_to_use` to frontmatter parsing and listing format.
-- [ ] P2 — Enforce `allowed-tools` on skill load (currently stored, not enforced).
-- [ ] P2 — Slash-command files (`~/.zcode/commands`, `.zcode/commands` equivalent):
-  markdown commands with `$ARGUMENTS`/`$N` substitution that rewrite the user prompt to
-  `Run custom command /name`. VibeCoder has `/skill` but not markdown custom commands.
+- [x] P2 — Enforce `allowed-tools` on skill load (`SkillToolGate` in `ToolRegistry`
+  execute + read-only batch). In-session only; fail-open after process restart.
+  Settings `disabledToolNames` still wins over the skill list.
+- [x] P2 — Slash-command files (`.vibecoder/commands` / user home) + Settings
+  **Commands** editor: markdown `/name` with `$ARGUMENTS` / `$N` expansion
+  (`SlashCommandService.expandCustomCommand`). `` `!` `` / `$ARGUMENTS` are not
+  shell-expanded.
 - [ ] P3 — Plugin namespace for skills (blocked by plugin system, §14).
 
-## 7. Subagents — 🟡 P0 (parallel) / P1 (profiles, messaging)
+## 7. Subagents — 🟡 P2 (mid-run metadata shipped; mcp/memory scope open)
 
 **ZCode**: `Agent` tool (`subagent_type`, `run_in_background`). Built-ins:
 `general-purpose` (tools `*`, AGENTS.md injected, prompt `Bzt()`) and `Explore`
@@ -197,11 +206,21 @@ with frontmatter: `tools, disallowedTools, skills, memory (user|project|local), 
 thoughtLevel, color, permissionMode, maxTurns, background, injectAgentsMd, mcpServers`.
 Plan mode: up to 3 Explore agents in phase 1.
 
-**VibeCoder**: `task` → `SubAgentRunner` (separate loop); types general-purpose/explore/plan
-+ custom `.md`; worktree isolation (💪 — ZCode ships it as dead code); depth 1; iteration
-cap ~15; background via `BackgroundJobManager` + job tools. Multiple `task` calls run
-**serially**. No per-agent model selection surfaced, no inter-agent messaging, no child
-token telemetry in UI.
+**VibeCoder**: `task` → `SubAgentRunner` (separate loop — do not merge into `AgentLoop`);
+types general-purpose/explore/plan + custom `.md`; worktree isolation (💪); depth 1;
+iteration cap ~15; background via `BackgroundJobManager` + job tools. Consecutive `task`
+calls fan out in parallel (max 10). Profiles + `send_message` / mailbox resume ship.
+Usage is summed from `ChatChunk.usage` into `SubagentUsage` and written under
+`~/Library/Application Support/VibeCoder/subagents/<parent>/<agent_id>/`
+(`transcript.jsonl`, `metadata.json`, `output.txt`). Tool-result `<subagent_meta>`
+includes duration, prompt/completion/total tokens, cache fields, tool count.
+**Honesty:** cache read/write stay **0** until a backend owner extends `ChatChunk`
+and are **hidden** in the inspector (shown only if > 0). Inspector Subagents
+detail shows **Duration / Tokens / Tools** from `<subagent_meta>` and
+`metadata.json`. Mid-run, `SubAgentRunner.publishThread` calls
+`updateProgress` so `metadata.json` rewrites while `status` stays `running`
+(no `completedAt`); the inspector merges that snapshot for live children.
+Not a per-token stream. Chat task rows do not grow a separate token card.
 
 **Work:**
 - [x] **P0 — Parallel `task` fan-out** (AgentLoop consecutive `task` batch + catalog text).
@@ -209,13 +228,14 @@ token telemetry in UI.
   `maxTurns`, `background` in agent `.md` frontmatter, applied at spawn.
 - [x] P1 — Inter-agent messaging: `send_message` + `AgentMailbox`; drain each child iteration;
   resume via `task` `resume_agent_id`.
-- [ ] P1 — Surface subagent usage (tokens incl. cache, tool count, duration) in the UI
-  task card; persist child transcript JSONL for inspection (VibeCoder keeps job output —
-  extend to full transcript).
+- [x] P1 — Persist child transcript JSONL + usage/tool-count/duration
+  (`SubagentSessionStore` + `task` meta). Cache token fields reserved, currently 0.
+- [x] P2 — Inspector Duration / Tokens / Tools cards (`subagent_meta` +
+  mid-run `metadata.json` via `updateProgress`). `cache_*` hidden while 0.
 - [ ] P2 — Per-agent `mcpServers` (agent-scoped MCP pool) and memory scope
   (`user|project|local`) à la ZCode `agent-memory/`.
 
-## 8. Memory — ✅ VibeCoder is stronger; one P1 gap
+## 8. Memory — ✅ VibeCoder is stronger
 
 **ZCode**: `~/.zcode/cli/memories/projects/<slug>-<sha256[:16]>/memory/*.md` typed
 `user|feedback|project|reference`; `# Memory` system section when memory root set;
@@ -227,12 +247,17 @@ an older build, not the current bundle.
 
 **VibeCoder**: `MEMORY.md`/`DECISIONS.md`/`SESSION_HANDOFF.md` in project root (tails
 injected), workspace index `memory/<sha256>` + FTS, first-turn recall block, end-of-turn
-flush + extractive dream (LLM option), 3 model-facing tools.
+flush + extractive dream (LLM option), 3 model-facing tools. Successful `remember` /
+`log_decision` / `write_handoff` emit a `memory_update` extra; `AgentLoop.recordToolResult`
+appends it to `pendingNudges` so the next model step sees the write (cached system-prompt
+memory tail stays stale until the next user turn — the reminder says so). No embeddings.
 
 **Work:**
 - [x] **P1 — `read_session_context` tool**: keyword `relevant` + structured `handoff`, 12k cap.
-- [ ] P2 — Typed memory entries (`user|feedback|project|reference`) and mid-conversation
-  `memory_update` reminder when the model writes new memory (so later turns see it).
+- [x] P2 — Mid-conversation `memory_update` reminder when `memory` writes
+  (`MemoryUpdateReminder` extras + `AgentLoop` `pendingNudges`). Read actions never emit.
+- [ ] P2 — Typed memory entries (`user|feedback|project|reference`) à la ZCode
+  `agent-memory/`. Vibe still uses flat MEMORY/DECISIONS/HANDOFF files.
 - [ ] P3 — Semantic recall: ZCode ships it disabled; skip until embeddings are worth it.
 
 ## 9. Permissions — ✅ near-parity (rule-syntax P1)
@@ -259,10 +284,11 @@ policy → path confinement (always) → Safe Mode allowlists. Grants UI exists.
 - [x] P1 — Structured command-prefix permission rules for `run_shell` + domain allowlist
   for `fetch_url` / `web_search`. `ToolAuthorization.suggestions(forShellCommand:)` is
   ready for a later UI bind (sheet still uses Once/Always/Never).
-- [ ] P2 — Permission-request pre-check hook (`PermissionRequest` event, §10) so hooks can
-  auto-approve/modify before the UI is involved.
+- [x] P2 — Permission-request pre-check hook (`PermissionRequest` via
+  `ShellApproval.resolveAsk` / `permissionRequestDenial`) so hooks can deny
+  before the ask sheet. Fail-open when no hooks dir.
 
-## 10. Hooks — 🟡 P1 (three semantic gaps)
+## 10. Hooks — ✅ (events wired; project files ignored at runtime)
 
 **ZCode events**: `SessionStart, UserPromptSubmit, PreToolUse, PermissionRequest,
 PostToolUse, PostToolUseFailure, Stop`. JSON on stdin (Claude-compatible incl. temp
@@ -274,15 +300,21 @@ system-prompt instruction "treat hook output as user feedback". Project-file hoo
 **stripped** (security); plugins contribute hooks.
 
 **VibeCoder**: `PreToolUse, PostToolUse, SessionStart, UserPromptSubmit, Stop,
-Notification`; exit 2 deny; fail-open on spawn errors.
+Notification, PermissionRequest, PostToolUseFailure`; exit 2 deny; fail-open on
+spawn errors. MCP namespaced tools use `applyPreToolDetailedJSONArgs` then the
+same PostToolUse / PostToolUseFailure decorate path as builtins. Runtime
+`hooksDir` **defaults to user-scope only** (`allowProjectFileHooks == false`).
+Project/worktree `.vibecoder/hooks` are not executed unless that flag is on.
+Settings still load/save project hook files via `projectHooksDir` (edit ≠ run).
 
 **Work:**
 - [x] P1 — **Stop-hook continuation**: `stopDetailed` + `shouldContinueAfterStop` (cap 3).
-- [x] P1 — PreToolUse `updatedInput` + deny/ask via `preToolDetailed` in `ToolRegistry`.
-- [ ] P2 — `PermissionRequest` and `PostToolUseFailure` events (automation parity).
-- [ ] P2 — Adopt ZCode's security stance: ignore hook definitions from project files by
-      default (VibeCoder currently reads hooks from `<project>/.vibecoder/hooks/` — that's
-      a supply-chain vector since models can write project files).
+- [x] P1 — PreToolUse `updatedInput` + deny/ask via `preToolDetailed` in `ToolRegistry`
+  and MCP (`applyPreToolDetailedJSONArgs` in `AgentLoop` before `invokeTool`).
+- [x] P2 — `PermissionRequest` (`ShellApproval.resolveAsk`) and `PostToolUseFailure`
+  (ToolRegistry catch/`isError` + MCP throw/`isError`).
+- [x] P2 — Adopt ZCode's security stance: **ignore project-file hooks by
+      default**. User `~/.vibecoder/hooks` and `~/.grok/hooks` still run.
 
 ## 11. Sessions & persistence — 🟡 P2 (debug parity)
 
@@ -293,13 +325,17 @@ local_setting` + usage); resume restores messages, `readFileState`, permission m
 made the prompt extraction above trivial.
 
 **VibeCoder**: one JSON per conversation in App Support; checkpoints; opt-in
-`AgentTraceService` JSONL.
+`AgentTraceService` JSONL; `sessionReadPaths` on the conversation (string array
+on disk — `Set<String>` Codable SIGSEGV). `ConversationStore` hydrates
+`SessionReadTracker`; `AgentLoop` seeds the tracker and `ToolContext` at turn
+start. Empty tracker still fail-closes the read-before-edit guard.
 
 **Work:**
 - [x] P2 — Opt-in model I/O JSONL via `ModelIORecorder` (default off) hooked in
   `OpenAICompatibleClient.streamChatCompletion`.
-- [ ] P2 — On resume, restore read-before-edit state (VibeCoder's `SessionReadTracker`
-  is per-session — rehydrate from stored reads like ZCode).
+- [x] P2 — On resume, restore read-before-edit state (`sessionReadPaths` persist
+  + `ConversationSessionReadCodec` + `AgentLoop` seed). `SkillToolGate` is
+  **not** part of this field and stays in-memory.
 
 ## 12. Scheduling — 🟡 (P1 tools over existing service)
 
@@ -309,19 +345,24 @@ canned denial), hidden on automation-created turns; plus product-level **off-pea
 local).
 
 **VibeCoder**: `SchedulerService` (in-process timer; sidebar "Scheduled"; stops when app
-quits) + `/loop`.
+quits) + `/loop` + model-facing `cron_*` tools (20-task cap).
 
 **Work:**
 - [x] P1 — `cron_create/update/list/delete` wired to `ScheduledTaskStore` (20-task cap).
 - [ ] P2 — Persist schedules so they survive app restarts (launchd/`smapsd` or re-arm on
   boot). Off-peak cloud runs = Z.ai infra, skip.
 
-## 13. MCP — ✅ (one transport)
+## 13. MCP — ✅ (SSE is GET, not an alias)
 
 Both: `server__tool` namespacing, allow/deny rule integration, session-pooled clients,
-OAuth. ZCode adds **SSE transport**, plugin-scoped `.mcp.json` with env substitution
-(`${CLAUDE_PLUGIN_ROOT}`, `${user_config.*}`), and a builtin `node_repl` server.
-**Work:** [ ] P2 SSE transport; [ ] P3 plugin-scoped servers (needs plugins, §14).
+OAuth. VibeCoder transports: stdio, streamable HTTP, and **legacy GET `/sse`**
+(`MCPSSEClient` — `Accept: text/event-stream`, wait for `endpoint` event, then
+POST messages). Tests reject treating the SSE URL as a streamable-HTTP POST
+alias. ZCode also ships plugin-scoped `.mcp.json` env substitution and a builtin
+`node_repl` server.
+
+**Work:** [x] P2 SSE transport (GET `/sse` + `endpoint` event); [ ] P3 plugin-scoped
+servers; [ ] P3 builtin `node_repl` (`mcp__node_repl__js`).
 
 ## 14. Product-surface scope (P3 — not agent-harness parity)
 
@@ -345,17 +386,28 @@ These exist in ZCode as *desktop product* features; decide if VibeCoder wants th
 
 ## Suggested build order (effort vs impact)
 
-1. **git-status snapshot injection** (§4) — small, every session benefits.
-2. **Reactive compaction on context-exceeded** (§1/§2) — reliability, prevents dead turns.
-3. **Port ZCode behavior prompt sections verbatim** (§4) — copy-paste from
-   `live-system-prompt-raw.md`, immediate behavioral quality.
-4. **Parallel task fan-out** + tool description update (§7) — big capability bump.
-5. **9-section compact prompt + micro-compact old tool results** (§2).
-6. **`read_session_context` cross-session tool** (§8) — reuses existing store/index.
-7. **Command-prefix + domain permission rules** (§9) — daily-driver QoL.
-8. **Stop-hook continuation + PreToolUse input rewrite** (§10).
-9. **Model-facing cron tools over SchedulerService** (§12).
-10. **Subagent profiles (model/thoughtLevel/permissionMode) + inter-agent messaging** (§7).
-11. **Model-I/O request recording, opt-in** (§11) — pays off for everything else.
-12. P2 items: Anthropic-format backend + cache_control, rg vendoring, node REPL MCP,
-    SSE transport, custom markdown commands.
+Items 1–11 below **landed** (through Wave 2, 2026-08-18). Wave 4 added
+`memory_update` (§8). Later: GET `/sse`, ignore-project-hooks, commands
+`$ARGUMENTS`, mid-run metadata. Remaining product leftovers named by
+coordinator: `node_repl`, mermaid, `mlx-swift`, queue Edit.
+
+1. ~~**git-status snapshot injection** (§4)~~ — shipped.
+2. ~~**Reactive compaction on context-exceeded** (§1/§2)~~ — shipped.
+3. ~~**Port ZCode behavior prompt sections verbatim** (§4)~~ — shipped.
+4. ~~**Parallel task fan-out** + tool description update (§7)~~ — shipped.
+5. ~~**9-section compact prompt + micro-compact old tool results** (§2)~~ — shipped.
+6. ~~**`read_session_context` cross-session tool** (§8)~~ — shipped. Wave 4:
+    ~~**`memory_update` mid-turn nudge**~~ — extras + `pendingNudges`. Typed
+    `user|feedback|project|reference` entries still open.
+7. ~~**Command-prefix + domain permission rules** (§9)~~ — shipped (sheet UI bind still later).
+8. ~~**Stop-hook continuation + PreToolUse input rewrite** (§10)~~ — shipped.
+9. ~~**Model-facing cron tools over SchedulerService** (§12)~~ — shipped.
+10. ~~**Subagent profiles + inter-agent messaging** (§7)~~ — shipped. Usage + JSONL
+    + mid-run `metadata.json` (`updateProgress`). `cache_*` hidden.
+11. ~~**Model-I/O request recording, opt-in** (§11)~~ — shipped. **`sessionReadPaths`
+    resume** shipped Wave 2.
+12. Still unshipped (keep unchecked): **`node_repl`**, **mermaid**, **`mlx-swift`**,
+    queue **Edit**. Other open P2s that did not land this pass: Anthropic
+    `cache_control`, mid-stream RO tools, composer cache split, skill listing
+    budget / `when_to_use`, per-agent `mcpServers` + typed memory kinds,
+    persist cron across restart, rg vendoring.

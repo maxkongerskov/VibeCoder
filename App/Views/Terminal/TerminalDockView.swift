@@ -70,7 +70,10 @@ struct TerminalDockView: View {
                 .frame(height: 1)
             TerminalTextView(
                 attributed: session.display,
+                fixedGrid: session.isAlternateScreen,
+                applicationCursorKeys: session.applicationCursorKeys,
                 onInput: { session.send($0) },
+                onPaste: { session.paste($0) },
                 onResize: { session.setPixelSize($0) }
             )
         }
@@ -108,18 +111,32 @@ struct TerminalDockView: View {
                     .foregroundStyle(Theme.Palette.tertiary)
             }
             Spacer(minLength: Theme.Spacing.s)
-            headerIconButton(
-                systemName: "stop.circle",
-                help: "Kill",
-                enabled: session.isAlive
-            ) {
-                session.terminate()
+            if session.isAlive {
+                headerIconButton(
+                    systemName: "stop.circle",
+                    help: "Kill",
+                    enabled: true,
+                    accent: true
+                ) {
+                    session.terminate()
+                }
+                .accessibilityLabel("Kill terminal")
+            } else {
+                headerIconButton(
+                    systemName: "arrow.clockwise",
+                    help: "Restart",
+                    enabled: true,
+                    accent: false
+                ) {
+                    session.restart()
+                }
+                .accessibilityLabel("Restart terminal")
             }
-            .accessibilityLabel("Kill terminal")
             headerIconButton(
                 systemName: "chevron.down",
                 help: "Hide",
-                enabled: true
+                enabled: true,
+                accent: true
             ) {
                 NotificationCenter.default.post(name: .toggleTerminalRequested, object: nil)
             }
@@ -158,12 +175,17 @@ struct TerminalDockView: View {
         systemName: String,
         help: String,
         enabled: Bool,
+        accent: Bool,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
                 .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(enabled ? Theme.Palette.accent : Theme.Palette.tertiary.opacity(0.45))
+                .foregroundStyle(
+                    enabled
+                        ? (accent ? Theme.Palette.accent : Theme.Palette.secondary)
+                        : Theme.Palette.tertiary.opacity(0.45)
+                )
                 .frame(width: 22, height: 22)
                 .contentShape(Rectangle())
         }

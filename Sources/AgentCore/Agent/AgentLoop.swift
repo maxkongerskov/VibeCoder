@@ -276,6 +276,9 @@ public actor AgentLoop {
         /// One reactive compact + retry per consecutive overflow; a second
         /// overflow after that compact fails the turn.
         var didReactiveCompactThisStep = false
+        /// Set only when `applyReactiveCompact` rewrote `convo.messages`.
+        /// Consumed by `cadenceReminders` on the retry iteration.
+        var pendingPostCompactRefresh = false
         var stopContinuationCount = 0
         /// Natural no-tool finish already ran `stopDetailed` — skip trailing `stop`.
         var stopHookAlreadyFired = false
@@ -326,6 +329,10 @@ public actor AgentLoop {
                 projectKey: projectKey)
             authConfig = PermissionRules.merge(into: authConfig, snapshot: fileRules)
         }
+        // Resume read-before-edit from the conversation's persisted set.
+        // Do not wrap the decoded Set in another Set (SIGSEGV on some loads).
+        await SessionReadTracker.shared.seed(
+            paths: convo.sessionReadPaths, conversationID: convo.id)
         var context = ToolContext(
             projectRoot: convo.projectRoot,
             worktreeRoot: convo.worktreeRootURL,
@@ -339,6 +346,7 @@ public actor AgentLoop {
             subagentDepth: 0,
             executionMode: config.executionMode,
             authorization: authConfig,
+            sessionReadPaths: convo.sessionReadPaths,
             disabledToolNames: config.disabledToolNames
         )
 
@@ -527,6 +535,20 @@ public actor AgentLoop {
                 convo: &convo,
                 pendingNudges: &pendingNudges,
                 events: events)
+
+            if !config.rawMode {
+                let hasLivePlan = await PlanStore.shared.plan(
+                    for: convo.id, workingDirectory: workDir) != nil
+                pendingNudges.append(contentsOf: ChatLoop.cadenceReminders(
+                    messages: convo.messages,
+                    executionMode: config.executionMode,
+                    didPersistCompact: pendingPostCompactRefresh,
+                    emitTurnCadence: iteration == 1,
+                    projectRoot: convo.projectRoot,
+                    worktreeRoot: convo.worktreeRootURL,
+                    hasLivePlan: hasLivePlan))
+                pendingPostCompactRefresh = false
+            }
 
             // Re-assemble each iteration so `tool_search` unlocks of deferred
             // tools appear in the next model request mid-turn.
@@ -729,6 +751,7 @@ public actor AgentLoop {
                         events: events)
                     if didShrink {
                         refill.recordCompact()
+                        pendingPostCompactRefresh = true
                     }
                     if refill.shouldHardStop() {
                         return await finishRapidRefillBlocked(
@@ -1097,6 +1120,7 @@ public actor AgentLoop {
                             recentToolErrorFlags: &recentToolErrorFlags,
                             lastToolOutput: &lastToolOutput,
                             pendingAutoVerifyPaths: &pendingAutoVerifyPaths,
+                            pendingNudges: &pendingNudges,
                             events: events) || anyMutation
                     }
                 } else if let inv = readOnlyBatch.first {
@@ -1106,6 +1130,7 @@ public actor AgentLoop {
                         recentToolErrorFlags: &recentToolErrorFlags,
                         lastToolOutput: &lastToolOutput,
                         pendingAutoVerifyPaths: &pendingAutoVerifyPaths,
+                        pendingNudges: &pendingNudges,
                         events: events) || anyMutation
                 }
 
@@ -1135,6 +1160,7 @@ public actor AgentLoop {
                             recentToolErrorFlags: &recentToolErrorFlags,
                             lastToolOutput: &lastToolOutput,
                             pendingAutoVerifyPaths: &pendingAutoVerifyPaths,
+                            pendingNudges: &pendingNudges,
                             events: events) || anyMutation
                     }
                 }
@@ -1160,6 +1186,7 @@ public actor AgentLoop {
                         recentToolErrorFlags: &recentToolErrorFlags,
                         lastToolOutput: &lastToolOutput,
                         pendingAutoVerifyPaths: &pendingAutoVerifyPaths,
+                        pendingNudges: &pendingNudges,
                         events: events) || anyMutation
                 }
             }
@@ -1419,26 +1446,25 @@ public actor AgentLoop {
             await events(.toolStarted(id: inv.id, name: inv.name, label: label))
             // Parse arguments as a generic dict for MCP (the schema
             // comes from the server, not our ToolArguments decoder).
-            let args: [String: Any]
+            let parsedArgs: [String: Any]
             if let data = inv.arguments.data(using: .utf8),
                let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                args = parsed
+                parsedArgs = parsed
             } else {
-                args = [:]
+                parsedArgs = [:]
             }
-            let toolArgs = ToolArguments(dictionary: args)
-
-            // Pre-tool hooks (same gate as ToolRegistry.execute).
-            let pre = HookDispatcher.preTool(
+            // Pre-tool hooks (same gate as ToolRegistry.execute — detailed).
+            let preApplied = HookDispatcher.applyPreToolDetailedJSONArgs(
                 toolName: inv.name,
-                argumentsSummary: String(describing: args),
+                arguments: parsedArgs,
                 projectRoot: context.projectRoot,
                 worktreeRoot: context.worktreeRoot)
-            if !pre.allow {
-                let msg = pre.message ?? "Denied by hook"
+            if let msg = preApplied.denyMessage {
                 await events(.toolCompleted(id: inv.id, name: inv.name, label: label, isError: true))
                 return ToolResult(content: msg, isError: true)
             }
+            let effectiveArgs = preApplied.arguments
+            let toolArgs = ToolArguments(dictionary: effectiveArgs)
 
             // Hydrate live grants so ShellApproval "Always" within this turn
             // is honored on subsequent MCP calls (turn-start snapshot alone
@@ -1466,7 +1492,7 @@ public actor AgentLoop {
                     isError: true)
             case .ask(let reason):
                 // Wave B S4: same ShellApprovalGate as ToolRegistry (shell).
-                let summary = String(describing: args).prefix(200)
+                let summary = String(describing: effectiveArgs).prefix(200)
                 let gate = await ShellApprovalGate.resolve(
                     toolName: inv.name,
                     reason: reason,
@@ -1487,24 +1513,24 @@ public actor AgentLoop {
             }
             do {
                 let payload = try await pool.invokeTool(
-                    namespacedName: inv.name, arguments: args)
+                    namespacedName: inv.name, arguments: effectiveArgs)
                 let content = Self.mcpResultContent(payload)
                 let isErr = content.hasPrefix("MCP error:")
                     || (payload.value["isError"] as? Bool == true)
-                let post = HookDispatcher.postTool(
+                let decorated = HookDispatcher.decorateWithPostToolHooks(
                     toolName: inv.name,
-                    resultSummary: String(content.prefix(200)),
+                    result: ToolResult(content: content, isError: isErr),
                     projectRoot: context.projectRoot,
                     worktreeRoot: context.worktreeRoot)
-                if !post.allow {
-                    let msg = post.message ?? "Denied by post-tool hook"
-                    let merged = content.isEmpty ? msg : "\(content)\n\n[PostTool hook deny] \(msg)"
-                    await events(.toolCompleted(id: inv.id, name: inv.name, label: label, isError: true))
-                    return ToolResult(content: merged, isError: true)
-                }
-                await events(.toolCompleted(id: inv.id, name: inv.name, label: label, isError: isErr))
-                return ToolResult(content: content, isError: isErr)
+                await events(.toolCompleted(
+                    id: inv.id, name: inv.name, label: label, isError: decorated.isError))
+                return decorated
             } catch {
+                HookDispatcher.notifyPostToolUseFailure(
+                    toolName: inv.name,
+                    errorSummary: error.localizedDescription,
+                    projectRoot: context.projectRoot,
+                    worktreeRoot: context.worktreeRoot)
                 await events(.toolCompleted(id: inv.id, name: inv.name, label: label, isError: true))
                 return ToolResult(content: "MCP error: \(error.localizedDescription)", isError: true)
             }
@@ -1669,6 +1695,7 @@ public actor AgentLoop {
         recentToolErrorFlags: inout [Bool],
         lastToolOutput: inout ToolOutputInfo?,
         pendingAutoVerifyPaths: inout [String],
+        pendingNudges: inout [String],
         events: @escaping @Sendable (LoopEvent) async -> Void
     ) async -> Bool {
         let mutated = !result.mutatedPaths.isEmpty
@@ -1682,6 +1709,9 @@ public actor AgentLoop {
 
         if !result.isError {
             context = Self.contextApplyingToolExtras(context, extras: result.extras)
+            if let reminder = MemoryUpdateReminder.extract(result.extras) {
+                pendingNudges.append(reminder)
+            }
         }
 
         // `tool_search` unlocks deferred tools for subsequent iterations.

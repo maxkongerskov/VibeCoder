@@ -401,6 +401,233 @@ final class InspectorSubagentsUITests: XCTestCase {
         XCTAssertTrue(dir.ended.isEmpty)
     }
 
+    // MARK: - Usage extras (Wave 3)
+
+    func testParseResultExtractsUsageExtras() {
+        let block = """
+        Summary.
+
+        <subagent_meta>
+        task_id: \(UUID().uuidString)
+        agent_id: agent_review
+        duration_ms: 12500
+        prompt_tokens: 150
+        completion_tokens: 40
+        total_tokens: 190
+        cache_read_tokens: 12
+        cache_write_tokens: 3
+        tool_count: 4
+        </subagent_meta>
+        """
+        let meta = InspectorSubagentDirectory.parseResult(block)
+        XCTAssertEqual(meta.durationMs, 12_500)
+        XCTAssertEqual(meta.promptTokens, 150)
+        XCTAssertEqual(meta.completionTokens, 40)
+        XCTAssertEqual(meta.totalTokens, 190)
+        XCTAssertEqual(meta.cacheReadTokens, 12)
+        XCTAssertEqual(meta.cacheWriteTokens, 3)
+        XCTAssertEqual(meta.toolCount, 4)
+        XCTAssertEqual(meta.agentId, "agent_review")
+    }
+
+    func testParseResultAcceptsTokenAliases() {
+        let meta = InspectorSubagentDirectory.parseResult("""
+        <subagent_meta>
+        input_tokens: 8
+        output_tokens: 2
+        cache_read: 1
+        cache_write: 0
+        total_tool_use_count: 3
+        </subagent_meta>
+        """)
+        XCTAssertEqual(meta.promptTokens, 8)
+        XCTAssertEqual(meta.completionTokens, 2)
+        XCTAssertEqual(meta.cacheReadTokens, 1)
+        XCTAssertEqual(meta.cacheWriteTokens, 0)
+        XCTAssertEqual(meta.toolCount, 3)
+    }
+
+    func testTranscriptMetaFillsEntryExtras() throws {
+        let taskID = UUID()
+        let invocation = try taskInvocation(
+            id: "call_usage",
+            type: "explore",
+            description: "count tokens",
+            prompt: "Count"
+        )
+        let result = """
+        Done.
+
+        <subagent_meta>
+        task_id: \(taskID.uuidString)
+        agent_id: agent_\(taskID.uuidString)
+        type: explore
+        description: count tokens
+        duration_ms: 850
+        prompt_tokens: 12
+        completion_tokens: 7
+        total_tokens: 19
+        cache_read_tokens: 0
+        cache_write_tokens: 0
+        tool_count: 1
+        </subagent_meta>
+        """
+        let conversation = Conversation(messages: turn(
+            user: "count",
+            assistantTools: [invocation],
+            results: [("call_usage", result)]
+        ))
+        let dir = InspectorSubagentDirectory.build(conversation: conversation, jobs: [])
+        let extras = try XCTUnwrap(dir.ended.first?.extras)
+        XCTAssertEqual(extras.promptTokens, 12)
+        XCTAssertEqual(extras.completionTokens, 7)
+        XCTAssertEqual(extras.totalTokens, 19)
+        XCTAssertEqual(extras.toolCount, 1)
+        XCTAssertEqual(extras.durationMs, 850)
+        XCTAssertEqual(extras.agentId, "agent_\(taskID.uuidString)")
+        XCTAssertEqual(
+            InspectorSubagentDirectory.formatTokenLine(extras),
+            "12 in · 7 out · 19 total"
+        )
+        XCTAssertEqual(InspectorSubagentDirectory.formatToolLine(extras), "1 tool")
+        XCTAssertEqual(InspectorSubagentDirectory.formatDurationLine(extras), "850ms")
+        XCTAssertEqual(
+            InspectorSubagentDirectory.formatExtrasCompact(extras),
+            "19 tok · 1 tool · 850ms"
+        )
+    }
+
+    func testZeroTokensHideTokenLineButKeepTools() {
+        let extras = InspectorSubagentExtras(
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            toolCount: 0,
+            durationMs: 0
+        )
+        XCTAssertFalse(extras.hasTokens)
+        XCTAssertTrue(extras.hasAny)
+        XCTAssertNil(InspectorSubagentDirectory.formatTokenLine(extras))
+        XCTAssertEqual(InspectorSubagentDirectory.formatToolLine(extras), "0 tools")
+        XCTAssertNil(InspectorSubagentDirectory.formatDurationLine(extras))
+    }
+
+    func testSessionMetadataOverlaysMissingExtras() throws {
+        let taskID = UUID()
+        let invocation = try taskInvocation(
+            id: "call_disk",
+            type: "general-purpose",
+            description: "from disk",
+            prompt: "Go"
+        )
+        let result = """
+        Background subagent started.
+
+        <subagent_meta>
+        task_id: \(taskID.uuidString)
+        agent_id: agent_from_disk
+        type: general-purpose
+        description: from disk
+        status: completed
+        </subagent_meta>
+        """
+        let conversation = Conversation(messages: turn(
+            user: "go",
+            assistantTools: [invocation],
+            results: [("call_disk", result)]
+        ))
+        let session = SubagentSessionMetadata(
+            agentId: "agent_from_disk",
+            parentConversationId: conversation.id,
+            taskId: taskID,
+            status: "completed",
+            totalDurationMs: 45_000,
+            totalTokens: 190,
+            totalToolUseCount: 4,
+            usage: SubagentUsage(
+                inputTokens: 150,
+                outputTokens: 40,
+                cacheReadTokens: 12,
+                cacheWriteTokens: 3
+            )
+        )
+        let dir = InspectorSubagentDirectory.build(
+            conversation: conversation,
+            jobs: [],
+            sessionMetadata: [session]
+        )
+        let extras = try XCTUnwrap(dir.ended.first?.extras)
+        XCTAssertEqual(extras.promptTokens, 150)
+        XCTAssertEqual(extras.completionTokens, 40)
+        XCTAssertEqual(extras.totalTokens, 190)
+        XCTAssertEqual(extras.cacheReadTokens, 12)
+        XCTAssertEqual(extras.cacheWriteTokens, 3)
+        XCTAssertEqual(extras.toolCount, 4)
+        XCTAssertEqual(extras.durationMs, 45_000)
+        XCTAssertEqual(
+            InspectorSubagentDirectory.formatTokenLine(extras),
+            "150 in · 40 out · 190 total · cache r 12 / w 3"
+        )
+        XCTAssertEqual(InspectorSubagentDirectory.formatDurationLine(extras), "45s")
+        XCTAssertEqual(InspectorSubagentDirectory.formatToolLine(extras), "4 tools")
+    }
+
+    func testJobOverlayPreservesTranscriptExtras() throws {
+        let taskID = UUID()
+        let invocation = try taskInvocation(
+            id: "call_keep",
+            type: "explore",
+            description: "keep extras",
+            prompt: "Keep"
+        )
+        let result = """
+        Listed.
+
+        <subagent_meta>
+        task_id: \(taskID.uuidString)
+        prompt_tokens: 20
+        completion_tokens: 5
+        total_tokens: 25
+        tool_count: 2
+        duration_ms: 2100
+        </subagent_meta>
+        """
+        let conversation = Conversation(messages: turn(
+            user: "keep",
+            assistantTools: [invocation],
+            results: [("call_keep", result)]
+        ))
+        let job = BackgroundJobSnapshot(
+            id: taskID,
+            kind: .subagent,
+            status: .completed,
+            command: "explore: keep extras",
+            output: "Listed.",
+            exitCode: 0,
+            startedAt: Date().addingTimeInterval(-3),
+            finishedAt: Date()
+        )
+        let dir = InspectorSubagentDirectory.build(conversation: conversation, jobs: [job])
+        let extras = try XCTUnwrap(dir.ended.first?.extras)
+        XCTAssertEqual(extras.promptTokens, 20)
+        XCTAssertEqual(extras.completionTokens, 5)
+        XCTAssertEqual(extras.totalTokens, 25)
+        XCTAssertEqual(extras.toolCount, 2)
+        XCTAssertEqual(extras.durationMs, 2100)
+    }
+
+    func testFormatCountAndDuration() {
+        XCTAssertEqual(InspectorSubagentDirectory.formatCount(190), "190")
+        XCTAssertEqual(InspectorSubagentDirectory.formatCount(12_500), "12.5k")
+        XCTAssertEqual(InspectorSubagentDirectory.formatDurationLine(.init(durationMs: 420)), "420ms")
+        XCTAssertEqual(InspectorSubagentDirectory.formatDurationLine(.init(durationMs: 12_500)), "12s")
+        XCTAssertEqual(InspectorSubagentDirectory.tokensTitle, "Tokens")
+        XCTAssertEqual(InspectorSubagentDirectory.toolsTitle, "Tools")
+        XCTAssertEqual(InspectorSubagentDirectory.durationTitle, "Duration")
+    }
+
     // MARK: - Fixtures
 
     private func taskInvocation(

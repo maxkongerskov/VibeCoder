@@ -16,9 +16,13 @@ final class HookDispatcherV2Tests: XCTestCase {
             .appendingPathComponent("hooks-v2-\(UUID().uuidString)", isDirectory: true)
         hooks = root.appendingPathComponent(".vibecoder/hooks", isDirectory: true)
         try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        HookDispatcher.setHooksHomeDirectoryOverride(root)
+        HookDispatcher.allowProjectFileHooks = false
     }
 
     override func tearDownWithError() throws {
+        HookDispatcher.allowProjectFileHooks = false
+        HookDispatcher.setHooksHomeDirectoryOverride(nil)
         try? FileManager.default.removeItem(at: root)
         root = nil
         hooks = nil

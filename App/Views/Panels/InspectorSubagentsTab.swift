@@ -19,12 +19,14 @@ struct InspectorSubagentsTab: View {
     @State private var loadFailed = false
     @State private var now = Date()
     @State private var threadByJob: [UUID: [SubagentThreadItem]] = [:]
+    @State private var sessionMetadata: [SubagentSessionMetadata] = []
 
     private var directory: InspectorSubagentDirectory {
         InspectorSubagentDirectory.build(
             conversation: conversation,
             jobs: jobs,
-            liveTaskStates: liveTaskStates
+            liveTaskStates: liveTaskStates,
+            sessionMetadata: sessionMetadata
         )
     }
 
@@ -142,23 +144,33 @@ struct InspectorSubagentsTab: View {
         return Button {
             selectedID = entry.id
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(entry.type)
-                    .font(Theme.Typography.mono(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Theme.Palette.subagentType)
-                    .lineLimit(1)
-                Text(entry.description.isEmpty ? "Subagent" : entry.description)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Theme.Palette.primary)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                Spacer(minLength: 6)
-                Text(entry.status.title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(statusColor(entry.status))
-                Text(entry.elapsedLabel(now: now))
-                    .font(Theme.Typography.mono(size: 10.5))
-                    .foregroundStyle(Theme.Palette.tertiary)
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(entry.type)
+                        .font(Theme.Typography.mono(size: 11.5, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.subagentType)
+                        .lineLimit(1)
+                    Text(entry.description.isEmpty ? "Subagent" : entry.description)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Theme.Palette.primary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 6)
+                    Text(entry.status.title)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(statusColor(entry.status))
+                    Text(entry.elapsedLabel(now: now))
+                        .font(Theme.Typography.mono(size: 10.5))
+                        .foregroundStyle(Theme.Palette.tertiary)
+                }
+                if let compact = InspectorSubagentDirectory.formatExtrasCompact(entry.extras) {
+                    Text(compact)
+                        .font(Theme.Typography.mono(size: 10))
+                        .foregroundStyle(Theme.Palette.tertiary)
+                        .lineLimit(1)
+                        .padding(.top, 1)
+                        .accessibilityIdentifier("inspector-subagent-extras-compact-\(entry.id)")
+                }
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 5)
@@ -231,6 +243,8 @@ struct InspectorSubagentsTab: View {
                         }
                     }
 
+                    extrasBlock(entry)
+
                     if !entry.prompt.isEmpty {
                         labeledBlock(
                             InspectorSubagentDirectory.promptTitle,
@@ -245,6 +259,51 @@ struct InspectorSubagentsTab: View {
             }
         }
         .accessibilityIdentifier("inspector-subagent-detail")
+    }
+
+    @ViewBuilder
+    private func extrasBlock(_ entry: InspectorSubagentEntry) -> some View {
+        let extras = entry.extras
+        if extras.hasAny {
+            VStack(alignment: .leading, spacing: 6) {
+                if let duration = InspectorSubagentDirectory.formatDurationLine(extras) {
+                    extraRow(
+                        InspectorSubagentDirectory.durationTitle,
+                        value: duration,
+                        identifier: "inspector-subagent-duration"
+                    )
+                }
+                if let tokens = InspectorSubagentDirectory.formatTokenLine(extras) {
+                    extraRow(
+                        InspectorSubagentDirectory.tokensTitle,
+                        value: tokens,
+                        identifier: "inspector-subagent-tokens"
+                    )
+                }
+                if let tools = InspectorSubagentDirectory.formatToolLine(extras) {
+                    extraRow(
+                        InspectorSubagentDirectory.toolsTitle,
+                        value: tools,
+                        identifier: "inspector-subagent-tools"
+                    )
+                }
+            }
+            .accessibilityIdentifier("inspector-subagent-extras")
+        }
+    }
+
+    private func extraRow(_ title: String, value: String, identifier: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.Palette.tertiary)
+            Text(value)
+                .font(Theme.Typography.mono(size: 11.5))
+                .foregroundStyle(Theme.Palette.secondary)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityIdentifier(identifier)
+        }
     }
 
     private func threadBlock(_ entry: InspectorSubagentEntry) -> some View {
@@ -395,6 +454,8 @@ struct InspectorSubagentsTab: View {
     private func refresh() async {
         guard let conversation else {
             jobs = []
+            sessionMetadata = []
+            threadByJob = [:]
             loadFailed = false
             return
         }
@@ -436,7 +497,45 @@ struct InspectorSubagentsTab: View {
             }
         }
         threadByJob = nextThread
+        sessionMetadata = await loadSessionMetadata(
+            conversationID: conversation.id,
+            directory: directory
+        )
         loadFailed = false
+    }
+
+    private func loadSessionMetadata(
+        conversationID: UUID,
+        directory: InspectorSubagentDirectory
+    ) async -> [SubagentSessionMetadata] {
+        var byAgent: [String: SubagentSessionMetadata] = [:]
+        var seen = Set<String>()
+
+        func load(agentId: String) async {
+            let key = AgentMailbox.normalizeAgentId(agentId).lowercased()
+            guard seen.insert(key).inserted else { return }
+            if let meta = await SubagentSessionStore.shared.loadMetadata(
+                parentConversationID: conversationID,
+                agentId: agentId
+            ) {
+                byAgent[key] = meta
+            }
+        }
+
+        for entry in directory.running + directory.ended {
+            if let agentId = entry.extras.agentId {
+                await load(agentId: agentId)
+            }
+        }
+
+        let root = await SubagentSessionStore.shared.resolvedRoot()
+        let parentDir = root.appendingPathComponent(conversationID.uuidString, isDirectory: true)
+        if let names = try? FileManager.default.contentsOfDirectory(atPath: parentDir.path) {
+            for name in names {
+                await load(agentId: name)
+            }
+        }
+        return Array(byAgent.values)
     }
 
     private func kill(_ entry: InspectorSubagentEntry) {

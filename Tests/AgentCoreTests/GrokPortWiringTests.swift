@@ -46,7 +46,11 @@ final class GrokPortWiringTests: XCTestCase {
             .appendingPathComponent("batch-hooks-\(UUID().uuidString)", isDirectory: true)
         let hooks = root.appendingPathComponent(".vibecoder/hooks", isDirectory: true)
         try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
+        HookDispatcher.setHooksHomeDirectoryOverride(root)
+        defer {
+            HookDispatcher.setHooksHomeDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: root)
+        }
         try "grep_code\n".write(
             to: hooks.appendingPathComponent("deny-tools.txt"),
             atomically: true, encoding: .utf8)

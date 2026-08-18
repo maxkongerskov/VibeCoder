@@ -1,8 +1,8 @@
 //
 //  MCPServerPool.swift
 //
-//  Manages all user-configured MCP servers (both stdio and Streamable HTTP)
-//  for a single agent turn. This is VibeCoder's equivalent of Grok Build's
+//  Manages all user-configured MCP servers (stdio, Streamable HTTP, and
+//  legacy GET /sse) for a single agent turn. This is VibeCoder's equivalent of Grok Build's
 //  `McpPool` — it connects to each enabled server, discovers tools via
 //  `tools/list`, and exposes them as namespaced `server__tool` entries.
 //
@@ -137,6 +137,7 @@ public actor MCPServerPool {
     /// Active connections, keyed by server name.
     private var stdioClients: [String: MCPStdioClient] = [:]
     private var httpClients: [String: MCPHttpClient] = [:]
+    private var sseClients: [String: MCPSSEClient] = [:]
     /// Tools discovered from each server, keyed by namespaced name.
     private(set) var discoveredTools: [MCPDiscoveredTool] = []
     /// Connection errors, keyed by server name (for diagnostics).
@@ -165,7 +166,7 @@ public actor MCPServerPool {
     public func connectAll() async {
         // Tear down any prior clients first — re-entrant connectAll used to
         // leak stdio processes (cleared tool list but left old clients open).
-        if !stdioClients.isEmpty || !httpClients.isEmpty {
+        if !stdioClients.isEmpty || !httpClients.isEmpty || !sseClients.isEmpty {
             await disconnectAll()
         }
         discoveredTools = []
@@ -180,12 +181,15 @@ public actor MCPServerPool {
     }
 
     /// Connect to a single server and discover its tools.
+    /// Switch is exhaustive over `MCPServerTransport` (stdio / streamableHttp / sse).
     private func connectOne(_ server: MCPServerConfig) async {
         switch server.transport {
         case .stdio:
             await connectStdio(server)
         case .streamableHttp:
             await connectHTTP(server)
+        case .sse:
+            await connectSSE(server)
         }
     }
 
@@ -263,6 +267,39 @@ public actor MCPServerPool {
             httpClients[server.name] = client
         } catch {
             connectionErrors[server.name] = "HTTP connect failed: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Legacy SSE connection
+
+    private func connectSSE(_ server: MCPServerConfig) async {
+        let client = MCPSSEClient(config: server)
+
+        if let oauth = server.oauth, let urlStr = server.url {
+            let serverName = server.name
+            let provider = MCPOAuthCoordinator.shared.tokenProvider(
+                serverName: serverName,
+                serverURL: urlStr,
+                config: oauth)
+            await client.setOAuthTokenProvider(provider)
+            await client.setOAuthOnUnauthorized {
+                MCPOAuthCoordinator.shared.invalidateAccessToken(
+                    serverName: serverName, serverURL: urlStr)
+            }
+            _ = try? await MCPOAuthCoordinator.shared.ensureAuthenticated(
+                serverName: serverName,
+                serverURL: urlStr,
+                config: oauth,
+                interactive: false)
+        }
+
+        do {
+            try await client.connect()
+            let tools = await listTools(client: .sse(client), serverName: server.name)
+            discoveredTools.append(contentsOf: tools)
+            sseClients[server.name] = client
+        } catch {
+            connectionErrors[server.name] = "SSE connect failed: \(error.localizedDescription)"
         }
     }
 
@@ -371,6 +408,10 @@ public actor MCPServerPool {
             return try await client.request(method: method, params: params,
                                              timeout: resolvedTimeout)
         }
+        if let client = sseClients[server] {
+            return try await client.request(method: method, params: params,
+                                             timeout: resolvedTimeout)
+        }
         throw MCPClientError.notConnected
     }
 
@@ -385,8 +426,12 @@ public actor MCPServerPool {
         for (_, client) in httpClients {
             await client.disconnect()
         }
+        for (_, client) in sseClients {
+            await client.disconnect()
+        }
         stdioClients.removeAll()
         httpClients.removeAll()
+        sseClients.removeAll()
         discoveredTools = []
     }
 
@@ -429,6 +474,7 @@ public actor MCPServerPool {
     private enum MCPClientRef {
         case stdio(MCPStdioClient)
         case http(MCPHttpClient)
+        case sse(MCPSSEClient)
 
         func request(method: String, params: [String: Any],
                      timeout: TimeInterval) async throws -> MCPJSONPayload {
@@ -446,6 +492,8 @@ public actor MCPServerPool {
             case .stdio(let c):
                 return try await c.request(method: method, params: safeParams, timeout: timeout)
             case .http(let c):
+                return try await c.request(method: method, params: safeParams, timeout: timeout)
+            case .sse(let c):
                 return try await c.request(method: method, params: safeParams, timeout: timeout)
             }
         }

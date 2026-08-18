@@ -51,7 +51,7 @@ import Foundation
 /// ```
 public struct MCPFileServerEntry: Codable, Sendable {
     public enum TransportKind: String, Codable, Sendable {
-        case stdio, http, streamableHttp
+        case stdio, http, streamableHttp, sse
     }
 
     public var type: String?
@@ -294,13 +294,16 @@ public enum MCPConfigWalker {
     /// Convert a `.mcp.json` server entry to an `MCPServerConfig`.
     /// The "type" field determines the transport:
     ///   - "stdio" → .stdio (requires command)
+    ///   - "sse" → .sse (requires url; legacy GET /sse + endpoint event)
     ///   - "http", "streamableHttp", or absent → .streamableHttp (requires url)
     public static func entryToConfig(name: String, entry: MCPFileServerEntry) -> MCPServerConfig? {
         let transport: MCPServerTransport
         switch entry.type?.lowercased() {
         case "stdio":
             transport = .stdio
-        case "http", "streamablehttp", "sse":
+        case "sse":
+            transport = .sse
+        case "http", "streamablehttp":
             transport = .streamableHttp
         case nil:
             // Default to HTTP if url is present, stdio if command is present.
@@ -333,10 +336,10 @@ public enum MCPConfigWalker {
                 startupTimeout: startup,
                 toolTimeout: toolT,
                 toolTimeouts: perTool)
-        case .streamableHttp:
+        case .streamableHttp, .sse:
             guard let url = entry.url else { return nil }
             return MCPServerConfig(
-                name: name, transport: .streamableHttp,
+                name: name, transport: transport,
                 url: url,
                 headers: entry.headers ?? [:],
                 enabled: enabled,

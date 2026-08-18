@@ -3,8 +3,9 @@
 //  Load/save hooks.json using HookDispatcher's nested schema.
 //
 //  Project file: <project>/.vibecoder/hooks/hooks.json (or existing
-//  config.json / .grok/hooks). User path ~/.vibecoder/hooks.json is
-//  exposed for the Settings UI only — HookDispatcher does not read it.
+//  config.json / .grok/hooks) — Settings editor IO only. Runtime
+//  HookDispatcher ignores project files by default (user ~/.vibecoder
+//  and ~/.grok hooks still execute).
 //
 
 import Foundation
@@ -67,16 +68,39 @@ public enum HookConfigStore: Sendable {
         HookDispatcher.eventStop,
     ]
 
-    /// Display-only. Dispatcher never searches `$HOME/.vibecoder`.
+    /// User-scope JSON the dispatcher executes (`~/.vibecoder/hooks.json`).
     public static var userConfigURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser
+        HookDispatcher.hooksHomeDirectory()
             .appendingPathComponent(".vibecoder/hooks.json", isDirectory: false)
     }
 
-    /// Write target: existing hooks.json/config.json if the dispatcher
-    /// would read it; otherwise `<project>/.vibecoder/hooks/hooks.json`.
+    /// Grok user-scope JSON (`~/.grok/hooks.json`).
+    public static var userGrokConfigURL: URL {
+        HookDispatcher.hooksHomeDirectory()
+            .appendingPathComponent(".grok/hooks.json", isDirectory: false)
+    }
+
+    /// Drop this empty file to opt into project hooks without Settings.
+    public static var allowProjectFileHooksMarkerURL: URL {
+        HookDispatcher.hooksHomeDirectory()
+            .appendingPathComponent(
+                ".vibecoder/\(HookDispatcher.allowProjectFileHooksMarkerName)",
+                isDirectory: false)
+    }
+
+    /// Grok-side marker (`~/.grok/allow-project-hooks`).
+    public static var allowProjectGrokFileHooksMarkerURL: URL {
+        HookDispatcher.hooksHomeDirectory()
+            .appendingPathComponent(
+                ".grok/\(HookDispatcher.allowProjectFileHooksMarkerName)",
+                isDirectory: false)
+    }
+
+    /// Settings write target: existing project hooks.json/config.json if
+    /// present; otherwise `<project>/.vibecoder/hooks/hooks.json`.
+    /// Independent of runtime `hooksDir` (project files are not executed).
     public static func configURL(projectRoot: URL) -> URL {
-        if let dir = HookDispatcher.hooksDir(projectRoot: projectRoot) {
+        if let dir = HookDispatcher.projectHooksDir(projectRoot: projectRoot) {
             if let existing = HookDispatcher.configURL(hooksDir: dir) {
                 return existing
             }
@@ -90,7 +114,7 @@ public enum HookConfigStore: Sendable {
 
     public static func load(projectRoot: URL?) -> HookConfigFile {
         guard let root = projectRoot,
-              let dir = HookDispatcher.hooksDir(projectRoot: root)
+              let dir = HookDispatcher.projectHooksDir(projectRoot: root)
         else { return .empty }
         return HookDispatcher.loadConfig(hooksDir: dir)
     }

@@ -98,6 +98,11 @@ public struct Conversation: Codable, Identifiable, Sendable {
     /// Sticky @ pins re-injected each turn until dismissed (survive reload).
     public var stickyContextPins: [StickyContextPinRecord]
 
+    /// Absolute paths `read_file` recorded this conversation. Persisted so
+    /// read-before-edit survives process restart (SessionReadTracker is
+    /// otherwise in-memory only).
+    public var sessionReadPaths: Set<String>
+
     public init(id: UUID = UUID(),
                 title: String = "New conversation",
                 createdAt: Date = Date(),
@@ -114,7 +119,8 @@ public struct Conversation: Codable, Identifiable, Sendable {
                 orchestratorBriefs: [String: String] = [:],
                 railUserPreference: Bool? = nil,
                 attachedSkillIds: [UUID] = [],
-                stickyContextPins: [StickyContextPinRecord] = []) {
+                stickyContextPins: [StickyContextPinRecord] = [],
+                sessionReadPaths: Set<String> = []) {
         self.id = id
         self.title = title
         self.createdAt = createdAt
@@ -132,6 +138,7 @@ public struct Conversation: Codable, Identifiable, Sendable {
         self.railUserPreference = railUserPreference
         self.attachedSkillIds = attachedSkillIds
         self.stickyContextPins = stickyContextPins
+        self.sessionReadPaths = sessionReadPaths
     }
 
     enum CodingKeys: String, CodingKey {
@@ -139,7 +146,7 @@ public struct Conversation: Codable, Identifiable, Sendable {
              worktreeBranch, systemPromptOverride,
              samplingOverride, unlockedDeferredTools,
              pinned, archived, orchestratorBriefs, railUserPreference,
-             attachedSkillIds, stickyContextPins
+             attachedSkillIds, stickyContextPins, sessionReadPaths
     }
 
     public init(from decoder: Decoder) throws {
@@ -165,6 +172,7 @@ public struct Conversation: Codable, Identifiable, Sendable {
         self.railUserPreference = try c.decodeIfPresent(Bool.self, forKey: .railUserPreference)
         self.attachedSkillIds = try c.decodeIfPresent([UUID].self, forKey: .attachedSkillIds) ?? []
         self.stickyContextPins = try c.decodeIfPresent([StickyContextPinRecord].self, forKey: .stickyContextPins) ?? []
+        self.sessionReadPaths = try c.decodeIfPresent(Set<String>.self, forKey: .sessionReadPaths) ?? []
     }
 
     /// The on-disk path of the worktree associated with this conversation,

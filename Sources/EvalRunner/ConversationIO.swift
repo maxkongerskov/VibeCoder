@@ -18,12 +18,21 @@ public enum ConversationIO {
         }
         do {
             let data = try Data(contentsOf: url)
-            return try Self.decoder.decode(Conversation.self, from: data)
+            // Array codec — Conversation.sessionReadPaths Set Codable SIGSEGVs.
+            return try ConversationSessionReadCodec.decode(data)
         } catch let e as EvalRunnerLibError {
             throw e
         } catch {
             throw EvalRunnerLibError.resumeDecode(error.localizedDescription)
         }
+    }
+
+    /// Seed SessionReadTracker after `--resume`. Sync `load` cannot await
+    /// the actor; the eval CLI still needs to call this (remaining gap).
+    public static func hydrateSessionReads(_ conversation: Conversation) async {
+        await SessionReadTracker.shared.seed(
+            paths: conversation.sessionReadPaths,
+            conversationID: conversation.id)
     }
 
     /// Atomically write a Conversation as pretty JSON.
@@ -37,26 +46,11 @@ public enum ConversationIO {
         do {
             var updated = conversation
             updated.updatedAt = Date()
-            let data = try Self.encoder.encode(updated)
+            let data = try ConversationSessionReadCodec.encode(updated)
             try data.write(to: url, options: Data.WritingOptions.atomic)
         } catch {
             throw EvalRunnerLibError.saveFailed(error.localizedDescription)
         }
-    }
-
-    // ConversationStore's ISO-8601 helpers are internal to AgentCore —
-    // mirror them here so resume JSON stays compatible without API churn.
-    private static var decoder: JSONDecoder {
-        let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
-        return d
-    }
-
-    private static var encoder: JSONEncoder {
-        let e = JSONEncoder()
-        e.dateEncodingStrategy = .iso8601
-        e.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return e
     }
 
     /// After resume, re-bind project root to the eval workdir (resume files

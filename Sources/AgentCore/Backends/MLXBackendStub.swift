@@ -23,12 +23,18 @@ public actor MLXBackendUnavailable: InferenceBackend {
     public init() {}
     public func listModels() async throws -> [ModelDescriptor] { [] }
     public func warmUp(model: ModelDescriptor) async throws {
-        throw BackendError.unsupported("MLX backend not linked in this build. Run `swift build` with the MLXBackend target enabled.")
+        throw BackendError.unsupported(Self.notShippedMessage)
     }
     public nonisolated func stream(request: ChatRequest) -> AsyncThrowingStream<ChatChunk, Error> {
         AsyncThrowingStream { continuation in
-            continuation.finish(throwing: BackendError.unsupported("MLX backend not linked."))
+            continuation.finish(throwing: BackendError.unsupported(Self.notShippedMessage))
         }
     }
+
+    /// User-facing: in-process MLX is a stub (mlx-swift not wired). Linking
+    /// the MLXBackend target does not enable generation.
+    public static let notShippedMessage =
+        "In-process MLX generation is not shipped. Use LM Studio, Ollama, oMLX, Unsloth Studio, EXO, or a custom OpenAI-compatible server."
+
     public func cancel(streamID: UUID) async {}
 }

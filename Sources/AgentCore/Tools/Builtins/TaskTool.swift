@@ -314,6 +314,12 @@ public struct TaskTool: Tool {
         description: \(descCapture)
         iterations: \(outcome.iterations)
         duration_ms: \(durationMs)
+        prompt_tokens: \(outcome.usage.inputTokens)
+        completion_tokens: \(outcome.usage.outputTokens)
+        total_tokens: \(outcome.usage.totalTokens)
+        cache_read_tokens: \(outcome.usage.cacheReadTokens)
+        cache_write_tokens: \(outcome.usage.cacheWriteTokens)
+        tool_count: \(outcome.toolCount)
         hit_cap: \(outcome.hitCap)
         cancelled: \(outcome.wasCancelled)
         stalled: \(outcome.stalled)
@@ -345,6 +351,8 @@ public struct TaskTool: Tool {
         let failed: Bool
         let worktreeDiscarded: Bool
         let scrubReport: AgentToolAllowlist.ScrubReport?
+        let usage: SubagentUsage
+        let toolCount: Int
     }
 
     /// Run SubAgentRunner and complete the BackgroundJobManager entry.
@@ -439,7 +447,9 @@ public struct TaskTool: Tool {
             stalled: result.stallReason != nil,
             failed: failed,
             worktreeDiscarded: worktreeDiscarded,
-            scrubReport: result.scrubReport
+            scrubReport: result.scrubReport,
+            usage: result.usage,
+            toolCount: result.toolCount
         )
     }
 

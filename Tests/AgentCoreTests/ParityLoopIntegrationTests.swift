@@ -180,7 +180,11 @@ final class ParityLoopIntegrationTests: XCTestCase {
             .appendingPathComponent("parity-loop-stop-\(UUID().uuidString)", isDirectory: true)
         let hooks = root.appendingPathComponent(".vibecoder/hooks", isDirectory: true)
         try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: root) }
+        HookDispatcher.setHooksHomeDirectoryOverride(root)
+        defer {
+            HookDispatcher.setHooksHomeDirectoryOverride(nil)
+            try? FileManager.default.removeItem(at: root)
+        }
 
         let script = hooks.appendingPathComponent("stop-once.sh")
         try """

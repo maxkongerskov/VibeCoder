@@ -14,9 +14,23 @@ public actor SessionReadTracker {
 
     public func recordRead(path: String, conversationID: UUID) {
         let norm = SafeModeConfig.normalizePath(path)
+        guard !norm.isEmpty else { return }
         var set = byConversation[conversationID] ?? []
         set.insert(norm)
         byConversation[conversationID] = set
+    }
+
+    /// Union persisted / decoded paths into the in-memory set (conversation resume).
+    /// Empty `paths` is a no-op so a legacy JSON load cannot wipe live reads.
+    public func seed(paths: some Sequence<String>, conversationID: UUID) {
+        var set = byConversation[conversationID] ?? []
+        for path in paths {
+            let norm = SafeModeConfig.normalizePath(path)
+            if !norm.isEmpty { set.insert(norm) }
+        }
+        if !set.isEmpty {
+            byConversation[conversationID] = set
+        }
     }
 
     public func paths(for conversationID: UUID) -> Set<String> {
@@ -28,15 +42,24 @@ public actor SessionReadTracker {
         return byConversation[conversationID]?.contains(norm) == true
     }
 
-    /// True when the path was read this conversation or seeded via `sessionReadPaths` (tests).
+    /// True when the path was read this conversation or listed in
+    /// `sessionReadPaths`. Iterates the incoming set — do not wrap a
+    /// Codable-decoded Set in another Set (SIGSEGV).
     public func hasSessionRead(
         path: String,
         conversationID: UUID,
         sessionReadPaths: Set<String>
     ) -> Bool {
         let norm = SafeModeConfig.normalizePath(path)
-        let seeded = Set(sessionReadPaths.map { SafeModeConfig.normalizePath($0) })
-        return seeded.contains(norm) || (byConversation[conversationID]?.contains(norm) == true)
+        if byConversation[conversationID]?.contains(norm) == true {
+            return true
+        }
+        for raw in sessionReadPaths {
+            if SafeModeConfig.normalizePath(raw) == norm {
+                return true
+            }
+        }
+        return false
     }
 
     public func clear(conversationID: UUID) {

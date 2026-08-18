@@ -95,9 +95,13 @@ final class AgentLoopStopHookPC5Tests: XCTestCase {
         ]
         try JSONSerialization.data(withJSONObject: config)
             .write(to: hooks.appendingPathComponent("hooks.json"))
+        HookDispatcher.setHooksHomeDirectoryOverride(root)
+        HookDispatcher.allowProjectFileHooks = false
     }
 
     override func tearDownWithError() throws {
+        HookDispatcher.allowProjectFileHooks = false
+        HookDispatcher.setHooksHomeDirectoryOverride(nil)
         try? FileManager.default.removeItem(at: root)
         root = nil
         hooks = nil

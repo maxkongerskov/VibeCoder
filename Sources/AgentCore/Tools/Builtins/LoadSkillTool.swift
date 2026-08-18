@@ -95,6 +95,12 @@ public struct LoadSkillTool: Tool {
         }
 
         let message = SkillDiscovery.formatSkillMessage(skill, args: args)
+        // Last successful load wins. Failed loads above return without recording.
+        // Empty allowed-tools clears the in-session gate (not written to JSON).
+        await SkillToolGate.shared.record(
+            allowedTools: skill.allowedTools,
+            conversationID: context.conversationID
+        )
         return ToolResult(content: message, isError: false)
     }
 }

@@ -58,12 +58,12 @@ public actor MLXBackend: InferenceBackend {
     }
 
     public func warmUp(model: ModelDescriptor) async throws {
-        throw BackendError.unsupported("MLX backend pending mlx-swift dependency (Phase P2). See Sources/MLXBackend/MLXBackend.swift.")
+        throw BackendError.unsupported(MLXBackendUnavailable.notShippedMessage)
     }
 
     public nonisolated func stream(request: ChatRequest) -> AsyncThrowingStream<ChatChunk, Error> {
         AsyncThrowingStream { continuation in
-            continuation.finish(throwing: BackendError.unsupported("MLX backend pending — use LM Studio or llama.cpp for P0."))
+            continuation.finish(throwing: BackendError.unsupported(MLXBackendUnavailable.notShippedMessage))
         }
     }
 

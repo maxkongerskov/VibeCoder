@@ -59,6 +59,25 @@ final class MCPConfigWalkerTests: XCTestCase {
         XCTAssertEqual(config?.toolTimeouts["heavy"], 600)
     }
 
+    /// `.mcp.json` `type: "sse"` is the legacy GET /sse transport, not Streamable HTTP.
+    func testEntryToConfigSSEUsesSSETransport() {
+        let lower = MCPFileServerEntry(
+            type: "sse", url: "https://legacy.example.com/sse")
+        let lowerConfig = MCPConfigWalker.entryToConfig(name: "legacy-sse", entry: lower)
+        XCTAssertNotNil(lowerConfig)
+        XCTAssertEqual(lowerConfig?.transport, .sse)
+        XCTAssertNotEqual(lowerConfig?.transport, .streamableHttp)
+        XCTAssertEqual(lowerConfig?.url, "https://legacy.example.com/sse")
+
+        let upper = MCPFileServerEntry(
+            type: "SSE", url: "https://legacy.example.com/events")
+        let upperConfig = MCPConfigWalker.entryToConfig(name: "legacy-SSE", entry: upper)
+        XCTAssertEqual(upperConfig?.transport, .sse)
+
+        let missingURL = MCPFileServerEntry(type: "sse")
+        XCTAssertNil(MCPConfigWalker.entryToConfig(name: "no-url", entry: missingURL))
+    }
+
     func testEntryToConfigStdio() {
         let entry = MCPFileServerEntry(
             type: "stdio", command: "/usr/local/bin/mcp-server",

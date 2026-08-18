@@ -50,8 +50,8 @@ struct ModelBackendSettingsView: View {
                     HStack(spacing: 5) {
                         Circle().fill(Theme.Palette.success).frame(width: 6, height: 6)
                         Text(settings.localAPIAgentToolsEnabled
-                             ? "Local API proxy on :\(settings.localAPIPort) (schemas opt-in)"
-                             : "Local API proxy on :\(settings.localAPIPort) (completions only)")
+                             ? "Local API on :\(settings.localAPIPort) (agent loop; tools execute, capped)"
+                             : "Local API on :\(settings.localAPIPort) (completions only, tools: [])")
                             .font(.system(size: 10, weight: .medium))
                             .foregroundColor(Theme.Palette.tertiary)
                     }

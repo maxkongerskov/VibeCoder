@@ -2,7 +2,7 @@
 //  MCPServerConfig.swift
 //
 //  Configuration types for MCP server connections, ported from Grok Build's
-//  xai-grok-config-types/src/mcp.rs. Two transports are supported:
+//  xai-grok-config-types/src/mcp.rs. Three transports are supported:
 //
 //    stdio          — local subprocess speaking JSON-RPC over stdin/stdout
 //                     (VibeCoder's existing path; Apple's mcpbridge, etc.)
@@ -10,9 +10,13 @@
 //    streamableHttp — remote HTTP server implementing the MCP Streamable
 //                     HTTP transport (POST JSON-RPC, SSE responses). This
 //                     is what most cloud MCP servers (GitHub, Slack,
-//                     databases) use. Prior to this file VibeCoder could
-//                     only talk to local stdio servers; now both paths are
-//                     first-class.
+//                     databases) use.
+//
+//    sse            — legacy MCP HTTP+SSE transport: GET the configured
+//                     URL as `text/event-stream`, wait for `event:
+//                     endpoint`, POST JSON-RPC to that message URL, and
+//                     read replies on the same GET stream. Not an alias
+//                     of Streamable HTTP.
 //
 //  The config shape mirrors z.code / Grok Build's TOML schema so users
 //  coming from either tool can reuse their server definitions. We keep
@@ -28,6 +32,8 @@ public enum MCPServerTransport: String, Codable, Sendable {
     case stdio
     /// Remote HTTP server using the MCP Streamable HTTP transport.
     case streamableHttp
+    /// Legacy MCP HTTP+SSE transport (GET /sse + `endpoint` event).
+    case sse
 }
 
 /// One user-configured MCP server definition. Stored in AppSettings and
@@ -90,8 +96,8 @@ public struct MCPServerConfig: Codable, Sendable, Identifiable, Equatable {
     /// MCP HTTP client uses `MCPOAuthCoordinator` to obtain a bearer token
     /// via the Authorization Code + PKCE flow (see MCPOAuthCoordinator).
     ///
-    /// Only meaningful for `streamableHttp` servers — stdio servers don't
-    /// make HTTP requests and have no use for OAuth.
+    /// Only meaningful for `streamableHttp` / `sse` servers — stdio
+    /// servers don't make HTTP requests and have no use for OAuth.
     public var oauth: MCPOAuthConfig?
 
     /// Resolve the timeout for a specific tool on this server.
@@ -147,6 +153,16 @@ public struct MCPServerConfig: Codable, Sendable, Identifiable, Equatable {
                             headers: [String: String] = [:],
                             bearerTokenEnvVar: String? = nil) -> MCPServerConfig {
         MCPServerConfig(name: name, transport: .streamableHttp,
+                        url: url, headers: headers,
+                        bearerTokenEnvVar: bearerTokenEnvVar)
+    }
+
+    /// Convenience for a legacy HTTP+SSE server definition.
+    public static func sse(name: String,
+                           url: String,
+                           headers: [String: String] = [:],
+                           bearerTokenEnvVar: String? = nil) -> MCPServerConfig {
+        MCPServerConfig(name: name, transport: .sse,
                         url: url, headers: headers,
                         bearerTokenEnvVar: bearerTokenEnvVar)
     }

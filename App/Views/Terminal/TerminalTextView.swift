@@ -8,11 +8,14 @@ import SwiftUI
 
 struct TerminalTextView: NSViewRepresentable {
     var attributed: NSAttributedString
+    var fixedGrid: Bool
+    var applicationCursorKeys: Bool
     var onInput: (Data) -> Void
+    var onPaste: (String) -> Void
     var onResize: (CGSize) -> Void
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(onInput: onInput, onResize: onResize)
+        Coordinator(onInput: onInput, onPaste: onPaste, onResize: onResize)
     }
 
     func makeNSView(context: Context) -> TerminalScrollView {
@@ -29,15 +32,15 @@ struct TerminalTextView: NSViewRepresentable {
         text.minSize = NSSize(width: 0, height: 0)
         text.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         text.isVerticallyResizable = true
-        text.isHorizontallyResizable = false
+        text.isHorizontallyResizable = true
         text.autoresizingMask = [.width]
         text.textContainer?.containerSize = NSSize(
-            width: scroll.contentSize.width,
+            width: CGFloat.greatestFiniteMagnitude,
             height: CGFloat.greatestFiniteMagnitude
         )
-        text.textContainer?.widthTracksTextView = true
+        text.textContainer?.widthTracksTextView = false
         text.textContainer?.lineFragmentPadding = 0
-        text.textContainerInset = NSSize(width: 8, height: 6)
+        text.textContainerInset = TerminalMetrics.inset
         text.isEditable = false
         text.isSelectable = true
         text.isRichText = true
@@ -49,6 +52,17 @@ struct TerminalTextView: NSViewRepresentable {
         text.isAutomaticSpellingCorrectionEnabled = false
         text.focusRingType = .none
         text.onSend = context.coordinator.onInput
+        text.onPaste = context.coordinator.onPaste
+        text.applicationCursorKeys = applicationCursorKeys
+        text.setAccessibilityElement(true)
+        text.setAccessibilityRole(.textArea)
+        text.setAccessibilityLabel("Terminal output")
+        text.setAccessibilityValue(attributed.string)
+        text.defaultParagraphStyle = {
+            let paragraph = NSMutableParagraphStyle()
+            paragraph.lineBreakMode = .byClipping
+            return paragraph
+        }()
         applyChrome(scroll: scroll, text: text)
 
         scroll.documentView = text
@@ -62,12 +76,17 @@ struct TerminalTextView: NSViewRepresentable {
 
     func updateNSView(_ scroll: TerminalScrollView, context: Context) {
         context.coordinator.onInput = onInput
+        context.coordinator.onPaste = onPaste
         context.coordinator.onResize = onResize
         scroll.onResize = onResize
         guard let text = scroll.documentView as? TerminalNSTextView else { return }
         text.onSend = onInput
+        text.onPaste = onPaste
+        text.applicationCursorKeys = applicationCursorKeys
+        text.setAccessibilityValue(attributed.string)
         applyChrome(scroll: scroll, text: text)
 
+        scroll.hasVerticalScroller = !fixedGrid
         let wasNearBottom = Self.isNearBottom(scroll)
         let selected = text.selectedRange()
         if let storage = text.textStorage {
@@ -76,6 +95,8 @@ struct TerminalTextView: NSViewRepresentable {
         let length = (text.string as NSString).length
         if selected.length > 0, selected.location + selected.length <= length {
             text.setSelectedRange(selected)
+        } else if fixedGrid {
+            text.scrollToBeginningOfDocument(nil)
         } else if wasNearBottom {
             text.scrollToEndOfDocument(nil)
         }
@@ -98,11 +119,17 @@ struct TerminalTextView: NSViewRepresentable {
 
     final class Coordinator {
         var onInput: (Data) -> Void
+        var onPaste: (String) -> Void
         var onResize: (CGSize) -> Void
         weak var textView: TerminalNSTextView?
 
-        init(onInput: @escaping (Data) -> Void, onResize: @escaping (CGSize) -> Void) {
+        init(
+            onInput: @escaping (Data) -> Void,
+            onPaste: @escaping (String) -> Void,
+            onResize: @escaping (CGSize) -> Void
+        ) {
             self.onInput = onInput
+            self.onPaste = onPaste
             self.onResize = onResize
         }
     }
@@ -119,20 +146,44 @@ final class TerminalScrollView: NSScrollView {
 
 final class TerminalNSTextView: NSTextView {
     var onSend: ((Data) -> Void)?
+    var applicationCursorKeys = false
 
     override var acceptsFirstResponder: Bool { true }
 
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok {
+            setAccessibilityFocused(true)
+        }
+        return ok
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
+        super.mouseDown(with: event)
+    }
+
+    override func accessibilityValue() -> String? {
+        string
+    }
+
     override func keyDown(with event: NSEvent) {
-        if let data = TerminalKeyEncoder.data(for: event) {
+        if let data = TerminalKeyEncoder.data(for: event, applicationCursorKeys: applicationCursorKeys) {
             onSend?(data)
             return
         }
         super.keyDown(with: event)
     }
 
+    var onPaste: ((String) -> Void)?
+
     override func paste(_ sender: Any?) {
         if let string = NSPasteboard.general.string(forType: .string), !string.isEmpty {
-            onSend?(Data(string.utf8))
+            if let onPaste {
+                onPaste(string)
+            } else {
+                onSend?(Data(string.utf8))
+            }
         }
     }
 
@@ -156,7 +207,7 @@ final class TerminalNSTextView: NSTextView {
 }
 
 enum TerminalKeyEncoder {
-    static func data(for event: NSEvent) -> Data? {
+    static func data(for event: NSEvent, applicationCursorKeys: Bool = false) -> Data? {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if flags.contains(.command) { return nil }
 
@@ -175,16 +226,16 @@ enum TerminalKeyEncoder {
         }
 
         switch event.keyCode {
-        case 126: return Data([0x1b, 0x5b, 0x41])
-        case 125: return Data([0x1b, 0x5b, 0x42])
-        case 124: return Data([0x1b, 0x5b, 0x43])
-        case 123: return Data([0x1b, 0x5b, 0x44])
+        case 126: return cursorKey(applicationCursorKeys, 0x41)
+        case 125: return cursorKey(applicationCursorKeys, 0x42)
+        case 124: return cursorKey(applicationCursorKeys, 0x43)
+        case 123: return cursorKey(applicationCursorKeys, 0x44)
         case 36, 76: return Data([0x0d])
         case 48: return Data([0x09])
         case 51: return Data([0x7f])
         case 53: return Data([0x1b])
-        case 115: return Data([0x1b, 0x5b, 0x48])
-        case 119: return Data([0x1b, 0x5b, 0x46])
+        case 115: return cursorKey(applicationCursorKeys, 0x48)
+        case 119: return cursorKey(applicationCursorKeys, 0x46)
         case 116: return Data([0x1b, 0x5b, 0x35, 0x7e])
         case 121: return Data([0x1b, 0x5b, 0x36, 0x7e])
         default:
@@ -195,5 +246,9 @@ enum TerminalKeyEncoder {
             return Data(chars.utf8)
         }
         return nil
+    }
+
+    private static func cursorKey(_ application: Bool, _ final: UInt8) -> Data {
+        application ? Data([0x1b, 0x4f, final]) : Data([0x1b, 0x5b, final])
     }
 }

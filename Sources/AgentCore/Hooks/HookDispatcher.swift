@@ -2,9 +2,15 @@
 //  HookDispatcher.swift
 //  File-based hooks (Grok / Claude Code–style v1 tools + v2 lifecycle).
 //
-//  Discovery (first existing dir wins):
-//    <project>/.vibecoder/hooks/
-//    <project>/.grok/hooks/
+//  Runtime discovery (default — ZCode supply-chain stance):
+//    ~/.vibecoder/hooks/  then  ~/.grok/hooks/
+//    else lone ~/.vibecoder/hooks.json  /  ~/.grok/hooks.json
+//  Project/worktree `.vibecoder/hooks` and `.grok/hooks` are NOT executed
+//  unless opted in (no Settings editor required), first match wins:
+//    1. `allowProjectFileHooks` / `setAllowProjectFileHooksOverride`
+//    2. env `VIBECODER_ALLOW_PROJECT_HOOKS` (1/true/yes/on)
+//    3. user marker `~/.vibecoder/allow-project-hooks` or
+//       `~/.grok/allow-project-hooks`
 //
 //  Layers (pre-tool, first deny wins):
 //    1. deny-tools.txt — exact tool name or `*` per line (# comments)
@@ -13,7 +19,8 @@
 //  Events:
 //    Tool: PreToolUse / PostToolUse
 //    Lifecycle (v2): SessionStart, UserPromptSubmit, Stop, Notification
-//    Parsed (ZCode; loop may not fire yet): PermissionRequest, PostToolUseFailure
+//    Wired (Wave 4 helpers + ask/registry/MCP call sites):
+//      PermissionRequest, PostToolUseFailure
 //
 //  Nested (Claude/Grok/ZCode-compatible keys):
 //    {
@@ -177,6 +184,20 @@ public struct PreToolHookResult: Sendable, Equatable {
     }
 }
 
+/// Shared PreToolUse apply result for ToolRegistry and the MCP path.
+/// `deny` and `ask` fail closed (no permission-sheet broker on this path).
+public struct AppliedPreToolDecision: Sendable, Equatable {
+    public var denyMessage: String?
+    public var updatedInputJSON: String?
+
+    public init(denyMessage: String? = nil, updatedInputJSON: String? = nil) {
+        self.denyMessage = denyMessage
+        self.updatedInputJSON = updatedInputJSON
+    }
+
+    public var isDenied: Bool { denyMessage != nil }
+}
+
 // MARK: - Config models
 
 public struct HookHandlerSpec: Equatable, Sendable {
@@ -270,20 +291,105 @@ public enum HookDispatcher {
 
     /// Serializes hook log writes (batch tool dispatch can race appendLog).
     private static let logLock = NSLock()
+    private static let policyLock = NSLock()
+    // policyLock serializes policy state (Swift 6: lock is the safety).
+    nonisolated(unsafe) private static var _allowProjectFileHooksOverride: Bool?
+    nonisolated(unsafe) private static var _homeOverride: URL?
+    nonisolated(unsafe) private static var _environmentOverride: [String: String]?
 
-    /// Returns an existing hooks directory, or nil when none is configured.
-    /// Does **not** create `.vibecoder/hooks` — logging only writes after a
-    /// real hooks dir already exists (avoids polluting every project on the
-    /// first tool call).
+    /// Env key so users/CI can opt into project hooks without Settings.
+    public static let allowProjectFileHooksEnvironmentKey = "VIBECODER_ALLOW_PROJECT_HOOKS"
+    /// Marker filename under `~/.vibecoder/` or `~/.grok/`.
+    public static let allowProjectFileHooksMarkerName = "allow-project-hooks"
+
+    /// Effective project-hook policy. Default false. Set this (or
+    /// `setAllowProjectFileHooksOverride`) to force a value for tests /
+    /// process lifetime. `nil` override falls through to env, then marker file.
+    public static var allowProjectFileHooks: Bool {
+        get { resolvesAllowProjectFileHooks() }
+        set { setAllowProjectFileHooksOverride(newValue) }
+    }
+
+    /// `nil` restores env / marker / default resolution.
+    public static func setAllowProjectFileHooksOverride(_ value: Bool?) {
+        policyLock.lock()
+        _allowProjectFileHooksOverride = value
+        policyLock.unlock()
+    }
+
+    /// Test seam. Production reads `ProcessInfo.processInfo.environment`.
+    public static func setProcessEnvironmentOverride(_ env: [String: String]?) {
+        policyLock.lock()
+        _environmentOverride = env
+        policyLock.unlock()
+    }
+
+    public static func resolvesAllowProjectFileHooks() -> Bool {
+        policyLock.lock()
+        let explicit = _allowProjectFileHooksOverride
+        let envOverride = _environmentOverride
+        policyLock.unlock()
+        if let explicit { return explicit }
+
+        let env = envOverride ?? ProcessInfo.processInfo.environment
+        if let raw = env[allowProjectFileHooksEnvironmentKey], isTruthyEnv(raw) {
+            return true
+        }
+
+        let home = hooksHomeDirectory()
+        let markers = [
+            home.appendingPathComponent(".vibecoder/\(allowProjectFileHooksMarkerName)"),
+            home.appendingPathComponent(".grok/\(allowProjectFileHooksMarkerName)"),
+        ]
+        return markers.contains { FileManager.default.fileExists(atPath: $0.path) }
+    }
+
+    private static func isTruthyEnv(_ raw: String) -> Bool {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "on": return true
+        default: return false
+        }
+    }
+
+    /// Test seam. Production uses `FileManager.homeDirectoryForCurrentUser`.
+    public static func setHooksHomeDirectoryOverride(_ url: URL?) {
+        policyLock.lock()
+        _homeOverride = url
+        policyLock.unlock()
+    }
+
+    public static func hooksHomeDirectory() -> URL {
+        policyLock.lock()
+        defer { policyLock.unlock() }
+        return _homeOverride ?? FileManager.default.homeDirectoryForCurrentUser
+    }
+
+    /// Runtime hooks directory. Default: user-scope only.
+    /// Does **not** create `.vibecoder/hooks`.
     ///
-    /// Search order (first hit wins):
-    /// 1. `projectRoot` — repo security policy (deny-tools / hooks.json)
-    /// 2. `worktreeRoot` — session-local hooks when project has none
+    /// When `allowProjectFileHooks` is true, first existing project/worktree
+    /// dir wins (legacy). Otherwise only `userHooksDir()` is used.
     public static func hooksDir(projectRoot: URL?, worktreeRoot: URL? = nil) -> URL? {
+        if allowProjectFileHooks,
+           let dir = projectHooksDir(projectRoot: projectRoot, worktreeRoot: worktreeRoot) {
+            return dir
+        }
+        return userHooksDir()
+    }
+
+    /// Existing project/worktree hook dir for Settings load/save. Not executed
+    /// unless `allowProjectFileHooks` is true.
+    public static func projectHooksDir(projectRoot: URL?, worktreeRoot: URL? = nil) -> URL? {
         for root in [projectRoot, worktreeRoot].compactMap({ $0 }) {
             if let dir = existingHooksDir(under: root) { return dir }
         }
         return nil
+    }
+
+    /// User-scope hook dir: `~/.vibecoder/hooks`, `~/.grok/hooks`, or the
+    /// parent of a lone `hooks.json` in those folders.
+    public static func userHooksDir() -> URL? {
+        existingUserHooksDir(under: hooksHomeDirectory())
     }
 
     private static func existingHooksDir(under root: URL) -> URL? {
@@ -291,6 +397,30 @@ public enum HookDispatcher {
         if FileManager.default.fileExists(atPath: a.path) { return a }
         let b = root.appendingPathComponent(".grok/hooks", isDirectory: true)
         if FileManager.default.fileExists(atPath: b.path) { return b }
+        return nil
+    }
+
+    private static func existingUserHooksDir(under home: URL) -> URL? {
+        let dirs = [
+            home.appendingPathComponent(".vibecoder/hooks", isDirectory: true),
+            home.appendingPathComponent(".grok/hooks", isDirectory: true),
+        ]
+        for dir in dirs {
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: dir.path, isDirectory: &isDir),
+               isDir.boolValue {
+                return dir
+            }
+        }
+        let files = [
+            (home.appendingPathComponent(".vibecoder/hooks.json", isDirectory: false),
+             home.appendingPathComponent(".vibecoder", isDirectory: true)),
+            (home.appendingPathComponent(".grok/hooks.json", isDirectory: false),
+             home.appendingPathComponent(".grok", isDirectory: true)),
+        ]
+        for (file, dir) in files {
+            if FileManager.default.fileExists(atPath: file.path) { return dir }
+        }
         return nil
     }
 
@@ -600,7 +730,8 @@ public enum HookDispatcher {
         )
     }
 
-    /// ZCode PermissionRequest — parsed and runnable; AgentLoop may not fire yet.
+    /// ZCode PermissionRequest — fired from ShellApproval.resolveAsk (and
+    /// the App coordinator when AgentCore has not already evaluated it).
     @discardableResult
     public static func permissionRequest(
         toolName: String,
@@ -622,7 +753,7 @@ public enum HookDispatcher {
         )
     }
 
-    /// ZCode PostToolUseFailure — parsed and runnable; AgentLoop may not fire yet.
+    /// ZCode PostToolUseFailure — fired from ToolRegistry / MCP on isError or throw.
     @discardableResult
     public static func postToolUseFailure(
         toolName: String,
@@ -643,6 +774,137 @@ public enum HookDispatcher {
                 "error": String(errorSummary.prefix(2_000))
             ]
         )
+    }
+
+    // MARK: Wave 4 apply helpers
+
+    /// Map a PreToolUse detailed result: `deny` / `ask` fail closed.
+    public static func appliedPreToolDecision(_ pre: PreToolHookResult) -> AppliedPreToolDecision {
+        let decision = pre.permissionDecision?.lowercased()
+        if !pre.allow || decision == "deny" {
+            return AppliedPreToolDecision(
+                denyMessage: trimmedNonEmpty(pre.message) ?? "Denied by hook")
+        }
+        if decision == "ask" {
+            return AppliedPreToolDecision(
+                denyMessage: trimmedNonEmpty(pre.message)
+                    ?? "Hook requested user approval before this tool can run.")
+        }
+        let json = trimmedNonEmpty(pre.updatedInputJSON)
+        return AppliedPreToolDecision(denyMessage: nil, updatedInputJSON: json)
+    }
+
+    /// Run PreToolUse (detailed) and apply deny/ask/rewrite.
+    public static func applyPreToolDetailed(
+        toolName: String,
+        argumentsSummary: String,
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> AppliedPreToolDecision {
+        appliedPreToolDecision(
+            preToolDetailed(
+                toolName: toolName,
+                argumentsSummary: argumentsSummary,
+                projectRoot: projectRoot,
+                worktreeRoot: worktreeRoot))
+    }
+
+    /// MCP path: same PreToolUse gate, optional JSON-object rewrite.
+    public static func applyPreToolDetailedJSONArgs(
+        toolName: String,
+        arguments: [String: Any],
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> (arguments: [String: Any], denyMessage: String?) {
+        let summary: String
+        if JSONSerialization.isValidJSONObject(arguments),
+           let data = try? JSONSerialization.data(withJSONObject: arguments),
+           let text = String(data: data, encoding: .utf8) {
+            summary = text
+        } else {
+            summary = String(describing: arguments)
+        }
+        let applied = applyPreToolDetailed(
+            toolName: toolName,
+            argumentsSummary: summary,
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot)
+        if let deny = applied.denyMessage {
+            return (arguments, deny)
+        }
+        if let json = applied.updatedInputJSON, !json.isEmpty,
+           let data = json.data(using: .utf8),
+           let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return (parsed, nil)
+        }
+        return (arguments, nil)
+    }
+
+    /// PermissionRequest gate. `nil` = allow (no hook, or hook allowed).
+    public static func permissionRequestDenial(
+        toolName: String,
+        payload: String,
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> String? {
+        let decision = permissionRequest(
+            toolName: toolName,
+            payload: payload,
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot)
+        guard !decision.allow else { return nil }
+        return trimmedNonEmpty(decision.message) ?? "Denied by PermissionRequest hook"
+    }
+
+    /// Fire PostToolUseFailure. No-op when there is no hooks directory.
+    @discardableResult
+    public static func notifyPostToolUseFailure(
+        toolName: String,
+        errorSummary: String,
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> HookDecision {
+        postToolUseFailure(
+            toolName: toolName,
+            errorSummary: errorSummary,
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot)
+    }
+
+    /// After a tool body returns: PostToolUseFailure on `isError`, then PostToolUse.
+    public static func decorateWithPostToolHooks(
+        toolName: String,
+        result: ToolResult,
+        projectRoot: URL?,
+        worktreeRoot: URL? = nil
+    ) -> ToolResult {
+        if result.isError {
+            _ = notifyPostToolUseFailure(
+                toolName: toolName,
+                errorSummary: String(result.content.prefix(200)),
+                projectRoot: projectRoot,
+                worktreeRoot: worktreeRoot)
+        }
+        let post = postTool(
+            toolName: toolName,
+            resultSummary: String(result.content.prefix(200)),
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot)
+        if !post.allow {
+            let msg = post.message ?? "Denied by post-tool hook"
+            return ToolResult(
+                content: result.content.isEmpty ? msg : "\(result.content)\n\n[PostTool hook deny] \(msg)",
+                isError: true,
+                mutatedPaths: result.mutatedPaths,
+                extras: result.extras)
+        }
+        return result
+    }
+
+    static func trimmedNonEmpty(_ raw: String?) -> String? {
+        guard let raw else { return nil }
+        let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        return t.isEmpty ? nil : t
     }
 
     /// Shared lifecycle runner: first deny wins; fail-open on spawn/timeout.

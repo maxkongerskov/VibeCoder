@@ -470,6 +470,12 @@ final class ChatViewModel: ObservableObject {
         Task { try? await ConversationStore.shared.save(snapshot) }
     }
 
+    /// Flip archive without changing the Conversation JSON schema.
+    func setArchived(_ archived: Bool) {
+        conversation.archived = archived
+        persistConversation()
+    }
+
     // MARK: - Plan projection (S2: PlanStore + transcript)
 
     /// Live plan from `PlanStore` (tools write here). Prefer over transcript-only projection.
@@ -725,7 +731,7 @@ final class ChatViewModel: ObservableObject {
         guard let first = store.dequeueFirst() else { return }
         applyQueueStore(store)
         Task { @MainActor [weak self] in
-            _ = self?.send(first.text)
+            self?.dispatchQueuedFollowUp(first.text)
         }
     }
 
@@ -803,6 +809,15 @@ final class ChatViewModel: ObservableObject {
             if !isRunning && !queuePaused && !composerQueue.isEmpty {
                 flushComposerQueueAfterTurn()
             }
+            return
+        }
+        let slash = handleSlashCommand(text)
+        if case .handled(let message) = slash {
+            if let message, !message.isEmpty { statusLine = message }
+            return
+        }
+        if case .expandToMessage(let expanded) = slash {
+            _ = send(expanded)
             return
         }
         _ = send(text)
@@ -2377,6 +2392,13 @@ final class ChatViewModel: ObservableObject {
         // isn't in our catalog (skills may share names later). Known names
         // always handle even with empty args.
         if SlashCommandService.command(named: parsed.command) == nil {
+            if let expanded = SlashCommandService.expandCustomCommand(
+                name: parsed.command,
+                args: parsed.args,
+                projectRoot: conversation.projectRoot ?? conversation.worktreeRootURL
+            ) {
+                return .expandToMessage(expanded)
+            }
             return .notACommand
         }
 

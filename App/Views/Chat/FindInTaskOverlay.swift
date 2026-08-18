@@ -12,6 +12,7 @@ extension Notification.Name {
 
 struct FindInTaskOverlay: View {
     @Binding var query: String
+    @Binding var scope: FindInTaskScope
     let currentIndex: Int
     let matchCount: Int
     /// Bumped by ChatView when ⌘F fires while the bar is already open.
@@ -56,6 +57,8 @@ struct FindInTaskOverlay: View {
                 .help("Clear")
                 .accessibilityLabel("Clear search")
             }
+
+            scopePicker
 
             Text(FindInTaskSearch.countLabel(currentIndex: currentIndex, count: matchCount))
                 .font(Theme.Typography.mono(size: 11, weight: .medium))
@@ -102,6 +105,31 @@ struct FindInTaskOverlay: View {
         }
         .onExitCommand { onClose() }
         .accessibilityElement(children: .contain)
+    }
+
+    private var scopePicker: some View {
+        HStack(spacing: 2) {
+            ForEach(FindInTaskScope.allCases, id: \.self) { option in
+                Button {
+                    scope = option
+                } label: {
+                    Text(option.title)
+                        .font(.system(size: 11, weight: scope == option ? .semibold : .regular))
+                        .foregroundStyle(scope == option ? Theme.Palette.primary : Theme.Palette.tertiary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(scope == option ? Theme.Palette.hover : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(option.title)
+                .accessibilityAddTraits(scope == option ? .isSelected : [])
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Find scope")
     }
 
     private func findChromeButton(

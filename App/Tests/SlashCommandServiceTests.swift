@@ -200,4 +200,91 @@ final class SlashCommandServiceTests: XCTestCase {
         XCTAssertTrue(SlashCommandService.helpText().contains("Git"))
     }
 
+    // MARK: - Markdown custom commands
+
+    func testExpandTemplateArgumentsAndIndexedTokens() {
+        let body = SlashCommandService.expandTemplate(
+            "Review $ARGUMENTS. First=$1 Second=$2 Third=$3",
+            arguments: "src/App.swift extra"
+        )
+        XCTAssertEqual(body, "Review src/App.swift extra. First=src/App.swift Second=extra Third=")
+    }
+
+    func testExpandTemplateDoesNotLetDollarOneEatDollarTen() {
+        let body = SlashCommandService.expandTemplate(
+            "$1|$10|$ARGUMENTS",
+            arguments: "a b c d e f g h i j"
+        )
+        XCTAssertEqual(body, "a|j|a b c d e f g h i j")
+    }
+
+    func testExpandTemplateLeavesBangBackticksLiteral() {
+        let body = SlashCommandService.expandTemplate(
+            "Do not run `!ls` or ```! echo hi```. Args=$ARGUMENTS",
+            arguments: "safe"
+        )
+        XCTAssertTrue(body.contains("`!ls`"))
+        XCTAssertTrue(body.contains("```! echo hi```"))
+        XCTAssertTrue(body.contains("Args=safe"))
+    }
+
+    func testDiscoverAndExpandCustomCommandPrefersWorkspace() throws {
+        let home = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vc-cmd-home-\(UUID().uuidString)", isDirectory: true)
+        let project = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vc-cmd-proj-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: home)
+            try? FileManager.default.removeItem(at: project)
+        }
+        let userDir = CommandProfilePaths.userRoot(home: home)
+        let projectDir = CommandProfilePaths.projectRoot(project)
+        try CommandProfileCodec.write(
+            CommandProfileDraft(name: "review", prompt: "USER $ARGUMENTS"),
+            to: CommandProfileCodec.fileURL(name: "review", directory: userDir)
+        )
+        try CommandProfileCodec.write(
+            CommandProfileDraft(name: "review", prompt: "WORKSPACE $1"),
+            to: CommandProfileCodec.fileURL(name: "review", directory: projectDir)
+        )
+        try CommandProfileCodec.write(
+            CommandProfileDraft(
+                name: "compact",
+                prompt: "Should not override builtin"
+            ),
+            to: CommandProfileCodec.fileURL(name: "compact", directory: userDir)
+        )
+
+        let found = SlashCommandService.discoverCustomCommands(projectRoot: project, home: home)
+        XCTAssertEqual(found.map(\.name), ["review"])
+        XCTAssertEqual(found.first?.prompt, "WORKSPACE $1")
+
+        let expanded = try XCTUnwrap(
+            SlashCommandService.expandCustomCommand(
+                name: "/review",
+                args: "Auth.swift",
+                projectRoot: project,
+                home: home
+            )
+        )
+        XCTAssertTrue(expanded.hasPrefix("Run custom command /review"))
+        XCTAssertTrue(expanded.contains("WORKSPACE Auth.swift"))
+        XCTAssertFalse(expanded.contains("$1"))
+
+        XCTAssertNil(
+            SlashCommandService.expandCustomCommand(
+                name: "/compact",
+                args: "",
+                projectRoot: project,
+                home: home
+            )
+        )
+
+        let matches = SlashCommandService.matchingCommands(
+            draft: "/rev",
+            projectRoot: project,
+            home: home
+        )
+        XCTAssertTrue(matches.contains { $0.name == "/review" && $0.category == "Custom" })
+    }
 }

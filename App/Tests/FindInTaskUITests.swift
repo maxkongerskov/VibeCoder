@@ -102,4 +102,70 @@ final class FindInTaskUITests: XCTestCase {
         )
         XCTAssertTrue(hits.isEmpty)
     }
+
+    // MARK: - File-changes scope
+
+    func testFileChangeEmptyQuery() {
+        XCTAssertTrue(FindInTaskFileChangeSearch.hits(query: "", messages: writeTurn()).isEmpty)
+        XCTAssertTrue(FindInTaskFileChangeSearch.hits(query: "  \n", messages: writeTurn()).isEmpty)
+    }
+
+    func testFileChangeMatchesPath() {
+        let hits = FindInTaskFileChangeSearch.hits(query: "Hello.swift", messages: writeTurn())
+        XCTAssertEqual(hits.count, 1)
+        XCTAssertEqual(hits[0].id, FindInTaskFileChangeSearch.hitID(path: "Src/Hello.swift"))
+        XCTAssertTrue(FindInTaskFileChangeSearch.isFileChangeHitID(hits[0].id))
+        XCTAssertEqual(
+            FindInTaskFileChangeSearch.pathKey(fromHitID: hits[0].id),
+            TurnChangeSummary.pathKey("Src/Hello.swift")
+        )
+        XCTAssertTrue(hits[0].snippet.localizedCaseInsensitiveContains("Hello.swift"))
+    }
+
+    func testFileChangeDoesNotSearchMessageBodies() {
+        let hits = FindInTaskFileChangeSearch.hits(
+            query: "please edit",
+            messages: writeTurn(user: "please edit")
+        )
+        XCTAssertTrue(hits.isEmpty)
+    }
+
+    func testFileChangeIgnoresNonMutatingTurns() {
+        let messages = [
+            ChatMessage(role: .user, content: "read Hello.swift"),
+            ChatMessage(role: .assistant, content: "looked at Hello.swift"),
+        ]
+        XCTAssertTrue(FindInTaskFileChangeSearch.hits(query: "Hello.swift", messages: messages).isEmpty)
+    }
+
+    func testFileChangeDedupesSamePath() {
+        let first = writeTurn(path: "a.txt", content: "aaa\n")
+        let second = writeTurn(path: "a.txt", content: "aaa\nbbb\n", user: "again")
+        let hits = FindInTaskFileChangeSearch.hits(query: "a.txt", messages: first + second)
+        XCTAssertEqual(hits.count, 1)
+    }
+
+    private func writeTurn(
+        path: String = "Src/Hello.swift",
+        content: String = "one\ntwo\n",
+        user: String = "write it"
+    ) -> [ChatMessage] {
+        let callID = "w-\(path.hashValue)"
+        let data = try! JSONSerialization.data(withJSONObject: ["path": path, "content": content])
+        let args = String(data: data, encoding: .utf8) ?? "{}"
+        return [
+            ChatMessage(role: .user, content: user),
+            ChatMessage(
+                role: .assistant,
+                content: "",
+                toolCalls: [ToolCallInvocation(id: callID, name: "write_file", arguments: args)]
+            ),
+            ChatMessage(
+                role: .tool,
+                content: "Wrote \(content.utf8.count) bytes to \(path). hunk_id=\(UUID().uuidString)",
+                toolCallID: callID
+            ),
+            ChatMessage(role: .assistant, content: "done"),
+        ]
+    }
 }

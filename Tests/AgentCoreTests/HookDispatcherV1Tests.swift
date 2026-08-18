@@ -16,9 +16,13 @@ final class HookDispatcherV1Tests: XCTestCase {
             .appendingPathComponent("hooks-v1-\(UUID().uuidString)", isDirectory: true)
         hooks = root.appendingPathComponent(".vibecoder/hooks", isDirectory: true)
         try FileManager.default.createDirectory(at: hooks, withIntermediateDirectories: true)
+        HookDispatcher.setHooksHomeDirectoryOverride(root)
+        HookDispatcher.allowProjectFileHooks = false
     }
 
     override func tearDownWithError() throws {
+        HookDispatcher.allowProjectFileHooks = false
+        HookDispatcher.setHooksHomeDirectoryOverride(nil)
         try? FileManager.default.removeItem(at: root)
         root = nil
         hooks = nil
@@ -61,6 +65,7 @@ final class HookDispatcherV1Tests: XCTestCase {
         try FileManager.default.createDirectory(at: bare, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: bare) }
 
+        HookDispatcher.setHooksHomeDirectoryOverride(bare)
         XCTAssertNil(HookDispatcher.hooksDir(projectRoot: bare))
         let d = HookDispatcher.preTool(
             toolName: "run_shell", argumentsSummary: "ls", projectRoot: bare)
@@ -419,10 +424,15 @@ final class HookDispatcherV1Tests: XCTestCase {
         try "run_shell\n".write(
             to: wtHooks.appendingPathComponent("deny-tools.txt"),
             atomically: true, encoding: .utf8)
+        let ignored = HookDispatcher.preTool(
+            toolName: "run_shell", argumentsSummary: "ls",
+            projectRoot: bare, worktreeRoot: wt)
+        XCTAssertTrue(ignored.allow, "worktree project hooks ignored by default")
+        HookDispatcher.allowProjectFileHooks = true
         let d = HookDispatcher.preTool(
             toolName: "run_shell", argumentsSummary: "ls",
             projectRoot: bare, worktreeRoot: wt)
-        XCTAssertFalse(d.allow, "worktree hooks apply when project has none")
+        XCTAssertFalse(d.allow, "opt-in still uses worktree when project has none")
     }
 
     func testTimeoutStringInConfig() throws {
