@@ -232,13 +232,13 @@ struct EvalRunnerMain {
             fputs("\n[eval-runner] agent error: \(error)\n", stderr)
             // Still try to save partial conversation if requested.
             if let saveConversationPath {
-                try? ConversationIO.save(conversation, toPath: saveConversationPath)
+                _ = try? await ConversationIO.save(conversation, toPath: saveConversationPath)
             }
             throw RunnerError.agentFailed(String(describing: error))
         }
 
         if let saveConversationPath {
-            try ConversationIO.save(conversation, toPath: saveConversationPath)
+            try await ConversationIO.save(conversation, toPath: saveConversationPath)
             fputs("[eval-runner] saved conversation → \(saveConversationPath)\n", stderr)
         }
 
