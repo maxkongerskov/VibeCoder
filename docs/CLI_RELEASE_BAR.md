@@ -4,7 +4,7 @@ What **99%** means for the interactive **`vibecoder` REPL**. Not a hobby demo. N
 
 Ada owns this file. Lin/Pixel/Rigel/Turnip raise the numbers with **evidence**, not vibes. Do not claim 99% without the proof column filled. Max ships only when Ada, Lin, Pixel, Rigel, and Turnip are each 99% confident it is launchable.
 
-Inspected (2026-08-21): `Sources/VibeCoderCLI/main.swift`, `Sources/VibeCoderCLILib/{CLIArgs,EventPrinter,REPL,TTYApprovals,TurnRunner}.swift`, `Tests/VibeCoderCLILibTests/*`. HEAD `7baddb2` (C1–C3). Do not mix the dirty 99% app tree into this cut.
+Inspected (2026-08-21): `Sources/VibeCoderCLI/main.swift`, `Sources/VibeCoderCLILib/{CLIArgs,EventPrinter,REPL,TTYApprovals,TurnRunner}.swift`, `Tests/VibeCoderCLILibTests/*`. HEAD `3718799` (C1–C3 + F3/F2/B2 probe). Do not mix the dirty 99% app tree into this cut.
 
 ---
 
@@ -28,44 +28,44 @@ The CLI is 99% when **all** cells below are true **and** Rigel has written evide
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| F1 | `swift run vibecoder --help` (and `-h` / `help`) prints usage and exits 0; unknown flags exit 2 with usage on stderr | |
-| F2 | Server **down**, no `--model` → process does **not** sit at `›`. User-visible reason names the backend and tells them to start the server or pass `--model` | |
-| F3 | Server **down** + `--model ID` → same as F2: **must not** print `›` and fail on first send. Today `REPL.resolveModel` skips `listModels` when `--model` is set — **must-fix** | |
-| F4 | Server **up** + reachable model → first user turn streams tokens to stdout and ends with `[done] …` | |
+| F1 | `swift run vibecoder --help` (and `-h` / `help`) prints usage and exits 0; unknown flags exit 2 with usage on stderr | **Rigel 2026-08-21 00:59.** `swift run --skip-build vibecoder --help` exit **0**, usage on stdout. `.build/debug/vibecoder -h` and `help` exit **0**. `--nope` exit **2**, usage on stderr. |
+| F2 | Server **down**, no `--model` → process does **not** sit at `›`. User-visible reason names the backend and tells them to start the server or pass `--model` | **Rigel 2026-08-21 00:59.** Ollama down: `vibecoder --backend ollama --project /tmp/vc-cli-f2` exit **1** in 0.04s. stderr `Can't reach Ollama (Could not connect to the server.). Start the server.` No REPL `›`. `CLIModelProbeTests.testDownServerWithoutModelDoesNotLookLikeEmptyCatalog` pass. |
+| F3 | Server **down** + `--model ID` → same as F2: **must not** print `›` and fail on first send. Today `REPL.resolveModel` skips `listModels` when `--model` is set — **must-fix** | **Rigel 2026-08-21 00:59.** Lin landed always-probe. Live: Ollama down `vibecoder --backend ollama --model qwen --project /tmp/vc-cli-f3` exit **1** in 0.04s, same `Can't reach Ollama… Start the server.` No `›`. `CLIModelProbeTests` **6/6** including `testDownServerThrowsBeforePromptEvenWithModelFlag`. |
+| F4 | Server **up** + reachable model → first user turn streams tokens to stdout and ends with `[done] …` | **Rigel 2026-08-21 01:02.** oMLX `:8080` `mlx-community--Qwen3-0.6B-4bit`. PTY turn `Reply with only the word hello.` → stdout `hello` then `[done] stop` (~70s first load). Artifact `docs/orchestration/cli-tty-2026-08-21.md`. |
 
 ### REPL surface (C1)
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| R1 | Line REPL: `›` prompt, `/help` `/exit` `/quit` `/new`. Continuation on trailing `\`. **Not** a TUI (no alt-screen, no mouse) | |
-| R2 | Same `ConversationStore.shared` as the app (App Support `conversations/`). Turn success, turn error, and cancel persist | |
-| R3 | `--resume UUID` loads that conversation; missing id prints `resume id not found` and starts new | |
-| R4 | Default `--project` is cwd; `--project PATH` binds that folder; `--backend` / `--model` / `--max-iterations` parse as `CLIArgs` | |
-| R5 | Git project bind enables worktree isolation (same `WorktreeService.bindProjectEnablingWorktree` contract as the app). Non-git: bind succeeds, `userVisibleReason` on stderr, `worktreeBranch` nil | |
+| R1 | Line REPL: `›` prompt, `/help` `/exit` `/quit` `/new`. Continuation on trailing `\`. **Not** a TUI (no alt-screen, no mouse) | **Rigel 2026-08-21.** PTY: `›`, `/help` prints usage, `/ex\` → `…` then `it` exits 0. No alt-screen (`CSI ?1049`). Artifact session A. `/quit` `/new` not live-clicked; `/new` exists in `REPL.swift`. |
+| R2 | Same `ConversationStore.shared` as the app (App Support `conversations/`). Turn success, turn error, and cancel persist | **Rigel 2026-08-21 01:02.** `~/Library/Application Support/VibeCoder/conversations/70256FC5-….json` title `CLI`, project `/tmp/vc-cli-p2-live2`, user+assistant hello persist; cancelled list user line persisted. `CLICancelTests` 3/3 pairing on cancel. |
+| R3 | `--resume UUID` loads that conversation; missing id prints `resume id not found` and starts new | **Rigel 2026-08-21 00:59.** `--resume 00000000-0000-0000-0000-000000000000` (oMLX) stderr `resume id not found; starting new conversation` then `›`. `/exit` 0. |
+| R4 | Default `--project` is cwd; `--project PATH` binds that folder; `--backend` / `--model` / `--max-iterations` parse as `CLIArgs` | **Rigel 2026-08-21 00:58.** `CLIArgsTests` 7/7: cwd default, `--project /tmp/cli-proj --backend ollama --model qwen`, `--max-iterations 12`, `--resume` UUID. |
+| R5 | Git project bind enables worktree isolation (same `WorktreeService.bindProjectEnablingWorktree` contract as the app). Non-git: bind succeeds, `userVisibleReason` on stderr, `worktreeBranch` nil | **Rigel 2026-08-21.** Non-git: stderr `Not a git repository: /tmp/vc-cli-r5-nongit. Worktree mode requires git.` Git temp repo: banner `worktree agentcore/5350fc21`; store `worktreeBranch=agentcore/5350fc21`. Sibling cleaned up. |
 
 ### Color (C2)
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| C1 | TTY stdout/stderr: EventPrinter paints role colors (tool/build/error/ask/done) | |
-| C2 | `NO_COLOR` set (non-empty) **or** non-TTY → C1 plain text, **no** CSI escapes | |
+| C1 | TTY stdout/stderr: EventPrinter paints role colors (tool/build/error/ask/done) | **Rigel 2026-08-21 00:58.** `EventPrinterTests` 5/5: `testTTYColorPathEmitsANSIForErrorAndToolEvents`, `testColorEnabledRespectsNO_COLORAndTTY`. Live PTY F4 `[done] stop` had **no** CSI (residual — unit injects color flags; public `isatty` path not seen in this PTY log). |
+| C2 | `NO_COLOR` set (non-empty) **or** non-TTY → C1 plain text, **no** CSI escapes | **Rigel 2026-08-21.** Unit: `testNoColorAndNonTTYMatchC1PlainText`, `NO_COLOR=1` disables even on TTY. Live: `NO_COLOR=1` PTY `/exit` no CSI; piped `--help` no CSI. |
 
 ### Cancel + approvals (C3)
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| K1 | SIGINT **during a turn** cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` edit). Returned conversation persists with paired `tool_calls` (same contract as A4) | |
-| K2 | Idle Ctrl+C at `›` **exits the process** (SIGINT not armed) | |
-| K3 | TTY shell prompt `[y/n/always]`. `y`/`yes` → once. `always` → durable `ShellApprovalDecision.always`. Empty / `n` / `no` / unknown → **deny** | |
-| K4 | Patch `[y/n/always]`. `always` → accept + `RememberedGrants.alwaysAllowDirectory` for the common folder. Empty/`n`/unknown → reject all | |
+| K1 | SIGINT **during a turn** cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` edit). Returned conversation persists with paired `tool_calls` (same contract as A4) | **Rigel 2026-08-21.** Unit: `CLICancelTests` 3/3 (`testSIGINTMapsToTurnCancelAndPersistsPairedTranscript`, pairing valid). Live PTY: SIGINT during second oMLX turn → `[done] cancelled` then `›`. No `AgentLoop.swift` edit. |
+| K2 | Idle Ctrl+C at `›` **exits the process** (SIGINT not armed) | **Rigel 2026-08-21.** Fresh PTY at `›` (no in-flight turn): `^C` → **signal 2**, process exits (`› ^C`). After mid-turn cancel, a SIGINT during `[done] cancelled` did not exit (handler still armed) — race residual, not idle-at-prompt. |
+| K3 | TTY shell prompt `[y/n/always]`. `y`/`yes` → once. `always` → durable `ShellApprovalDecision.always`. Empty / `n` / `no` / unknown → **deny** | **Rigel 2026-08-21 00:58.** `CLIApprovalsTests` 10/10: `testParseShellYIsOnce`, `testParseShellAlways`, `testParseShellEmptyAndNDeny`, `testAlwaysPersistsDurableGrant`, `testOnceDoesNotPersistGrant`, `testScriptedEmptyDenies`. |
+| K4 | Patch `[y/n/always]`. `always` → accept + `RememberedGrants.alwaysAllowDirectory` for the common folder. Empty/`n`/unknown → reject all | **Rigel 2026-08-21 00:58.** `testParsePatchFailClosed`, `testPatchAlwaysPersistsDirectoryGrant`, `testPatchEmptyRejectsAndDoesNotGrant`. |
 
 ### Backends
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| B1 | `--backend` accepts `lmstudio` / `omlx` / `ollama` / `unsloth` / `exo` / `custom` (aliases in `CLIArgs.parseBackend`) | |
-| B2 | `--backend mlx` must **not** pretend in-process MLX works (usage omits it; parse currently accepts `.mlx` — refuse or honest stub error before `›`) | |
-| B3 | Custom `/v1` uses app `SettingsStore` custom URL. Remote URL is allowed and must not be marketed as “nothing leaves your Mac” | |
+| B1 | `--backend` accepts `lmstudio` / `omlx` / `ollama` / `unsloth` / `exo` / `custom` (aliases in `CLIArgs.parseBackend`) | **Rigel 2026-08-21 00:58.** `CLIArgsTests.testBackendAliases` pass (lmstudio/unsloth/omlx/exo/custom). |
+| B2 | `--backend mlx` must **not** pretend in-process MLX works (usage omits it; parse currently accepts `.mlx` — refuse or honest stub error before `›`) | **Rigel 2026-08-21 00:59.** Lin refuse landed. Live: `vibecoder --backend mlx` exit **2**, stderr `in-process MLX is a stub and is not shipped.` Usage omits mlx. `testMLXBackendIsRefused` pass. No `›`. |
+| B3 | Custom `/v1` uses app `SettingsStore` custom URL. Remote URL is allowed and must not be marketed as “nothing leaves your Mac” | **Rigel 2026-08-21.** `--backend custom` parses (`testBackendAliases`). `main.swift` overlays `args.backend` onto `SettingsStore.shared.current()`; `BackendFactory` uses `settings.customEndpoint`. `LEGAL.md`: remote `/v1` exfiltrates by design; “nothing leaves your Mac” is loopback-only. |
 
 ### Proof pack (Rigel owns the folder)
 
@@ -73,10 +73,10 @@ Write results under `docs/orchestration/` or `Evals/results/` with date. A score
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| P1 | Dedicated CI step: `swift test --filter VibeCoderCLILib` (full `swift test` in `ci-pr.sh` is **not** this cell). Today: no CLI-specific job on the CLI commit; `.github/workflows/pr.yml` is untracked 99% tree | |
-| P2 | One **live TTY** session artifact (script or notes): help, one turn, SIGINT mid-turn returns to `›`, idle Ctrl+C exits. Unit tests are not a TTY | |
-| P3 | Rail honesty on the **CLI commit line**, not mixed into uncommitted 99% diffs. HEAD `7baddb2` `README.md` still says Interactive CLI removed. Working-tree README/DESIGN/ARCHITECTURE C1–C3 honesty is dirty with the app 99% tree | |
-| P4 | `origin` has the CLI commit when Max says ship. Today: `7baddb2` is **7 ahead, not pushed** | |
+| P1 | Dedicated CI step: `swift test --filter VibeCoderCLILib` (full `swift test` in `ci-pr.sh` is **not** this cell). Today: no CLI-specific job on the CLI commit; `.github/workflows/pr.yml` is untracked 99% tree | **Rigel 2026-08-21 00:58–00:59.** New `scripts/ci-cli.sh` + `.github/workflows/cli.yml` (CLILib only; does **not** import `pr.yml` Unsloth/app jobs). `ci-pr.sh` always calls `ci-cli.sh` even when `SKIP_UNIT=1`. `SKIP_UNIT=1 SKIP_EVAL=1 SKIP_APP_TESTS=1 ./scripts/ci-pr.sh` → **31/31** then skip full suite. Not committed. |
+| P2 | One **live TTY** session artifact (script or notes): help, one turn, SIGINT mid-turn returns to `›`, idle Ctrl+C exits. Unit tests are not a TTY | **Rigel 2026-08-21.** `docs/orchestration/cli-tty-2026-08-21.md` — PTY `/help` + continuation `/exit`; F4 `hello`/`[done] stop`; mid-turn SIGINT → `[done] cancelled` then `›`; dedicated idle `^C` → signal 2. |
+| P3 | Rail honesty on the **CLI commit line**, not mixed into uncommitted 99% diffs | **Ada 2026-08-21.** `eb507a5` `docs(cli): rail honesty for vibecoder REPL (C1–C3)` still on HEAD `3718799` (no later edits to those files). `git show HEAD:README.md`: heading `### CLI (\`vibecoder\`)` (no “C1” title); `swift run vibecoder --project …`; C2/C3 truth; **not** “CLI removed”. `git show HEAD:ARCHITECTURE.md` §5.8: REPL + C2 color/`NO_COLOR` + C3 SIGINT/`always`. DESIGN surfaces + Interactive CLI row = C1–C3, not agentos. Working-tree README re-added “C1” titles in the dirty app 99% mix — **not** the commit line; do not retitle that tree. |
+| P4 | `origin` has the CLI commit when Max says ship. Today: `3718799` is **10 ahead of origin/main, not pushed** | |
 
 ---
 
@@ -86,14 +86,14 @@ Keep these until the matching cell has evidence. Do not drop.
 
 | Hole | Cell | Status |
 |------|------|--------|
-| (a) `--model` skips `listModels` → down server can print `›` and fail later | F3 | **must-fix** (`REPL.resolveModel`) |
-| (b) no CI job dedicated to `VibeCoderCLILib` besides full `swift test` | P1 | **must-fix** |
-| (c) no live TTY session | P2, F4, K2 | **must-fix** (evidence, not new code) |
-| (d) README still titled “C1” (working tree); committed README still says CLI removed | P3 | **must-fix** (CLI-only docs commit) |
-| (e) not pushed | P4 | ship gate; Max |
-| (f) rail-doc honesty mixed into uncommitted 99% diffs | P3 | **must-fix** (extract CLI sentences only) |
+| (a) `--model` skips `listModels` → down server can print `›` and fail later | F3 | **closed in source + live** (Rigel 2026-08-21): always-probe; Ollama down + `--model` exit 1, no `›` |
+| (b) no CI job dedicated to `VibeCoderCLILib` besides full `swift test` | P1 | **closed in working tree, not committed** (Rigel): `scripts/ci-cli.sh` + `.github/workflows/cli.yml`; `ci-pr.sh` always runs the filter |
+| (c) no live TTY session | P2, F4, K2 | **closed** (Rigel): `docs/orchestration/cli-tty-2026-08-21.md` |
+| (d) README still titled “C1” (working tree); committed README still says CLI removed | P3 | **closed on the commit line** (Ada 2026-08-21): `eb507a5` / HEAD `README.md` is `### CLI (\`vibecoder\`)`, not “CLI removed”. Working-tree “C1” titles are the dirty 99% mix — leave them |
+| (e) not pushed | P4 | ship gate; Max — **not pushed** (`3718799`, 10 ahead) |
+| (f) rail-doc honesty mixed into uncommitted 99% diffs | P3 | **closed on the commit line** (Ada 2026-08-21): CLI sentences live in `eb507a5`; 99% app hunks stay uncommitted |
 
-Also inspect, not a 99% reopen: `--backend mlx` parses (`B2`). `listModels` uses `try?` so a down server without `--model` can look like “no models” (`F2` honesty). No CLI-specific worktree test (R5 can cite AgentCore W13 plus a REPL stderr assert).
+Also inspect, not a 99% reopen: `--backend mlx` now **refuses** before `›` (B2 live exit 2). F2 down-server no longer `try?` empty-catalog. Live R5 non-git stderr + git `worktreeBranch` recorded. Residual: live PTY F4 log had no CSI (C1 unit-only for paint); SIGINT during post-cancel `[done] cancelled` did not process-exit.
 
 ---
 
@@ -136,7 +136,7 @@ Also inspect, not a 99% reopen: `--backend mlx` parses (`B2`). `listModels` uses
 
 **Rigel** — exclusive: **P1** dedicated `swift test --filter VibeCoderCLILib` in the CLI CI path (do not land via the untracked 99% `.github/` mix unless that file is split); **P2** live TTY artifact; fill every Evidence cell. Do not `git push`.
 
-**Ada** — this bar; **P3** CLI-only rail honesty commit (README/DESIGN/ARCHITECTURE CLI sentences + drop the “C1” title). Not the 99% app hunks.
+**Ada** — this bar. **P3 landed** `eb507a5` (evidence filled 2026-08-21). Do not retitle working-tree README.
 
 **Turnip** — re-verify filters after Lin/Rigel land; keep 99% as evidence.
 
