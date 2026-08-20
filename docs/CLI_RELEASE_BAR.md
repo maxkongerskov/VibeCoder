@@ -73,10 +73,10 @@ Write results under `docs/orchestration/` or `Evals/results/` with date. A score
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| P1 | Dedicated CI step: `swift test --filter VibeCoderCLILib` (full `swift test` in `ci-pr.sh` is **not** this cell). Today: no CLI-specific job on the CLI commit; `.github/workflows/pr.yml` is untracked 99% tree | **Rigel 2026-08-21 00:58–00:59.** New `scripts/ci-cli.sh` + `.github/workflows/cli.yml` (CLILib only; does **not** import `pr.yml` Unsloth/app jobs). `ci-pr.sh` always calls `ci-cli.sh` even when `SKIP_UNIT=1`. `SKIP_UNIT=1 SKIP_EVAL=1 SKIP_APP_TESTS=1 ./scripts/ci-pr.sh` → **31/31** then skip full suite. Not committed. |
+| P1 | Dedicated CI step: `swift test --filter VibeCoderCLILib` (full `swift test` in `ci-pr.sh` is **not** this cell). Today: no CLI-specific job on the CLI commit; `.github/workflows/pr.yml` is untracked 99% tree | **Rigel 2026-08-21.** `a59c6b0` `ci(cli): VibeCoderCLILib job (P1) and live TTY notes (P2)` — only `scripts/ci-cli.sh`, `.github/workflows/cli.yml`, `docs/orchestration/cli-tty-2026-08-21.md`. Does **not** import `pr.yml`. **Turnip 2026-08-21 01:22.** `./scripts/ci-cli.sh` → **31/31**. Dirty `ci-pr.sh` / untracked `pr.yml` stay out of this cut. |
 | P2 | One **live TTY** session artifact (script or notes): help, one turn, SIGINT mid-turn returns to `›`, idle Ctrl+C exits. Unit tests are not a TTY | **Rigel 2026-08-21.** `docs/orchestration/cli-tty-2026-08-21.md` — PTY `/help` + continuation `/exit`; F4 `hello`/`[done] stop`; mid-turn SIGINT → `[done] cancelled` then `›`; dedicated idle `^C` → signal 2. |
 | P3 | Rail honesty on the **CLI commit line**, not mixed into uncommitted 99% diffs | **Ada 2026-08-21.** `eb507a5` `docs(cli): rail honesty for vibecoder REPL (C1–C3)` still on HEAD `3718799` (no later edits to those files). `git show HEAD:README.md`: heading `### CLI (\`vibecoder\`)` (no “C1” title); `swift run vibecoder --project …`; C2/C3 truth; **not** “CLI removed”. `git show HEAD:ARCHITECTURE.md` §5.8: REPL + C2 color/`NO_COLOR` + C3 SIGINT/`always`. DESIGN surfaces + Interactive CLI row = C1–C3, not agentos. Working-tree README re-added “C1” titles in the dirty app 99% mix — **not** the commit line; do not retitle that tree. |
-| P4 | `origin` has the CLI commit when Max says ship. Today: `3718799` is **10 ahead of origin/main, not pushed** | |
+| P4 | `origin` has the CLI commit when Max says ship. Today: HEAD `d08fb28` is **12 ahead of origin/main, not pushed** | |
 
 ---
 
@@ -87,13 +87,13 @@ Keep these until the matching cell has evidence. Do not drop.
 | Hole | Cell | Status |
 |------|------|--------|
 | (a) `--model` skips `listModels` → down server can print `›` and fail later | F3 | **closed in source + live** (Rigel 2026-08-21): always-probe; Ollama down + `--model` exit 1, no `›` |
-| (b) no CI job dedicated to `VibeCoderCLILib` besides full `swift test` | P1 | **closed in working tree, not committed** (Rigel): `scripts/ci-cli.sh` + `.github/workflows/cli.yml`; `ci-pr.sh` always runs the filter |
+| (b) no CI job dedicated to `VibeCoderCLILib` besides full `swift test` | P1 | **closed on the commit line** (Rigel `a59c6b0`): `scripts/ci-cli.sh` + `.github/workflows/cli.yml`; Turnip `./scripts/ci-cli.sh` **31/31** |
 | (c) no live TTY session | P2, F4, K2 | **closed** (Rigel): `docs/orchestration/cli-tty-2026-08-21.md` |
 | (d) README still titled “C1” (working tree); committed README still says CLI removed | P3 | **closed on the commit line** (Ada 2026-08-21): `eb507a5` / HEAD `README.md` is `### CLI (\`vibecoder\`)`, not “CLI removed”. Working-tree “C1” titles are the dirty 99% mix — leave them |
-| (e) not pushed | P4 | ship gate; Max — **not pushed** (`3718799`, 10 ahead) |
+| (e) not pushed | P4 | ship gate; Max — **not pushed** (`d08fb28`, 12 ahead) |
 | (f) rail-doc honesty mixed into uncommitted 99% diffs | P3 | **closed on the commit line** (Ada 2026-08-21): CLI sentences live in `eb507a5`; 99% app hunks stay uncommitted |
 
-Also inspect, not a 99% reopen: `--backend mlx` now **refuses** before `›` (B2 live exit 2). F2 down-server no longer `try?` empty-catalog. Live R5 non-git stderr + git `worktreeBranch` recorded. Residual: live PTY F4 log had no CSI (C1 unit-only for paint); SIGINT during post-cancel `[done] cancelled` did not process-exit.
+Also inspect, not a 99% reopen: `--backend mlx` now **refuses** before `›` (B2 live exit 2). F2 down-server no longer `try?` empty-catalog. Live R5 non-git stderr + git `worktreeBranch` recorded. Residual: live F4 PTY log had no CSI because this shell exports `NO_COLOR=1` (Pixel: that is C2, not a miss; public `isatty` paints when `NO_COLOR` is unset). SIGINT during post-cancel `[done] cancelled` did not process-exit.
 
 ---
 
@@ -134,11 +134,11 @@ Also inspect, not a 99% reopen: `--backend mlx` now **refuses** before `›` (B2
 
 **Pixel** — exclusive: `EventPrinter.swift` only if C1/C2 need a fix. Do not retitle README in the 99% dirty tree — Ada extracts CLI honesty.
 
-**Rigel** — exclusive: **P1** dedicated `swift test --filter VibeCoderCLILib` in the CLI CI path (do not land via the untracked 99% `.github/` mix unless that file is split); **P2** live TTY artifact; fill every Evidence cell. Do not `git push`.
+**Rigel** — exclusive: **P1** dedicated `swift test --filter VibeCoderCLILib` in the CLI CI path (do not land via the untracked 99% `.github/` mix unless that file is split); **P2** live TTY artifact; fill every Evidence cell. Do not `git push`. **Landed** `a59c6b0`.
 
-**Ada** — this bar. **P3 landed** `eb507a5` (evidence filled 2026-08-21). Do not retitle working-tree README.
+**Ada** — this bar. **P3 landed** `eb507a5` (evidence filled 2026-08-21, `d08fb28`). Do not retitle working-tree README.
 
-**Turnip** — re-verify filters after Lin/Rigel land; keep 99% as evidence.
+**Turnip** — re-verify filters after Lin/Rigel land; keep 99% as evidence. **Done** 2026-08-21: `./scripts/ci-cli.sh` **31/31**.
 
 **Max** — **P4** push when five-way 99%.
 
@@ -164,3 +164,15 @@ NEXT_ASSIGNMENT: …
 ```
 
 **99%** requires F1–F4, R1–R5, C1–C2, K1–K4, B1–B3, P1–P3 with artifacts. P4 is the ship/push gate after that.
+
+### Five-way (2026-08-21)
+
+| Who | CONFIDENCE | Note |
+|-----|------------|------|
+| Ada | 99% | P3 `eb507a5` / fill `d08fb28` |
+| Lin | 99% | F2/F3/B2 at `3718799` |
+| Pixel | 99% | C1/C2; F4 no-CSI = `NO_COLOR=1` harness |
+| Rigel | 99% | P1/P2 `a59c6b0`; live TTY artifact |
+| Turnip | 99% | Re-ran `./scripts/ci-cli.sh` **31/31**; scorecard cells filled |
+
+P4 remains Max. Do not mix the dirty app 99% tree into this push.
