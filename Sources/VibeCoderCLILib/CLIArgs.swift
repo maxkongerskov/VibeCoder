@@ -6,7 +6,7 @@
 import Foundation
 import AgentCore
 
-public enum CLIArgsError: Error, Equatable, CustomStringConvertible {
+public enum CLIArgsError: Error, Equatable, CustomStringConvertible, LocalizedError {
     case unknownFlag(String)
     case missingValue(String)
     case badValue(String)
@@ -18,6 +18,8 @@ public enum CLIArgsError: Error, Equatable, CustomStringConvertible {
         case .badValue(let m): return m
         }
     }
+
+    public var errorDescription: String? { description }
 }
 
 public struct CLIArgs: Equatable, Sendable {
@@ -104,7 +106,10 @@ public struct CLIArgs: Equatable, Sendable {
         case "unsloth", "unsloth-studio", "unsloth_studio": return .unslothStudio
         case "exo": return .exo
         case "custom", "openai", "openai-compat": return .custom
-        case "mlx": return .mlx
+        case "mlx":
+            throw CLIArgsError.badValue(
+                "in-process MLX is a stub and is not shipped. Use lmstudio|omlx|ollama|unsloth|exo|custom"
+            )
         default:
             throw CLIArgsError.badValue("unknown --backend \(raw) (use lmstudio|omlx|ollama|unsloth|exo|custom)")
         }

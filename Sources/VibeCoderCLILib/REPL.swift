@@ -112,12 +112,24 @@ public struct REPL {
         }
     }
 
+    /// Always probes `listModels` before returning a descriptor (F3).
+    /// A throwing probe never becomes “no models” via `try?` (F2).
+    /// `--model` is applied only after the backend answers.
     static func resolveModel(
         backend: any InferenceBackend,
         requestedID: String?,
         fallbackBackend: BackendIdentifier
     ) async throws -> ModelDescriptor {
+        let listed: [ModelDescriptor]
+        do {
+            listed = try await backend.listModels()
+        } catch {
+            throw CLIArgsError.badValue(unreachableMessage(backend: backend.identifier, error: error))
+        }
         if let requestedID, !requestedID.isEmpty {
+            if let match = listed.first(where: { $0.id == requestedID }) {
+                return match
+            }
             return ModelDescriptor(
                 id: requestedID,
                 displayName: requestedID,
@@ -125,9 +137,32 @@ public struct REPL {
                 supportsTools: true
             )
         }
-        let listed = (try? await backend.listModels()) ?? []
         if let first = listed.first { return first }
-        throw CLIArgsError.badValue("no models from \(fallbackBackend.rawValue); pass --model or start the server")
+        throw CLIArgsError.badValue(
+            "no models from \(backendLabel(backend.identifier)); pass --model or start the server"
+        )
+    }
+
+    static func backendLabel(_ id: BackendIdentifier) -> String {
+        switch id {
+        case .lmStudio: return "LM Studio"
+        case .omlx: return "oMLX"
+        case .ollama: return "Ollama"
+        case .unslothStudio: return "Unsloth Studio"
+        case .exo: return "EXO"
+        case .custom: return "custom"
+        case .xai: return "xAI"
+        case .mlx: return "MLX"
+        }
+    }
+
+    static func unreachableMessage(backend: BackendIdentifier, error: Error) -> String {
+        let label = backendLabel(backend)
+        let detail = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        if detail.isEmpty {
+            return "Can't reach \(label). Start the server."
+        }
+        return "Can't reach \(label) (\(detail)). Start the server."
     }
 
     static func loadOrCreate(

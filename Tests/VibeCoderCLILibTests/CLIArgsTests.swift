@@ -55,4 +55,22 @@ final class CLIArgsTests: XCTestCase {
         let args = try CLIArgs.parse(["--max-iterations", "12"])
         XCTAssertEqual(args.maxIterations, 12)
     }
+
+    func testMLXBackendIsRefused() {
+        XCTAssertThrowsError(try CLIArgs.parse(["--backend", "mlx"])) { err in
+            guard case CLIArgsError.badValue(let message) = err else {
+                return XCTFail("expected badValue, got \(err)")
+            }
+            XCTAssertTrue(
+                message.localizedCaseInsensitiveContains("mlx"),
+                "refuse must name mlx: \(message)"
+            )
+            XCTAssertTrue(
+                message.localizedCaseInsensitiveContains("stub")
+                    || message.localizedCaseInsensitiveContains("not shipped"),
+                "refuse must be honest that in-process MLX is a stub: \(message)"
+            )
+        }
+        XCTAssertThrowsError(try CLIArgs.parse(["--backend", "MLX"]))
+    }
 }
