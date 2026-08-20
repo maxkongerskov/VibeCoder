@@ -1,0 +1,18 @@
+# CLI launch bar P1 — VibeCoderCLILib only.
+# Do not import Unsloth / App / 99% jobs from pr.yml.
+name: CLI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  clilib:
+    name: swift test --filter VibeCoderCLILib
+    runs-on: macos-14
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: VibeCoderCLILib
+        run: ./scripts/ci-cli.sh
