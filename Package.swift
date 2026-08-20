@@ -11,8 +11,9 @@
 // The SwiftUI app lives in App/ and links AgentCore via XcodeGen.
 // See App/project.yml.
 //
-// Interactive agentos CLI removed — native app is primary.
-// EvalRunner is a thin headless executable for Evals/eval.sh only.
+// Interactive `vibecoder` REPL is C1 (BYO HTTP, same AgentCore). Not agentos.
+// Native app remains primary. EvalRunner is a thin headless executable for
+// Evals/eval.sh only — not the REPL.
 //
 import PackageDescription
 
@@ -36,6 +37,9 @@ let package = Package(
         .executable(name: "eval-runner", targets: ["EvalRunner"]),
         // Pure helpers shared by eval-runner CLI + unit tests (PB6).
         .library(name: "EvalRunnerLib", targets: ["EvalRunnerLib"]),
+        // Interactive REPL (C1). Not eval-runner.
+        .library(name: "VibeCoderCLILib", targets: ["VibeCoderCLILib"]),
+        .executable(name: "vibecoder", targets: ["VibeCoderCLI"]),
     ],
     dependencies: [
         // No remote package deps. App links AgentCore (+ optional MLXBackend stub)
@@ -84,6 +88,22 @@ let package = Package(
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
+        .target(
+            name: "VibeCoderCLILib",
+            dependencies: ["AgentCore"],
+            path: "Sources/VibeCoderCLILib",
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency"),
+            ]
+        ),
+        .executableTarget(
+            name: "VibeCoderCLI",
+            dependencies: ["AgentCore", "VibeCoderCLILib"],
+            path: "Sources/VibeCoderCLI",
+            swiftSettings: [
+                .enableExperimentalFeature("StrictConcurrency"),
+            ]
+        ),
         .testTarget(
             name: "AgentCoreTests",
             dependencies: ["AgentCore", "Harness", "EvalRunnerLib", "MLXBackend"],
@@ -98,6 +118,11 @@ let package = Package(
             name: "EvalRunnerLibTests",
             dependencies: ["EvalRunnerLib", "AgentCore"],
             path: "Tests/EvalRunnerLibTests"
+        ),
+        .testTarget(
+            name: "VibeCoderCLILibTests",
+            dependencies: ["VibeCoderCLILib", "AgentCore"],
+            path: "Tests/VibeCoderCLILibTests"
         ),
     ]
 )
