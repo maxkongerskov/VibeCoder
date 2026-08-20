@@ -1,7 +1,7 @@
 # VibeCoder · Design & Critique
 
 > Successor to the original AgentOS DEV PLAN. Native macOS Apple Silicon. **Open source (MIT).**
-> SwiftUI app (CLI removed) sharing one Swift core library.
+> SwiftUI app + interactive `vibecoder` REPL sharing one Swift core library.
 >
 > **Shipped backends (2026-07-23):** OpenAI-compatible **HTTP only** — LM Studio, oMLX, Ollama, EXO, custom endpoint.  
 > **Not shipped:** in-process MLX (stub; `mlx-swift` not wired), bundled llama.cpp/GGUF runner (product **removed**; legacy settings migrate to Ollama). There is no `LiteLocalBackend`.  
@@ -52,8 +52,8 @@ Carry these forward without rebuilding from scratch:
 ┌─────────────────────────────────────────────────────────────────┐
 │                       Surfaces                                   │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │  AgentOS.app     │  │  agentos CLI     │  │  HTTP server │  │
-│  │  (SwiftUI)       │  │  (executable)    │  │  (Xcode etc) │  │
+│  │  AgentOS.app     │  │  vibecoder REPL  │  │  HTTP server │  │
+│  │  (SwiftUI)       │  │  (C1–C3)         │  │  (Xcode etc) │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └──────┬───────┘  │
 └───────────┼──────────────────────┼─────────────────────┼─────────┘
             │                      │                     │
@@ -81,7 +81,7 @@ Carry these forward without rebuilding from scratch:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Surfaces today:** SwiftUI app links `AgentCore` (+ optional `MLXBackend` stub). Interactive `agentos` CLI was removed. `LocalAPIServer` is in `AgentCore` and can be started from the app — **v1 is a backend proxy** (`tools: []`), not a full agent-loop gateway for Xcode.
+**Surfaces today:** SwiftUI app links `AgentCore` (+ optional `MLXBackend` stub). Interactive **`vibecoder` REPL** (`Sources/VibeCoderCLI` + `VibeCoderCLILib`; same AgentCore, BYO HTTP, shared `ConversationStore`, TTY y/n/always, worktree bind). Not `agentos`. Not eval-runner. **C2:** EventPrinter colors TTY roles (`NO_COLOR` or non-TTY = plain text). **C3:** SIGINT mid-turn cancels via `TurnCancelHandle`; idle Ctrl+C exits; patch `always` → directory grant. Historical `agentos` CLI remains gone. `LocalAPIServer` is in `AgentCore` and can be started from the app — **v1 is a backend proxy** (`tools: []`), not a full agent-loop gateway for Xcode.
 
 ## 4. Module boundaries
 
@@ -223,14 +223,14 @@ Overhead budget for our wrapper:
 | Project memory (MEMORY.md) | partial | ✅ | n/a | partial / present |
 | Skills marketplace | ❌ | ✅ | ❌ | not v1 product surface |
 | OpenAI-compat server for Xcode | ❌ | ❌ | ✅ (no agent) | ✅ **proxy only** (`tools: []`; agent-loop opt-in deferred) |
-| Interactive CLI | ❌ | ✅ | ❌ | ❌ removed |
+| Interactive CLI | ❌ | ✅ | ❌ | ✅ C1–C3 `vibecoder` REPL (not agentos) |
 | No product license gate | varies | subscription | free | ✅ |
 
 **Anchors that still differentiate when used honestly:** (1) **local agent loop + worktree isolation** on top of a BYO local model server; (2) **loopback OpenAI-compat proxy for Xcode** (completions today; full agent tools not default).
 
 ## 10. Build & ship
 
-- **Build:** `swift build` for core; `xcodegen generate && xcodebuild` for the app. (CLI removed)
+- **Build:** `swift build` for core + `vibecoder` REPL; `xcodegen generate && xcodebuild` for the app. (`eval-runner` remains eval-only.)
 - **Signing:** Developer ID Application; entitlements `cs.allow-jit`, `cs.disable-library-validation`, `network.client`, `network.server`, `files.user-selected.read-write`.
 - **Notarization:** `notarytool` + `stapler`.
 - **Distribution:** signed DMG via GitHub Releases (or any host). Sparkle was removed — no in-app auto-update.
@@ -243,7 +243,7 @@ Historical plan of record (many items landed under different names; **do not rea
 
 | Phase | Original scope | Reality note (2026-07-23) |
 |---|---|---|
-| **P0** | Package, protocols, LM Studio, tools, CLI, app skeleton | Core + app exist; **CLI removed** |
+| **P0** | Package, protocols, LM Studio, tools, CLI, app skeleton | Core + app exist; interactive `vibecoder` REPL is C1–C3 (not agentos) |
 | **P1** | EXO + llama.cpp subprocess + edit tools | **EXO HTTP shipped**; llama.cpp product **removed** (use Ollama/custom); edit tools present |
 | **P2** | MLX in-process + catalog + BuildGuard | Catalog/downloader scaffolding exists; **inference still stub**; oMLX/Ollama HTTP added instead |
 | **P3** | App shell, worktrees, LocalAPIServer | App + worktrees shipped; LocalAPI = **proxy**, not full agent tools |

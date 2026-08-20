@@ -5,7 +5,7 @@ Native macOS agentic coder that runs on your own hardware.
 **Inference model (honest):** bring-your-own **local OpenAI-compatible HTTP server**. Live first-class backends: **LM Studio**, **oMLX**, **Ollama**, **Unsloth Studio**, **EXO**, and **custom** `/v1` endpoints.  
 **Not shipped:** in-process Swift MLX generation (`mlx-swift` not wired — adapter stub only), bundled llama.cpp/GGUF runner (product **removed**; use Ollama or any OpenAI-compat server). There is no `LiteLocalBackend`.
 
-Open-source under the [MIT License](./LICENSE). Apple Silicon, macOS 14+. SwiftUI app sharing the core library. (Interactive CLI removed.)
+Open-source under the [MIT License](./LICENSE). Apple Silicon, macOS 14+. SwiftUI app sharing the core library, plus an interactive `vibecoder` REPL.
 
 > **Where this project came from.** This is the second pass on Max's AgentOS DEV PLAN. A full critique and architectural diff from v1 lives in [`DESIGN.md`](./DESIGN.md). Read that first — including the **shipped status box** at the top of DESIGN.
 
@@ -67,9 +67,12 @@ VibeCoder/                      repo root (ships as VibeCoder.app)
 ├── Sources/
 │   ├── AgentCore/              Pure Swift core — backends, tools, agent loop
 │   ├── MLXBackend/             Optional MLX adapter **stub** (depends on AgentCore)
+│   ├── VibeCoderCLI/           Interactive `vibecoder` REPL entry (not eval-runner)
+│   ├── VibeCoderCLILib/        REPL, TTY y/n/always, TurnRunner → AgentLoop
 │   └── Harness/                Experimental rewrite (not the app daily driver)
 ├── Tests/
-│   └── AgentCoreTests/
+│   ├── AgentCoreTests/
+│   └── VibeCoderCLILibTests/
 └── App/                        SwiftUI macOS app + XcodeGen spec
     ├── project.yml
     ├── VibeCoderApp.swift
@@ -98,7 +101,15 @@ Then ⌘R inside Xcode. The project references the SPM package at `..` (the repo
 
 An XcodeGen `project.yml` is also included as an alternate generator if you'd rather regenerate the `.xcodeproj` from a declarative spec — useful if the pbxproj ever gets messy from manual edits in Xcode. `brew install xcodegen && cd App && xcodegen generate`.
 
-(The `agentos` CLI surface has been removed to focus development on the native app.)
+### CLI (`vibecoder`)
+
+Interactive REPL on the same `AgentCore` / BYO HTTP backends / `ConversationStore` as the app. Shared worktree bind. TTY ask-mode is y/n/always (empty, `n`, or unknown = deny). **Not** `agentos`. **Not** `eval-runner`. **Not** a TUI. Native app remains primary.
+
+```bash
+swift run vibecoder --project /path/to/repo --backend ollama --model qwen
+```
+
+**C2:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = plain text (no escapes). **C3:** SIGINT during a turn cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C still exits. TTY `always` is durable; patch `always` → directory grant. The historical `agentos` CLI is gone.
 
 ## Backends
 

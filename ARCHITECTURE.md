@@ -155,8 +155,8 @@ Rules:
 ┌─────────────────────────────────────────────────────────────────┐
 │                  Surfaces (3, sharing one core)                  │
 │  ┌──────────────┐    ┌──────────────┐    ┌────────────────────┐ │
-│  │ AgentOS.app  │    │ agentos CLI  │    │ LocalAPIServer     │ │
-│  │ (SwiftUI)    │    │ (executable) │    │ (OpenAI-compat)    │ │
+│  │ AgentOS.app  │    │ vibecoder    │    │ LocalAPIServer     │ │
+│  │ (SwiftUI)    │    │ REPL (C1–C3) │    │ (OpenAI-compat)    │ │
 │  └──────┬───────┘    └──────┬───────┘    └─────────┬──────────┘ │
 └─────────┼──────────────────────┼──────────────────────┼──────────┘
           ▼                      ▼                      ▼
@@ -418,7 +418,11 @@ Usage: Xcode 16 → Settings → Intelligence → Add provider → `http://local
 
 ### 5.8 CLI surface
 
-**Removed.** Development focuses on the native macOS app (`App/VibeCoder.xcodeproj`). Headless/eval runners may appear under `Evals/` or scripts; do not document a shipping `agentos` CLI unless it is reintroduced.
+Interactive **`vibecoder`** REPL (`Sources/VibeCoderCLI` + `VibeCoderCLILib`). Same `AgentCore` / BYO HTTP backends / `ConversationStore` as the app; TTY y/n/always (empty/`n`/unknown deny); worktree bind on git projects. **Not** `agentos`. **Not** `eval-runner` (`Evals/` stays separate). **Not** a TUI. Native app remains the primary surface.
+
+**C2:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = plain text (no escapes). **C3:** SIGINT during a turn cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C still exits. TTY `always` is durable; patch `always` → directory grant.
+
+Do not document `agentos run` / `agentos serve` as shipping. The historical `agentos` CLI remains removed.
 
 ## 6. Data architecture
 
@@ -609,7 +613,7 @@ Toggle on the chat header creates a real `git worktree` at `<project>-agentcore-
 
 ### 11.4 Headless mode
 
-App “Headless” / unattended posture (notifications, conservative system prompt). The interactive **`agentos` CLI was removed** — do not document `agentos run --headless` as a shipping CLI. Headless eval/script paths live under `Evals/` and scripts when present. Pairs with Safe Mode for unattended work.
+App “Headless” / unattended posture (notifications, conservative system prompt). The historical **`agentos` CLI remains removed** — do not document `agentos run --headless`. Interactive `vibecoder` REPL is C1–C3 and is **not** that headless path. Headless eval/script paths live under `Evals/` (`eval-runner`) when present. Pairs with Safe Mode for unattended work.
 
 ### 11.5 Job monitor (not Grok monitor product)
 
@@ -684,6 +688,7 @@ When this doc is amended, log the change here with date + reason. The doc itself
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
+| 2026-08-21 | §5 diagram, §5.8, §11.4 | **C1–C3 CLI honesty:** interactive `vibecoder` REPL (BYO HTTP, same AgentCore). Not `agentos`. Not eval-runner. C2 TTY color / `NO_COLOR`. C3 SIGINT cancel-in-turn + TTY always. | Code landed `7baddb2`; rail still said CLI removed |
 | 2026-08-18 | §17 + companion scorecards | **Docs flip:** MCP GET `/sse` (not HTTP alias); default-IGNORE project hooks (user-scope still runs); commands editor + `$ARGUMENTS`; sidebar archive list + Find Files scope; mid-run `metadata.json`; terminal CSI 33/33 incl. Grok Build smoke; XCTest parent-child suite. Still unchecked: `node_repl`, mermaid, `mlx-swift`, queue Edit. | Product-architect honesty pass after those landings |
 | 2026-08-18 | §17 + companion scorecards | **Hooks events wired:** `PermissionRequest` + `PostToolUseFailure` + MCP `preToolDetailed`. Scorecards flipped. | Docs-only; Build verified 53/53 + 84/84 |
 | 2026-08-18 | §17 + companion scorecards | **Wave 4 `memory_update`:** `MemoryUpdateReminder` extras + `AgentLoop` `pendingNudges` hook landed. Scorecards flipped. Still unchecked: typed memory kinds, ignore-project-hooks, SSE GET, node REPL, `mlx-swift`, commands editor, mermaid. | Wave 4 docs pass — do not list mid-turn memory refresh as open |
