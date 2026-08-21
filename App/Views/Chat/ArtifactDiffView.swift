@@ -50,6 +50,8 @@ enum DiffSyntaxHighlighter {
             if index > 0 { result.append(NSMutableAttributedString(string: "\n")) }
             result.append(attributedLine(String(line), swift: swift))
         }
+        // Stay on NSAttributedString until display — converting to
+        // AttributedString forms a non-Sendable SwiftUI color key path.
         return AttributedString(result)
     }
 

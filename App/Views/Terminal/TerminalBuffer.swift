@@ -45,12 +45,28 @@ struct TerminalRun: Equatable, Sendable {
 }
 
 enum TerminalMetrics {
-    static let fontSize: CGFloat = 12
-    static let inset = NSSize(width: 8, height: 6)
+    /// Terminal.app Pro (the dark built-in). Menlo 11, black canvas.
+    /// Basic (white) stripes through TUI row gaps and fights the app chrome.
+    static let fontSize: CGFloat = 11
+    static let inset = NSSize(width: 6, height: 4)
 
-    static func font(bold: Bool) -> NSFont {
-        .monospacedSystemFont(ofSize: fontSize, weight: bold ? .semibold : .regular)
+    static func font(size: CGFloat = fontSize, bold: Bool) -> NSFont {
+        let names = bold
+            ? ["Menlo-Bold", "SFMono-Bold"]
+            : ["Menlo-Regular", "SFMono-Regular"]
+        for name in names {
+            if let font = NSFont(name: name, size: size) { return font }
+        }
+        return .monospacedSystemFont(ofSize: size, weight: bold ? .bold : .regular)
     }
+
+    static let canvasColor = NSColor.black
+    static let textColor = NSColor(white: 0.92, alpha: 1)
+    static let selectionColor = NSColor(srgbRed: 0.22, green: 0.34, blue: 0.52, alpha: 1)
+    static let tabBarColor = Color(red: 0.14, green: 0.14, blue: 0.14)
+    static let tabBarDivider = Color(red: 0.22, green: 0.22, blue: 0.22)
+    static let chromeInk = Color(white: 0.86)
+    static let chromeSecondary = Color(white: 0.52)
 
     static var cellSize: CGSize {
         let font = font(bold: false)
@@ -402,10 +418,10 @@ struct TerminalBuffer: Sendable {
     }
 
     func attributedString(appearance: NSAppearance, fontSize: CGFloat) -> NSAttributedString {
-        let font = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
-        let boldFont = NSFont.monospacedSystemFont(ofSize: fontSize, weight: .semibold)
-        let defaultFG = NSColor(Theme.Palette.primary)
-        let defaultBG = NSColor(Theme.Palette.subtle)
+        let font = TerminalMetrics.font(size: fontSize, bold: false)
+        let boldFont = TerminalMetrics.font(size: fontSize, bold: true)
+        let defaultFG = TerminalMetrics.textColor
+        let defaultBG = TerminalMetrics.canvasColor
         let output = NSMutableAttributedString()
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byClipping
@@ -423,6 +439,7 @@ struct TerminalBuffer: Sendable {
                 output.append(NSAttributedString(string: "\n", attributes: [
                     .font: font,
                     .foregroundColor: defaultFG,
+                    .backgroundColor: defaultBG,
                     .paragraphStyle: paragraph,
                 ]))
             }
@@ -441,6 +458,7 @@ struct TerminalBuffer: Sendable {
                 output.append(NSAttributedString(string: " ", attributes: [
                     .font: font,
                     .foregroundColor: defaultFG,
+                    .backgroundColor: defaultBG,
                     .paragraphStyle: paragraph,
                 ]))
                 continue
@@ -456,11 +474,9 @@ struct TerminalBuffer: Sendable {
                 var attrs: [NSAttributedString.Key: Any] = [
                     .font: run.style.bold ? boldFont : font,
                     .foregroundColor: fg,
+                    .backgroundColor: bg ?? defaultBG,
                     .paragraphStyle: paragraph,
                 ]
-                if let bg {
-                    attrs[.backgroundColor] = bg
-                }
                 if run.style.underline {
                     attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
                 }
@@ -1025,45 +1041,36 @@ struct TerminalEmulator: Sendable {
 }
 
 enum TerminalANSIColor {
+    /// Terminal.app Basic profile ANSI 0–15 (sRGB 0–255).
+    private static let basic: [(CGFloat, CGFloat, CGFloat)] = [
+        (0, 0, 0),
+        (194, 54, 33),
+        (37, 188, 36),
+        (173, 173, 39),
+        (73, 46, 225),
+        (211, 56, 211),
+        (51, 187, 200),
+        (203, 204, 205),
+        (129, 131, 131),
+        (252, 57, 31),
+        (49, 231, 34),
+        (234, 236, 35),
+        (88, 51, 255),
+        (249, 53, 248),
+        (20, 240, 240),
+        (233, 235, 235),
+    ]
+
     static func foreground(_ index: UInt8, appearance: NSAppearance) -> NSColor {
         indexed(index, appearance: appearance)
     }
 
     static func indexed(_ index: UInt8, appearance: NSAppearance) -> NSColor {
-        let dark = appearance.bestMatch(from: [.darkAqua, .vibrantDark]) != nil
+        if index < 16 {
+            let c = basic[Int(index)]
+            return NSColor(srgbRed: c.0 / 255, green: c.1 / 255, blue: c.2 / 255, alpha: 1)
+        }
         switch index {
-        case 0:
-            return dark ? NSColor(white: 0.28, alpha: 1) : NSColor(white: 0.12, alpha: 1)
-        case 1:
-            return NSColor(Theme.Palette.error)
-        case 2:
-            return NSColor(Theme.Palette.success)
-        case 3:
-            return NSColor(Theme.Palette.warning)
-        case 4:
-            return NSColor(Theme.Palette.info)
-        case 5:
-            return NSColor(Theme.Palette.violet)
-        case 6:
-            return NSColor(srgbRed: 0.40, green: 0.68, blue: 0.70, alpha: 1)
-        case 7:
-            return dark ? NSColor(white: 0.86, alpha: 1) : NSColor(white: 0.14, alpha: 1)
-        case 8:
-            return dark ? NSColor(white: 0.40, alpha: 1) : NSColor(white: 0.35, alpha: 1)
-        case 9:
-            return NSColor(srgbRed: 1, green: 0.36, blue: 0.36, alpha: 1)
-        case 10:
-            return NSColor(srgbRed: 0.40, green: 0.86, blue: 0.50, alpha: 1)
-        case 11:
-            return NSColor(srgbRed: 0.95, green: 0.80, blue: 0.30, alpha: 1)
-        case 12:
-            return NSColor(srgbRed: 0.40, green: 0.65, blue: 1.0, alpha: 1)
-        case 13:
-            return NSColor(srgbRed: 0.78, green: 0.52, blue: 1.0, alpha: 1)
-        case 14:
-            return NSColor(srgbRed: 0.40, green: 0.85, blue: 0.85, alpha: 1)
-        case 15:
-            return dark ? NSColor(white: 0.96, alpha: 1) : NSColor(white: 0.08, alpha: 1)
         case 16...231:
             let cube = Int(index) - 16
             let r = cube / 36

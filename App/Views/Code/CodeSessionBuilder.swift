@@ -6,7 +6,7 @@
 //  file edits with +/- diff lines — OpenCode-style).
 //
 
-import Foundation
+@preconcurrency import Foundation
 import AgentCore
 
 enum CodeDiffLine: Equatable {

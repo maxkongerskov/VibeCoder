@@ -69,33 +69,40 @@ final class BugHuntServerSettingsTasksTests: XCTestCase {
 
     // MARK: - RemoteControlServer lifecycle
 
-    /// Failed `start(port:)` must not tear down a live listener (or leave a
-    /// dangling token for a server that is not running).
-    func testInvalidPortRestartDoesNotKillRunningRemoteControlServer() async throws {
+    /// 2026-08-20: LAN remote control is shut down. `start()` must refuse
+    /// (no all-interfaces bind, no session token/URL). Restore by flipping
+    /// `RemoteControlServer.isEnabled` — then this test should be replaced
+    /// with the previous “invalid-port restart does not kill a live listener”
+    /// contract.
+    func testRemoteControlStartDoesNotBindListener() async throws {
+        XCTAssertFalse(
+            RemoteControlServer.isEnabled,
+            "LAN remote control must stay off until isEnabled is flipped")
         let server = RemoteControlServer()
         let port = Int.random(in: 24_000...24_999)
-        let token = try await server.start(port: port, lifetime: 120)
-        let runningBefore = await server.isRunning()
-        let tokenBefore = await server.currentToken()
-        XCTAssertTrue(runningBefore)
-        XCTAssertEqual(tokenBefore, token)
+        do {
+            _ = try await server.start(port: port, lifetime: 120)
+            XCTFail("start() must throw .disabled while remote control is shut down")
+        } catch let err as RemoteControlServer.ServerError {
+            XCTAssertEqual(err, .disabled)
+        }
+        let running = await server.isRunning()
+        let token = await server.currentToken()
+        let url = await server.sessionURL(hostAddress: "127.0.0.1")
+        XCTAssertFalse(running, "start() must not leave an NWListener")
+        XCTAssertNil(token, "start() must not publish a session token")
+        XCTAssertNil(url, "start() must not publish a session URL")
 
         do {
             _ = try await server.start(port: 0, lifetime: 120)
-            XCTFail("port 0 must throw invalidPort")
+            XCTFail("start(port: 0) must also refuse")
         } catch {
-            // expected
+            // .disabled (fail-closed before port check) or .invalidPort
         }
-
-        let runningAfter = await server.isRunning()
-        let tokenAfter = await server.currentToken()
-        XCTAssertTrue(
-            runningAfter,
-            "invalid-port restart must leave the previous listener running")
-        XCTAssertEqual(
-            tokenAfter, token,
-            "failed start must not replace the live session token")
-        await server.stop()
+        let runningAfterInvalid = await server.isRunning()
+        let tokenAfterInvalid = await server.currentToken()
+        XCTAssertFalse(runningAfterInvalid)
+        XCTAssertNil(tokenAfterInvalid)
     }
 
     // MARK: - LocalAPI CORS
@@ -134,6 +141,100 @@ final class BugHuntServerSettingsTasksTests: XCTestCase {
             header(ok.response, "Access-Control-Allow-Origin"),
             "http://localhost:3000",
             "real localhost origins must still be echoed")
+    }
+
+    /// L1: default POST /v1/chat/completions is a backend proxy with `tools: []`.
+    func testLocalAPIDefaultChatCompletionsSendsEmptyTools() async throws {
+        let backend = RecordingBackend()
+        let server = LocalAPIServer()
+        await server.configure(backend: backend, settings: AppSettings())
+        let on = await server.isAgentToolsEnabled()
+        let policy = await server.toolsPolicy()
+        XCTAssertFalse(on)
+        XCTAssertEqual(policy, .proxyOnly)
+        let port = try await startLocalAPI(server)
+        defer { Task { await server.stopAndWait() } }
+
+        let body = """
+        {"model":"scripted","messages":[{"role":"user","content":"hi"}],"stream":true}
+        """
+        let result = try await http(
+            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            method: "POST",
+            headers: ["Content-Type": "application/json"],
+            body: Data(body.utf8))
+        XCTAssertEqual(result.response.statusCode, 200, String(data: result.body, encoding: .utf8) ?? "")
+        XCTAssertEqual(
+            backend.lastToolsCount(), 0,
+            "default LocalAPI proxy must send tools:[] to the backend")
+    }
+
+    /// L1: opt-in agent-loop is a different path — tools execute inside AgentLoop.
+    func testLocalAPIOptInAgentLoopSendsToolsOnInnerRequest() async throws {
+        await ToolRegistry.shared.registerBuiltins()
+        let backend = RecordingBackend()
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("l1-loop-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let server = LocalAPIServer()
+        await server.configure(
+            backend: backend,
+            settings: AppSettings(),
+            agentToolsEnabled: true,
+            agentLoopProjectRoot: root)
+        let on = await server.isAgentToolsEnabled()
+        let policy = await server.toolsPolicy()
+        XCTAssertTrue(on)
+        XCTAssertEqual(policy, .agentLoop)
+        let port = try await startLocalAPI(server)
+        defer { Task { await server.stopAndWait() } }
+
+        let body = """
+        {"model":"scripted","messages":[{"role":"user","content":"hi"}],"stream":true}
+        """
+        let result = try await http(
+            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            method: "POST",
+            headers: ["Content-Type": "application/json"],
+            body: Data(body.utf8))
+        XCTAssertEqual(result.response.statusCode, 200, String(data: result.body, encoding: .utf8) ?? "")
+        XCTAssertGreaterThan(
+            backend.lastToolsCount(), 0,
+            "agent-loop inner ChatRequest must carry ToolRegistry schemas, not tools:[]")
+    }
+
+    /// L2: opt-in AgentLoop with no usable project must 400, not run the loop.
+    func testLocalAPIOptInWithoutUsableProjectReturns400() async throws {
+        let backend = RecordingBackend()
+        let server = LocalAPIServer()
+        await server.configure(
+            backend: backend,
+            settings: AppSettings(),
+            agentToolsEnabled: true)
+        let on = await server.isAgentToolsEnabled()
+        let policy = await server.toolsPolicy()
+        XCTAssertTrue(on)
+        XCTAssertEqual(policy, .agentLoop)
+        let boundRoot = await server.currentAgentLoopProjectRoot()
+        XCTAssertNil(boundRoot)
+        let port = try await startLocalAPI(server)
+        defer { Task { await server.stopAndWait() } }
+
+        let body = """
+        {"model":"scripted","messages":[{"role":"user","content":"hi"}],"stream":true}
+        """
+        let result = try await http(
+            url: URL(string: "http://127.0.0.1:\(port)/v1/chat/completions")!,
+            method: "POST",
+            headers: ["Content-Type": "application/json"],
+            body: Data(body.utf8))
+        let text = String(data: result.body, encoding: .utf8) ?? ""
+        XCTAssertEqual(result.response.statusCode, 400, text)
+        XCTAssertTrue(
+            text.contains("Agent loop requires a project folder"),
+            "L2 400 body must name the missing project: \(text)")
     }
 
     // MARK: - AgentOSServeServer agent-tools flag

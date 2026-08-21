@@ -234,13 +234,31 @@ final class MCPOAuthTests: XCTestCase {
         let lock = MCPCrossProcessLock(
             serverName: "test-server", baseDir: tmpDir)
 
-        // Acquire + release should not throw.
-        XCTAssertNoThrow(try lock.acquire())
+        XCTAssertNoThrow(try lock.acquire(timeout: 2))
         lock.release()
 
-        // Second acquire after release should also succeed.
-        XCTAssertNoThrow(try lock.acquire())
+        XCTAssertNoThrow(try lock.acquire(timeout: 2))
         lock.release()
+    }
+
+    func testCrossProcessLockAcquireTimesOutWhenHeld() throws {
+        let tmpDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("vibecoder_lock_to_\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: tmpDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tmpDir) }
+
+        let holder = MCPCrossProcessLock(serverName: "held", baseDir: tmpDir)
+        let waiter = MCPCrossProcessLock(serverName: "held", baseDir: tmpDir)
+        try holder.acquire(timeout: 2)
+        defer { holder.release() }
+
+        let start = Date()
+        XCTAssertThrowsError(try waiter.acquire(timeout: 0.25)) { err in
+            let msg = (err as? LocalizedError)?.errorDescription ?? "\(err)"
+            XCTAssertTrue(msg.lowercased().contains("timed out"), msg)
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 2.0)
     }
 
     // MARK: - OAuth config Codable

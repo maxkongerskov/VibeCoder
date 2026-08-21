@@ -4,6 +4,7 @@
 //  returns nil when unavailable (CI / machines without toolchain).
 //
 
+import Darwin
 import Foundation
 
 public enum SourceKitLSPHost {
@@ -65,8 +66,36 @@ public final class ProcessLSPTransport: LSPTransport, @unchecked Sendable {
     private let process: Process
     private let stdinPipe: Pipe
     private let stdoutPipe: Pipe
+    private let stderrPipe: Pipe
     private let lock = NSLock()
     private var closed = false
+    private var stderrTask: Task<Void, Never>?
+
+    private static let pidLock = NSLock()
+    /// Guarded by `pidLock`.
+    nonisolated(unsafe) private static var livePIDs: Set<pid_t> = []
+
+    /// PIDs of transports that have not yet `close()`d. XCTest tearDown
+    /// kills these so a leaked sourcekit-lsp cannot stall the suite.
+    public static func liveProcessIDs() -> Set<pid_t> {
+        pidLock.lock()
+        defer { pidLock.unlock() }
+        return livePIDs
+    }
+
+    private static func registerPID(_ pid: pid_t) {
+        guard pid > 0 else { return }
+        pidLock.lock()
+        livePIDs.insert(pid)
+        pidLock.unlock()
+    }
+
+    private static func unregisterPID(_ pid: pid_t) {
+        guard pid > 0 else { return }
+        pidLock.lock()
+        livePIDs.remove(pid)
+        pidLock.unlock()
+    }
 
     public init(executable: URL, arguments: [String]) throws {
         let process = Process()
@@ -79,19 +108,24 @@ public final class ProcessLSPTransport: LSPTransport, @unchecked Sendable {
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
         try process.run()
+        Self.registerPID(process.processIdentifier)
 
         // Read stderr in the background to prevent pipe buffer overflow.
         // macOS pipes are ~64 KB; without a reader the LSP server deadlocks.
-        Task.detached {
-            for handle in [stderrPipe.fileHandleForReading] {
-                while let data = try? handle.read(upToCount: 65536), !data.isEmpty {
-                    // Discard LSP server logs (written to diagnostics).
-                }
+        // Cancelled + handle-close in `close()` so this Task cannot keep
+        // XCTest alive after the child dies.
+        let stderrHandle = stderrPipe.fileHandleForReading
+        let stderrTask = Task.detached {
+            while !Task.isCancelled {
+                let data = (try? stderrHandle.read(upToCount: 65536)) ?? Data()
+                if data.isEmpty { break }
             }
         }
         self.process = process
         self.stdinPipe = stdinPipe
         self.stdoutPipe = stdoutPipe
+        self.stderrPipe = stderrPipe
+        self.stderrTask = stderrTask
     }
 
     public func write(_ data: Data) async throws {
@@ -137,19 +171,35 @@ public final class ProcessLSPTransport: LSPTransport, @unchecked Sendable {
             DispatchQueue.global(qos: .userInitiated).async {
                 self.lock.lock()
                 self.closed = true
+                let task = self.stderrTask
+                self.stderrTask = nil
                 self.lock.unlock()
                 try? self.stdinPipe.fileHandleForWriting.close()
+                try? self.stdoutPipe.fileHandleForReading.close()
+                try? self.stderrPipe.fileHandleForReading.close()
+                task?.cancel()
+                let pid = self.process.processIdentifier
                 if self.process.isRunning {
                     self.process.terminate()
                 }
+                if self.process.isRunning, pid > 0 {
+                    kill(pid, SIGKILL)
+                }
+                Self.unregisterPID(pid)
                 cont.resume()
             }
         }
     }
 
     deinit {
+        stderrTask?.cancel()
+        let pid = process.processIdentifier
         if process.isRunning {
             process.terminate()
+            if pid > 0 {
+                kill(pid, SIGKILL)
+            }
         }
+        Self.unregisterPID(pid)
     }
 }

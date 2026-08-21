@@ -66,6 +66,121 @@ final class BugHuntViewModelsTests: XCTestCase {
             "Test / commit applies side effects once")
     }
 
+    func testEnsureFirstConversationWaitsForStoreThenSeedsOnce() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("first-run-seed-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let app = makeApp()
+        app.conversationsCoordinator.conversationStore = ConversationStore(directory: dir)
+        XCTAssertFalse(app.conversationsDidLoad)
+        app.ensureFirstConversationIfNeeded()
+        XCTAssertTrue(app.conversations.isEmpty, "must not seed before disk load")
+
+        app.conversationsCoordinator.conversationsDidLoad = true
+        app.ensureFirstConversationIfNeeded()
+        XCTAssertEqual(app.conversations.count, 1, "first-run creates the connect-hero task")
+        let id = app.conversations[0].id
+        app.ensureFirstConversationIfNeeded()
+        XCTAssertEqual(app.conversations.count, 1)
+        XCTAssertEqual(app.conversations[0].id, id)
+        XCTAssertEqual(app.selectedConversationID, id)
+    }
+
+    /// W3: binding a non-git folder must not be silent — worktreeError + statusLine.
+    func testBindNonGitFolderSurfacesVisibleWorktreeReason() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("w3-nongit-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let app = makeApp()
+        let convo = Conversation()
+        app.conversations = [convo]
+        let vm = app.chatViewModel(for: convo.id)
+        let project = Project(name: "plain", url: dir, createdAt: Date(), isExternal: true)
+        app.moveConversationToProject(convo.id, project: project)
+
+        XCTAssertEqual(app.conversations[0].projectRoot?.path, dir.path)
+        XCTAssertNil(app.conversations[0].worktreeBranch)
+        let reason = app.worktreeError
+        XCTAssertNotNil(reason, "non-git bind must surface a visible reason")
+        XCTAssertTrue(
+            reason?.localizedCaseInsensitiveContains("git") == true,
+            "got: \(reason ?? "nil")")
+        XCTAssertEqual(vm.statusLine, reason)
+        XCTAssertEqual(
+            WorktreeBindCopy.notice(for: .skippedNotGit(path: dir.path)),
+            reason)
+    }
+
+    /// Ada P2 leftover: coordinator create-save logs, does not throw to caller.
+    func testCoordinatorCreatedConversationSaveFailureIsCaught() async throws {
+        let blocker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("coord-save-block-\(UUID().uuidString)")
+        try Data([0x00]).write(to: blocker)
+        defer { try? FileManager.default.removeItem(at: blocker) }
+        let store = ConversationStore(
+            directory: blocker.appendingPathComponent("conversations", isDirectory: true))
+        let app = makeApp()
+        app.conversationsCoordinator.host = app
+        app.conversationsCoordinator.conversationStore = store
+        let ok = await app.conversationsCoordinator.persistCreatedConversation(
+            Conversation(title: "p2-coord"),
+            context: "test")
+        XCTAssertFalse(ok, "unwritable store must fail closed to the caller")
+    }
+
+    /// Ada P2: ChatViewModel persist logs and sets statusLine — no silent `try?`.
+    func testChatViewModelSaveFailureSetsStatusLine() async throws {
+        let blocker = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cvm-save-block-\(UUID().uuidString)")
+        try Data([0x00]).write(to: blocker)
+        defer { try? FileManager.default.removeItem(at: blocker) }
+        let store = ConversationStore(
+            directory: blocker.appendingPathComponent("conversations", isDirectory: true))
+        let app = makeApp()
+        let vm = ChatViewModel(conversation: Conversation(title: "p2-save"), app: app)
+        XCTAssertTrue(vm.statusLine.isEmpty)
+        await vm.persistConversationSnapshot(vm.conversation, store: store)
+        XCTAssertEqual(vm.statusLine, "Couldn't save conversation.")
+        XCTAssertFalse(vm.isRunning)
+    }
+
+    /// F2: draft + no model must not start a turn (no live server required).
+    func testSendWithDraftAndNoModelDoesNotDispatchTurn() {
+        let app = makeApp(models: [], selected: nil)
+        let vm = ChatViewModel(conversation: Conversation(), app: app)
+        let accepted = vm.send("hello from first run")
+        XCTAssertFalse(accepted)
+        XCTAssertFalse(vm.isRunning, "no-model send must not flip isRunning")
+        XCTAssertFalse(
+            vm.conversation.messages.contains { $0.role == .user },
+            "must not append an optimistic user bubble")
+        XCTAssertTrue(
+            vm.statusLine.lowercased().contains("model")
+                || vm.statusLine.lowercased().contains("connection"),
+            "honest status, got: \(vm.statusLine)")
+    }
+
+    /// F3: listing models / detecting a server is not selecting one.
+    func testSendWithListedModelsButNoSelectionDoesNotDispatchTurn() {
+        let listed = sampleModel()
+        let other = ModelDescriptor(
+            id: "other-model", displayName: "Other",
+            backend: .omlx, contextLength: 8_192)
+        let app = makeApp(models: [listed, other], selected: nil)
+        XCTAssertNil(app.selectedModelID)
+        let vm = ChatViewModel(conversation: Conversation(), app: app)
+        let accepted = vm.send("draft with servers listed")
+        XCTAssertFalse(accepted)
+        XCTAssertFalse(vm.isRunning)
+        XCTAssertTrue(
+            vm.statusLine.lowercased().contains("select a model"),
+            "must not auto-pick listed models, got: \(vm.statusLine)")
+    }
+
     func testDefaultExecutionModeIsAskNotFull() {
         let app = AppViewModel()
         XCTAssertEqual(
@@ -476,6 +591,153 @@ final class BugHuntViewModelsTests: XCTestCase {
             after.worktreeBranch,
             "failed discard must not drop worktreeBranch (orphans the worktree)")
         XCTAssertNotNil(wt.worktreeError)
+    }
+
+    /// W6: title-menu Edit main tree → `disableWorktree` (opt-out, disk stays).
+    /// Isolate/enable clears opt-out. Does not grow ChatViewModel.
+    func testEditMainTreeDisableWorktreeOptsOutWithoutDiscardingDisk() throws {
+        let fm = FileManager.default
+        let storeDir = fm.temporaryDirectory
+            .appendingPathComponent("w6-store-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: storeDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: storeDir) }
+
+        let project = try makeGitRepo(prefix: "w6-edit-main")
+        defer { try? fm.removeItem(at: project) }
+
+        var convo = Conversation()
+        convo.projectRoot = project
+        convo.worktreeOptOut = false
+
+        let coord = ConversationCoordinator()
+        coord.conversationStore = ConversationStore(directory: storeDir)
+        coord.conversations = [convo]
+        let wt = WorktreeCoordinator()
+        wt.conversations = coord
+
+        wt.enableWorktree(for: convo.id)
+        XCTAssertNil(wt.worktreeError, wt.worktreeError ?? "")
+        let isolated = coord.conversations[0]
+        XCTAssertNotNil(isolated.worktreeBranch)
+        XCTAssertFalse(isolated.worktreeOptOut)
+        guard let diskPath = isolated.worktreeRootURL?.path else {
+            return XCTFail("enable must produce a worktree path")
+        }
+        XCTAssertTrue(
+            WorktreeService.worktreeExists(at: diskPath),
+            "enable must create the sibling checkout")
+        defer {
+            try? WorktreeService.discard(
+                worktreePath: diskPath,
+                branch: isolated.worktreeBranch ?? "",
+                projectFolder: project.path)
+        }
+
+        // Edit main tree…
+        wt.disableWorktree(for: convo.id)
+        let opted = coord.conversations[0]
+        XCTAssertNil(opted.worktreeBranch)
+        XCTAssertTrue(opted.worktreeOptOut, "Edit main tree must persist opt-out")
+        XCTAssertEqual(opted.projectRoot?.path, project.path)
+        XCTAssertNil(wt.worktreeError)
+        XCTAssertTrue(
+            WorktreeService.worktreeExists(at: diskPath),
+            "disable must not git-worktree-remove; Discard on the review sheet is the delete path")
+
+        // Isolate / enable clears opt-out and reattaches (reuse).
+        wt.enableWorktree(for: convo.id)
+        XCTAssertNil(wt.worktreeError, wt.worktreeError ?? "")
+        let again = coord.conversations[0]
+        XCTAssertFalse(again.worktreeOptOut, "Isolate must clear opt-out")
+        XCTAssertNotNil(again.worktreeBranch)
+        XCTAssertTrue(WorktreeService.worktreeExists(at: diskPath))
+    }
+
+    /// mergeWorktree must persist the post-ensure `worktreeBranch` (not leave nil on disk).
+    func testMergeWorktreePersistsNewWorktreeBranch() async throws {
+        let fm = FileManager.default
+        let storeDir = fm.temporaryDirectory
+            .appendingPathComponent("merge-persist-store-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: storeDir, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: storeDir) }
+
+        let project = try makeGitRepo(prefix: "merge-persist")
+        defer { try? fm.removeItem(at: project) }
+
+        var convo = Conversation()
+        convo.projectRoot = project
+        let store = ConversationStore(directory: storeDir)
+        let coord = ConversationCoordinator()
+        coord.conversationStore = store
+        coord.conversations = [convo]
+        let wt = WorktreeCoordinator()
+        wt.conversations = coord
+
+        wt.enableWorktree(for: convo.id)
+        XCTAssertNil(wt.worktreeError, wt.worktreeError ?? "")
+        let isolated = coord.conversations[0]
+        XCTAssertNotNil(isolated.worktreeBranch)
+        guard let firstPath = isolated.worktreeRootURL?.path else {
+            return XCTFail("enable must produce a worktree")
+        }
+        try "from-wt".write(
+            to: URL(fileURLWithPath: firstPath).appendingPathComponent("from-wt.txt"),
+            atomically: true, encoding: .utf8)
+
+        wt.mergeWorktree(for: convo.id, commitMessage: "app persist re-isolate")
+        XCTAssertNil(wt.worktreeError, wt.worktreeError ?? "")
+        let after = coord.conversations[0]
+        XCTAssertNotNil(after.worktreeBranch, "in-memory conversation must be re-isolated after merge")
+        XCTAssertFalse(after.worktreeOptOut)
+        let newPath = after.worktreeRootURL?.path
+        defer {
+            if let newPath {
+                try? WorktreeService.discard(
+                    worktreePath: newPath,
+                    branch: after.worktreeBranch ?? "",
+                    projectFolder: project.path)
+            }
+        }
+        if let newPath {
+            XCTAssertTrue(WorktreeService.worktreeExists(at: newPath))
+        }
+
+        var loaded: Conversation?
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            loaded = try await store.load(id: convo.id)
+            if loaded?.worktreeBranch != nil { break }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertNotNil(
+            loaded?.worktreeBranch,
+            "ConversationStore must persist worktreeBranch after mergeWorktree")
+        XCTAssertEqual(loaded?.worktreeBranch, after.worktreeBranch)
+    }
+
+    private func makeGitRepo(prefix: String) throws -> URL {
+        let project = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(prefix)-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        func git(_ args: [String], timeout: TimeInterval = 10) -> ShellResult {
+            ShellRunner.run(
+                executable: "/usr/bin/env",
+                arguments: ["git"] + args,
+                workingDirectory: project,
+                timeout: timeout)
+        }
+        let initR = git(["init"])
+        XCTAssertEqual(initR.exitCode, 0, initR.stderr)
+        _ = git(["config", "user.email", "test@example.com"], timeout: 5)
+        _ = git(["config", "user.name", "Test"], timeout: 5)
+        try "readme".write(
+            to: project.appendingPathComponent("README.md"),
+            atomically: true, encoding: .utf8)
+        let add = git(["add", "README.md"], timeout: 5)
+        XCTAssertEqual(add.exitCode, 0, add.stderr)
+        let commit = git(["commit", "-m", "init"])
+        XCTAssertEqual(commit.exitCode, 0, commit.stderr)
+        return project
     }
 
     // MARK: 13 — move down last pinned mutates dates without changing order

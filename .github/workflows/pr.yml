@@ -1,0 +1,26 @@
+# PR bar: full package `swift test` + mock T0 then 012 then 013.
+# Invokes scripts/ci-pr.sh (not eval-gate). Flags used here are ones
+# ci-pr.sh actually supports — see that script’s header.
+#
+# SKIP_APP_TESTS=1: App VibeCoderTests need xcodebuild + a test host.
+# Skip them on this runner so the merge bar is AgentCore + eval T0 + 012 + 013.
+# Do not set USE_EVAL_GATE=1 here (that replaces the full suite).
+# baseline.json stays T0-only; 012/013 are --strict without --baseline.
+name: PR
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  ci-pr:
+    name: package + mock T0 + 012 + 013
+    runs-on: macos-14
+    timeout-minutes: 45
+    env:
+      SKIP_APP_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - name: ci-pr.sh (swift test + mock T0 + 012 + 013)
+        run: ./scripts/ci-pr.sh

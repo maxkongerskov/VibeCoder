@@ -424,6 +424,9 @@ final class BugHuntAppViewsTests: XCTestCase {
         XCTAssertTrue(ids.contains(.lmStudio))
         XCTAssertTrue(ids.contains(.ollama))
         XCTAssertTrue(ids.contains(.omlx))
+        XCTAssertTrue(ids.contains(.unslothStudio), "Unsloth Studio is a loopback default")
+        XCTAssertTrue(ids.contains(.exo), "EXO is a loopback default")
+        XCTAssertFalse(ids.contains(.custom), "custom is a Settings URL, not a default probe")
     }
 
     func testClassifyRequiresModelsJSONNotBareTCP() {

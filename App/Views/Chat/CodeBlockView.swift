@@ -6,7 +6,7 @@
 // the CopyChip pattern from MessageBubbleViewV2.swift.
 //
 
-import SwiftUI
+@preconcurrency import SwiftUI
 import AppKit
 import AgentCore
 
@@ -65,9 +65,9 @@ struct CodeBlockView: View {
 
             // ── Code body ───────────────────────────────────────────
             ScrollView(.horizontal, showsIndicators: false) {
-                Text(highlightedCode)
+                highlightedCode
                     .font(Theme.Typography.mono(size: fontSize))
-                    .foregroundColor(Theme.Palette.primary)
+                    .foregroundStyle(Theme.Palette.primary)
                     .textSelection(.enabled)
                     .padding(Theme.Spacing.ml)
             }
@@ -82,17 +82,33 @@ struct CodeBlockView: View {
 
     // MARK: - Highlighting
 
-    /// Keyword spans from `CodeHighlighter`. Gaps stay `Theme.Palette.primary`.
-    private var highlightedCode: AttributedString {
-        var attributed = AttributedString(code)
-        for token in CodeHighlighter.tokens(for: code, language: language) {
-            guard token.kind != .plain else { continue }
-            guard let lower = AttributedString.Index(token.range.lowerBound, within: attributed),
-                  let upper = AttributedString.Index(token.range.upperBound, within: attributed)
+    /// Keyword spans from `CodeHighlighter`. Concatenated `Text` so we
+    /// never form a SwiftUI `ForegroundColorAttribute` key path.
+    private var highlightedCode: Text {
+        let tokens = CodeHighlighter.tokens(for: code, language: language)
+            .filter { $0.kind != .plain }
+            .sorted { $0.range.lowerBound < $1.range.lowerBound }
+        var parts: [Text] = []
+        var cursor = code.startIndex
+        for token in tokens {
+            guard token.range.lowerBound >= cursor,
+                  token.range.lowerBound < token.range.upperBound,
+                  token.range.upperBound <= code.endIndex
             else { continue }
-            attributed[lower..<upper].foregroundColor = Self.color(for: token.kind)
+            if cursor < token.range.lowerBound {
+                parts.append(Text(String(code[cursor..<token.range.lowerBound])))
+            }
+            parts.append(
+                Text(String(code[token.range]))
+                    .foregroundStyle(Self.color(for: token.kind))
+            )
+            cursor = token.range.upperBound
         }
-        return attributed
+        if cursor < code.endIndex {
+            parts.append(Text(String(code[cursor...])))
+        }
+        if parts.isEmpty { return Text(code) }
+        return parts.reduce(Text(""), +)
     }
 
     /// Calm mapping aligned with `DiffSyntaxHighlighter` (violet keywords,

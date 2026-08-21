@@ -94,43 +94,58 @@ public final class MCPCrossProcessLock: @unchecked Sendable {
     /// async suspension points inside it. flock is kernel-level, so the
     /// lock survives Swift concurrency context switches.
     ///
-    /// - Parameter action: The work to do while holding the lock. Runs
-    ///   on a background task so it can freely `await`.
-    public func withLock<T>(_ action: @escaping () async throws -> T) async throws -> T {
-        try acquire()
+    /// - Parameter timeout: Fail closed if the lock is not free in time
+    ///   (never `flock` forever — that wedged XCTest after MCPOAuthTests).
+    /// - Parameter action: The work to do while holding the lock.
+    public func withLock<T>(
+        timeout: TimeInterval = 30,
+        _ action: @escaping () async throws -> T
+    ) async throws -> T {
+        try acquire(timeout: timeout)
         defer { release() }
         return try await action()
     }
 
-    /// Acquire the exclusive lock. Blocks (in `flock`) until the lock is
-    /// available. Throws on FD open failure.
-    public func acquire() throws {
-        try queue.sync {
-            // Ensure the parent directory exists (flock requires an existing
-            // file, and createDirectory is idempotent).
+    /// Acquire the exclusive lock. Uses non-blocking `flock` + a deadline
+    /// so a stuck peer (or same-process second FD) cannot hang testers or
+    /// the agent loop forever.
+    public func acquire(timeout: TimeInterval = 30) throws {
+        let fd: Int32 = try queue.sync {
             let dir = lockFilePath.deletingLastPathComponent()
             try? FileManager.default.createDirectory(
                 at: dir, withIntermediateDirectories: true)
-
-            // Open (create if needed) the lock file. We use low-level
-            // `open(2)` so we get a real FD for flock.
             let fd = open(lockFilePath.path, O_RDWR | O_CREAT, 0o600)
             guard fd >= 0 else {
                 throw MCPOAuthError.lockAcquisitionFailed(
                     "open() failed: \(String(cString: strerror(errno)))")
             }
-            fileDescriptor = fd
+            return fd
+        }
 
-            // Block until we get LOCK_EX. This is a system call — it
-            // suspends the current thread, which is fine since we're in
-            // a DispatchQueue.sync block on a utility queue.
-            let result = flock(fd, LOCK_EX)
-            guard result == 0 else {
-                close(fd)
-                fileDescriptor = -1
-                throw MCPOAuthError.lockAcquisitionFailed(
-                    "flock(LOCK_EX) failed: \(String(cString: strerror(errno)))")
+        let budget = max(0.05, timeout)
+        let deadline = Date().addingTimeInterval(budget)
+        while true {
+            if flock(fd, LOCK_EX | LOCK_NB) == 0 {
+                queue.sync {
+                    if fileDescriptor >= 0, fileDescriptor != fd {
+                        close(fileDescriptor)
+                    }
+                    fileDescriptor = fd
+                }
+                return
             }
+            let err = errno
+            if err != EWOULDBLOCK && err != EAGAIN {
+                close(fd)
+                throw MCPOAuthError.lockAcquisitionFailed(
+                    "flock(LOCK_EX) failed: \(String(cString: strerror(err)))")
+            }
+            if Date() >= deadline {
+                close(fd)
+                throw MCPOAuthError.lockAcquisitionFailed(
+                    "timed out after \(budget)s waiting for lock")
+            }
+            usleep(50_000)
         }
     }
 

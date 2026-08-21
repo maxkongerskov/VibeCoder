@@ -27,6 +27,27 @@ final class RemoteControlServerAuthTests: XCTestCase {
 
     // MARK: - Tests
 
+    /// LAN remote control is shut down: `start()` must not bind or publish
+    /// a session URL even when the UI still calls it.
+    func testStartRefusesAndDoesNotBindOrPublishURL() async throws {
+        XCTAssertFalse(RemoteControlServer.isEnabled)
+        let server = RemoteControlServer()
+        do {
+            _ = try await server.start(port: 18765, lifetime: 120)
+            XCTFail("start() must throw .disabled")
+        } catch let err as RemoteControlServer.ServerError {
+            XCTAssertEqual(err, .disabled)
+        }
+        let running = await server.isRunning()
+        let token = await server.currentToken()
+        let url = await server.sessionURL(hostAddress: "192.168.1.10")
+        let port = await server.currentPort()
+        XCTAssertFalse(running)
+        XCTAssertNil(token)
+        XCTAssertNil(url)
+        XCTAssertEqual(port, 18765)
+    }
+
     /// Test 1: When no password is set, the auth gate allows unauthenticated access.
     /// The store reports isSet()=false and issueSessionCookie returns empty.
     func testPasswordNotSetAllowsUnauthenticatedAccess() async throws {

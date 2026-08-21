@@ -270,6 +270,11 @@ final class SchedulerServiceTests: XCTestCase {
 
 final class JobMonitorTests: XCTestCase {
 
+    override func tearDown() {
+        failClosedTearDownLeftovers()
+        super.tearDown()
+    }
+
     func testFormatEmptyListIsHonest() {
         let text = JobMonitor.formatList([])
         XCTAssertTrue(text.contains("none running"))

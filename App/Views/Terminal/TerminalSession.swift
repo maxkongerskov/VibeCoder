@@ -347,7 +347,7 @@ final class TerminalSession: ObservableObject {
         rows = grid.rows
         emulator.resize(columns: columns, rows: rows)
         pty.resize(columns: columns, rows: rows)
-        refreshDisplay()
+        schedulePaint()
     }
 
     func refreshDisplay() {
@@ -404,6 +404,12 @@ final class TerminalSession: ObservableObject {
         // TUI apps (Grok Build) emit many PTY chunks per frame; paint once
         // per turn of the main run loop so the dock does not rebuild the
         // attributed string for every 4 KB read.
+        schedulePaint()
+    }
+
+    /// Hop off the current view-update so `@Published display` is not
+    /// written during `body` / `updateNSView`.
+    private func schedulePaint() {
         if displayPending { return }
         displayPending = true
         DispatchQueue.main.async { [weak self] in

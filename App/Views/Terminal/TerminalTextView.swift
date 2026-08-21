@@ -103,12 +103,16 @@ struct TerminalTextView: NSViewRepresentable {
     }
 
     private func applyChrome(scroll: NSScrollView, text: NSTextView) {
-        let bg = NSColor(Theme.Palette.subtle)
+        let bg = TerminalMetrics.canvasColor
         scroll.backgroundColor = bg
         scroll.drawsBackground = true
         text.backgroundColor = bg
         text.drawsBackground = true
-        text.insertionPointColor = NSColor(Theme.Palette.primary)
+        text.insertionPointColor = TerminalMetrics.textColor
+        text.selectedTextAttributes = [
+            .backgroundColor: TerminalMetrics.selectionColor,
+            .foregroundColor: TerminalMetrics.textColor,
+        ]
     }
 
     private static func isNearBottom(_ scroll: NSScrollView) -> Bool {

@@ -17,7 +17,7 @@
 // SwiftUI's own `Color.divider` symbol used in framework views; reach for
 // `Theme.Palette.divider` directly at call sites instead.
 
-import SwiftUI
+@preconcurrency import SwiftUI
 import AppKit
 
 extension Color {

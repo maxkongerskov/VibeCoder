@@ -58,10 +58,9 @@ final class ScheduledTasksViewModel: ObservableObject {
             ?? AppSupport.file("scheduledTaskArchive.json")
 
         Task { [weak self] in
-            guard let self else { return }
-            await self.refresh()
-            await self.store.startWatching { [weak self] fresh in
-                await MainActor.run {
+            await self?.refresh()
+            await self?.store.startWatching { [weak self] fresh in
+                Task { @MainActor [weak self] in
                     self?.tasks = fresh
                 }
             }

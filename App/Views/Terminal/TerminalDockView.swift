@@ -24,12 +24,14 @@ struct TerminalDockHost: View {
             visible.toggle()
         }
         .onChange(of: visible) { _, shown in
-            if shown {
+            guard shown else { return }
+            DispatchQueue.main.async {
                 session.ensureStarted(cwd: cwd)
             }
         }
         .onChange(of: cwdIdentity) { _, _ in
-            if visible || session.isAlive {
+            guard visible || session.isAlive else { return }
+            DispatchQueue.main.async {
                 session.adoptCWD(cwd)
             }
         }
@@ -66,7 +68,7 @@ struct TerminalDockView: View {
             resizeHandle
             header
             Rectangle()
-                .fill(Theme.Palette.divider)
+                .fill(TerminalMetrics.tabBarDivider)
                 .frame(height: 1)
             TerminalTextView(
                 attributed: session.display,
@@ -79,44 +81,46 @@ struct TerminalDockView: View {
         }
         .frame(height: CGFloat(TerminalDockStorage.clampHeight(height)))
         .frame(maxWidth: .infinity)
-        .background(Theme.Palette.subtle)
+        .background(Color(nsColor: TerminalMetrics.canvasColor))
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(Theme.Palette.divider)
+                .fill(TerminalMetrics.tabBarDivider)
                 .frame(height: 1)
         }
         .onAppear {
             session.ensureStarted(cwd: cwd)
         }
         .onChange(of: colorScheme) { _, _ in
-            session.refreshDisplay()
+            DispatchQueue.main.async {
+                session.refreshDisplay()
+            }
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Terminal")
     }
 
     private var header: some View {
-        HStack(spacing: Theme.Spacing.s) {
-            Text("Terminal")
-                .font(Theme.Typography.captionSemi)
-                .foregroundStyle(Theme.Palette.primary)
-            Text(cwd.lastPathComponent)
-                .font(Theme.Typography.monoSmall)
-                .foregroundStyle(Theme.Palette.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            if !session.isAlive {
-                Text("exited")
-                    .font(Theme.Typography.caption)
-                    .foregroundStyle(Theme.Palette.tertiary)
+        HStack(spacing: 0) {
+            HStack(spacing: 6) {
+                Text(cwd.lastPathComponent)
+                    .font(.system(size: 11, weight: .medium, design: .default))
+                    .foregroundStyle(TerminalMetrics.chromeInk)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if !session.isAlive {
+                    Text("exited")
+                        .font(.system(size: 11))
+                        .foregroundStyle(TerminalMetrics.chromeSecondary)
+                }
             }
-            Spacer(minLength: Theme.Spacing.s)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 5)
+            Spacer(minLength: 8)
             if session.isAlive {
                 headerIconButton(
                     systemName: "stop.circle",
                     help: "Kill",
-                    enabled: true,
-                    accent: true
+                    enabled: true
                 ) {
                     session.terminate()
                 }
@@ -125,25 +129,23 @@ struct TerminalDockView: View {
                 headerIconButton(
                     systemName: "arrow.clockwise",
                     help: "Restart",
-                    enabled: true,
-                    accent: false
+                    enabled: true
                 ) {
                     session.restart()
                 }
                 .accessibilityLabel("Restart terminal")
             }
             headerIconButton(
-                systemName: "chevron.down",
+                systemName: "xmark",
                 help: "Hide",
-                enabled: true,
-                accent: true
+                enabled: true
             ) {
                 NotificationCenter.default.post(name: .toggleTerminalRequested, object: nil)
             }
             .accessibilityLabel("Hide terminal")
         }
-        .padding(.horizontal, Theme.Spacing.m)
-        .padding(.vertical, 6)
+        .padding(.trailing, 8)
+        .background(TerminalMetrics.tabBarColor)
     }
 
     private var resizeHandle: some View {
@@ -175,18 +177,17 @@ struct TerminalDockView: View {
         systemName: String,
         help: String,
         enabled: Bool,
-        accent: Bool,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemName)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(
                     enabled
-                        ? (accent ? Theme.Palette.accent : Theme.Palette.secondary)
-                        : Theme.Palette.tertiary.opacity(0.45)
+                        ? TerminalMetrics.chromeSecondary
+                        : TerminalMetrics.chromeSecondary.opacity(0.35)
                 )
-                .frame(width: 22, height: 22)
+                .frame(width: 22, height: 20)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

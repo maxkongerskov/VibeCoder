@@ -6,6 +6,7 @@
 
 import XCTest
 import SwiftUI
+import AgentCore
 @testable import VibeCoderApp
 
 final class MenuChromeUITests: XCTestCase {
@@ -64,5 +65,79 @@ final class MenuChromeUITests: XCTestCase {
         XCTAssertEqual(MenuChrome.toggledSidebarVisibility(.all), .detailOnly)
         XCTAssertEqual(MenuChrome.toggledSidebarVisibility(.detailOnly), .all)
         XCTAssertEqual(MenuChrome.toggledSidebarVisibility(.automatic), .detailOnly)
+    }
+
+    // MARK: - First-run chat routing (no XCUI)
+
+    func testWorkspaceRoutingWaitsForStore() {
+        XCTAssertEqual(
+            WorkspaceChatRouting.decide(
+                conversationsLoaded: false,
+                conversations: [],
+                selectedID: nil
+            ),
+            .waitingForStore
+        )
+        let existing = Conversation()
+        XCTAssertEqual(
+            WorkspaceChatRouting.decide(
+                conversationsLoaded: false,
+                conversations: [existing],
+                selectedID: existing.id
+            ),
+            .waitingForStore,
+            "must not seed or show chat before disk load even if memory has rows"
+        )
+    }
+
+    func testWorkspaceRoutingSeedsFirstTaskWhenStoreEmpty() {
+        XCTAssertEqual(
+            WorkspaceChatRouting.decide(
+                conversationsLoaded: true,
+                conversations: [],
+                selectedID: nil
+            ),
+            .createFirstTask
+        )
+        var archived = Conversation()
+        archived.archived = true
+        XCTAssertEqual(
+            WorkspaceChatRouting.decide(
+                conversationsLoaded: true,
+                conversations: [archived],
+                selectedID: archived.id
+            ),
+            .createFirstTask,
+            "archived-only list is still first-run empty Recents"
+        )
+    }
+
+    func testWorkspaceRoutingShowsSelectedThenFirstVisible() {
+        let a = Conversation()
+        let b = Conversation()
+        XCTAssertEqual(
+            WorkspaceChatRouting.decide(
+                conversationsLoaded: true,
+                conversations: [a, b],
+                selectedID: b.id
+            ),
+            .showChat(b.id)
+        )
+        XCTAssertEqual(
+            WorkspaceChatRouting.decide(
+                conversationsLoaded: true,
+                conversations: [a, b],
+                selectedID: nil
+            ),
+            .showChat(a.id)
+        )
+        XCTAssertEqual(
+            WorkspaceChatRouting.decide(
+                conversationsLoaded: true,
+                conversations: [a, b],
+                selectedID: UUID()
+            ),
+            .showChat(a.id)
+        )
     }
 }

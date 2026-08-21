@@ -58,10 +58,9 @@ final class ProjectsViewModel: ObservableObject {
         )
         self.service = ProjectsService(rootURL: rootFolderURL)
         Task { [weak self] in
-            guard let self else { return }
-            await self.refresh()
-            await self.service.startWatching { [weak self] fresh in
-                await MainActor.run {
+            await self?.refresh()
+            await self?.service.startWatching { [weak self] fresh in
+                Task { @MainActor [weak self] in
                     self?.projects = fresh
                 }
             }

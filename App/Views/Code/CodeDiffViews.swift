@@ -5,7 +5,7 @@
 //  step-rail activity rows, focused edit cards.
 //
 
-import SwiftUI
+@preconcurrency import SwiftUI
 
 // MARK: - Diff block
 

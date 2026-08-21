@@ -71,6 +71,23 @@ final class TerminalSessionUITests: XCTestCase {
         XCTAssertEqual(TerminalDockStorage.clampHeight(500), 420)
     }
 
+    func testChromeMatchesMacTerminalPro() {
+        XCTAssertEqual(TerminalMetrics.fontSize, 11)
+        XCTAssertEqual(TerminalMetrics.font(bold: false).fontName, "Menlo-Regular")
+        XCTAssertEqual(TerminalMetrics.font(bold: true).fontName, "Menlo-Bold")
+        XCTAssertEqual(TerminalMetrics.canvasColor, .black)
+
+        let appearance = NSAppearance(named: .darkAqua)!
+        let black = TerminalANSIColor.indexed(0, appearance: appearance)
+        let red = TerminalANSIColor.indexed(1, appearance: appearance)
+        XCTAssertEqual(black.redComponent, 0, accuracy: 0.01)
+        XCTAssertEqual(black.greenComponent, 0, accuracy: 0.01)
+        XCTAssertEqual(black.blueComponent, 0, accuracy: 0.01)
+        XCTAssertEqual(red.redComponent, 194 / 255, accuracy: 0.02)
+        XCTAssertEqual(red.greenComponent, 54 / 255, accuracy: 0.02)
+        XCTAssertEqual(red.blueComponent, 33 / 255, accuracy: 0.02)
+    }
+
     func testToggleNotificationNameString() {
         XCTAssertEqual(
             Notification.Name.toggleTerminalRequested.rawValue,

@@ -37,4 +37,120 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         XCTAssertFalse(s.contains("cursor-level"))
         XCTAssertFalse(s.contains("full agentic"))
     }
+
+    func testSettingsSearchHitsConnectionForLocalAPIOllamaXcode() {
+        func hits(_ q: String) -> Bool {
+            SettingsDiscoverabilityCopy.tabMatchesSearch(
+                label: "Connection",
+                subtitle: "Local servers & APIs",
+                rawValue: "connection",
+                query: q
+            )
+        }
+        XCTAssertTrue(hits("local api"))
+        XCTAssertTrue(hits("ollama"))
+        XCTAssertTrue(hits("xcode"))
+        XCTAssertTrue(hits("unsloth"))
+        XCTAssertFalse(
+            SettingsDiscoverabilityCopy.tabMatchesSearch(
+                label: "Agent",
+                subtitle: "Instructions & behavior",
+                rawValue: "agent",
+                query: "ollama"
+            )
+        )
+    }
+
+    func testEmptyChatCopyListsUnslothOnNoBackend() {
+        let title = EmptyChatCopy.title(availableModelsEmpty: true, hasSelectedModel: false)
+        let sub = EmptyChatCopy.subtitle(availableModelsEmpty: true, hasSelectedModel: false)
+        XCTAssertEqual(title, "Connect a model server")
+        XCTAssertTrue(sub.contains("Unsloth"))
+        XCTAssertTrue(sub.contains("LM Studio"))
+        XCTAssertTrue(sub.contains("Ollama"))
+        XCTAssertTrue(sub.contains("oMLX"))
+        XCTAssertTrue(sub.contains("EXO"))
+        XCTAssertFalse(sub.localizedCaseInsensitiveContains("custom"))
+        XCTAssertEqual(
+            EmptyChatCopy.title(availableModelsEmpty: false, hasSelectedModel: false),
+            "Pick a model to start"
+        )
+        XCTAssertEqual(
+            EmptyChatCopy.title(availableModelsEmpty: false, hasSelectedModel: true),
+            "What are we working on?"
+        )
+    }
+
+    func testComposerSendDisabledUntilModelUnlessRunning() {
+        XCTAssertFalse(ComposerSendGate.sendEnabled(hasDraft: true, hasModel: false, isRunning: false))
+        XCTAssertTrue(ComposerSendGate.sendEnabled(hasDraft: true, hasModel: true, isRunning: false))
+        XCTAssertTrue(ComposerSendGate.sendEnabled(hasDraft: true, hasModel: false, isRunning: true))
+        XCTAssertFalse(ComposerSendGate.sendEnabled(hasDraft: false, hasModel: true, isRunning: false))
+    }
+
+    /// F3: loopback "Detected on this Mac" is not a selected model.
+    func testSendDisabledWhenLoopbackDetectedButNoModelSelected() {
+        let ollama = LoopbackDetectTarget.defaults.first { $0.backend == .ollama }!
+        let hits = [LoopbackDetectHit(target: ollama, verdict: .modelsReady)]
+        XCTAssertEqual(hits.first?.verdict, .modelsReady)
+        XCTAssertFalse(
+            ComposerSendGate.sendEnabled(hasDraft: true, hasModel: false, isRunning: false),
+            "detected servers must not enable Send")
+        XCTAssertEqual(
+            EmptyChatCopy.title(availableModelsEmpty: false, hasSelectedModel: false),
+            "Pick a model to start")
+        XCTAssertTrue(
+            EmptyChatCopy.subtitle(availableModelsEmpty: false, hasSelectedModel: false)
+                .localizedCaseInsensitiveContains("model chip"))
+    }
+
+    func testWorktreeBindCopySurfacesSkippedNotGitOnly() {
+        let notice = WorktreeBindCopy.notice(for: .skippedNotGit(path: "/tmp/plain-folder"))
+        XCTAssertEqual(
+            notice,
+            WorktreeError.notAGitRepo("/tmp/plain-folder").errorDescription)
+        XCTAssertTrue(notice?.localizedCaseInsensitiveContains("git") == true)
+        XCTAssertNil(WorktreeBindCopy.notice(for: .unbound))
+        XCTAssertNil(WorktreeBindCopy.notice(for: .skippedOptOut))
+        XCTAssertNil(WorktreeBindCopy.notice(for: .alreadyIsolated))
+        XCTAssertEqual(
+            WorktreeBindCopy.alertTitle(forMessage: WorktreeError.notAGitRepo("/tmp/x").errorDescription),
+            "Worktree")
+        XCTAssertEqual(
+            WorktreeBindCopy.alertTitle(forMessage: "Merge failed: conflict"),
+            "Worktree error")
+    }
+
+    func testWorktreeChromeCopyIsHonest() {
+        XCTAssertEqual(WorktreeChromeCopy.isolate, "Isolate work in git worktree")
+        XCTAssertEqual(WorktreeChromeCopy.review, "Review worktree…")
+        XCTAssertEqual(WorktreeChromeCopy.editMain, "Edit main tree…")
+        XCTAssertEqual(
+            WorktreeChromeCopy.isolatedActions(),
+            [.review, .editMain],
+            "Edit main tree is a distinct action from Review (opt-out, not discard)"
+        )
+    }
+
+    func testComposerTabKeyShiftTabCyclesModeAndDoesNotStealSlashTab() {
+        XCTAssertEqual(
+            ComposerTabKey.action(shift: true, slashMenuVisible: false),
+            .cycleMode
+        )
+        XCTAssertEqual(
+            ComposerTabKey.action(shift: true, slashMenuVisible: true),
+            .cycleMode,
+            "⇧Tab still cycles when the slash menu is open"
+        )
+        XCTAssertEqual(
+            ComposerTabKey.action(shift: false, slashMenuVisible: true),
+            .acceptSlash,
+            "plain Tab is slash-accept, not mode cycle"
+        )
+        XCTAssertEqual(
+            ComposerTabKey.action(shift: false, slashMenuVisible: false),
+            .ignore,
+            "plain Tab without slash menu must not steal focus advance"
+        )
+    }
 }

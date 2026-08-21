@@ -8,7 +8,7 @@
 //  Test button — so it's decoupled from whichever backend drives chat.
 //
 
-import Foundation
+@preconcurrency import Foundation
 import Combine
 import AgentCore
 
