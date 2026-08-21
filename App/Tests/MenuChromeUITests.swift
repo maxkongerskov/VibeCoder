@@ -140,7 +140,6 @@ final class MenuChromeUITests: XCTestCase {
             .showChat(a.id)
         )
     }
-}
 
     // MARK: - Cluster nav (EXO-only)
 
@@ -161,4 +160,4 @@ final class MenuChromeUITests: XCTestCase {
             [.chat, .projects, .models, .cluster, .notes, .scheduled]
         )
     }
-
+}
