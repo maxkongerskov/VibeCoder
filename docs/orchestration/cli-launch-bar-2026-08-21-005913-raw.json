@@ -1,0 +1,156 @@
+[
+  {
+    "name": "F1-help",
+    "argv": [
+      "swift",
+      "run",
+      "--skip-build",
+      "vibecoder",
+      "--help"
+    ],
+    "timeout": 30,
+    "dt": 1.328,
+    "code": 0,
+    "stdout": "usage: vibecoder [chat] [--project PATH] [--backend NAME] [--model ID] [--resume UUID]\nbackends: lmstudio | omlx | ollama | unsloth | exo | custom\ncommands: /help /exit /quit /new\nCtrl+C cancels the current turn (returns to \u203a); at the prompt it exits.\n",
+    "stderr": "",
+    "timed_out": false
+  },
+  {
+    "name": "F1-h",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "-h"
+    ],
+    "timeout": 20,
+    "dt": 0.012,
+    "code": 0,
+    "stdout": "usage: vibecoder [chat] [--project PATH] [--backend NAME] [--model ID] [--resume UUID]\nbackends: lmstudio | omlx | ollama | unsloth | exo | custom\ncommands: /help /exit /quit /new\nCtrl+C cancels the current turn (returns to \u203a); at the prompt it exits.\n",
+    "stderr": "",
+    "timed_out": false
+  },
+  {
+    "name": "F1-help-word",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "help"
+    ],
+    "timeout": 20,
+    "dt": 0.01,
+    "code": 0,
+    "stdout": "usage: vibecoder [chat] [--project PATH] [--backend NAME] [--model ID] [--resume UUID]\nbackends: lmstudio | omlx | ollama | unsloth | exo | custom\ncommands: /help /exit /quit /new\nCtrl+C cancels the current turn (returns to \u203a); at the prompt it exits.\n",
+    "stderr": "",
+    "timed_out": false
+  },
+  {
+    "name": "F1-unknown",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "--nope"
+    ],
+    "timeout": 20,
+    "dt": 0.011,
+    "code": 2,
+    "stdout": "",
+    "stderr": "vibecoder: unknown flag: --nope\nusage: vibecoder [chat] [--project PATH] [--backend NAME] [--model ID] [--resume UUID]\nbackends: lmstudio | omlx | ollama | unsloth | exo | custom\ncommands: /help /exit /quit /new\nCtrl+C cancels the current turn (returns to \u203a); at the prompt it exits.\n",
+    "timed_out": false
+  },
+  {
+    "name": "F2-ollama-down",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "--backend",
+      "ollama",
+      "--project",
+      "/tmp/vc-cli-f2"
+    ],
+    "timeout": 15,
+    "dt": 0.039,
+    "code": 1,
+    "stdout": "",
+    "stderr": "vibecoder: Can't reach Ollama (Could not connect to the server.). Start the server.\n",
+    "timed_out": false
+  },
+  {
+    "name": "F3-ollama-down-model",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "--backend",
+      "ollama",
+      "--model",
+      "qwen",
+      "--project",
+      "/tmp/vc-cli-f3"
+    ],
+    "timeout": 15,
+    "dt": 0.035,
+    "code": 1,
+    "stdout": "",
+    "stderr": "vibecoder: Can't reach Ollama (Could not connect to the server.). Start the server.\n",
+    "timed_out": false
+  },
+  {
+    "name": "B2-mlx",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "--backend",
+      "mlx"
+    ],
+    "timeout": 20,
+    "dt": 0.01,
+    "code": 2,
+    "stdout": "",
+    "stderr": "vibecoder: in-process MLX is a stub and is not shipped. Use lmstudio|omlx|ollama|unsloth|exo|custom\nusage: vibecoder [chat] [--project PATH] [--backend NAME] [--model ID] [--resume UUID]\nbackends: lmstudio | omlx | ollama | unsloth | exo | custom\ncommands: /help /exit /quit /new\nCtrl+C cancels the current turn (returns to \u203a); at the prompt it exits.\n",
+    "timed_out": false
+  },
+  {
+    "name": "R3-missing-resume",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "--backend",
+      "omlx",
+      "--model",
+      "mlx-community--Qwen3-0.6B-4bit",
+      "--project",
+      "/tmp/vc-cli-r3",
+      "--resume",
+      "00000000-0000-0000-0000-000000000000"
+    ],
+    "timeout": 20,
+    "dt": 0.05,
+    "code": 0,
+    "stdout": "\u203a ",
+    "stderr": "resume id not found; starting new conversation\nNot a git repository: /tmp/vc-cli-r3. Worktree mode requires git.\nvibecoder  model=mlx-community--Qwen3-0.6B-4bit  project=/tmp/vc-cli-r3\nType /help. Ctrl+C cancels the current turn (returns to \u203a); at the prompt it exits.\n",
+    "timed_out": false
+  },
+  {
+    "name": "R5-nongit",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "--backend",
+      "omlx",
+      "--model",
+      "mlx-community--Qwen3-0.6B-4bit",
+      "--project",
+      "/tmp/vc-cli-r5-nongit"
+    ],
+    "timeout": 20,
+    "dt": 0.049,
+    "code": 0,
+    "stdout": "\u203a ",
+    "stderr": "Not a git repository: /tmp/vc-cli-r5-nongit. Worktree mode requires git.\nvibecoder  model=mlx-community--Qwen3-0.6B-4bit  project=/tmp/vc-cli-r5-nongit\nType /help. Ctrl+C cancels the current turn (returns to \u203a); at the prompt it exits.\n",
+    "timed_out": false
+  },
+  {
+    "name": "C2-pipe-help",
+    "argv": [
+      "/Users/maxkongerskov/vibecoder/.build/debug/vibecoder",
+      "--help"
+    ],
+    "timeout": 20,
+    "dt": 0.01,
+    "code": 0,
+    "stdout": "usage: vibecoder [chat] [--project PATH] [--backend NAME] [--model ID] [--resume UUID]\nbackends: lmstudio | omlx | ollama | unsloth | exo | custom\ncommands: /help /exit /quit /new\nCtrl+C cancels the current turn (returns to \u203a); at the prompt it exits.\n",
+    "stderr": "",
+    "timed_out": false
+  }
+]
