@@ -55,7 +55,7 @@ The CLI is 99% when **all** cells below are true **and** Rigel has written evide
 | # | Bar | Evidence |
 |---|-----|----------|
 | K1 | SIGINT **during a turn** cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` edit). Returned conversation persists with paired `tool_calls` (same contract as A4) | **Rigel 2026-08-21.** Unit: `CLICancelTests` 3/3 (`testSIGINTMapsToTurnCancelAndPersistsPairedTranscript`, pairing valid). Live PTY: SIGINT during second oMLX turn → `[done] cancelled` then `›`. No `AgentLoop.swift` edit. |
-| K2 | Idle Ctrl+C at `›` **exits the process** (SIGINT not armed) | **Rigel 2026-08-21.** Fresh PTY at `›` (no in-flight turn): `^C` → **signal 2**, process exits (`› ^C`). After mid-turn cancel, a SIGINT during `[done] cancelled` did not exit (handler still armed) — race residual, not idle-at-prompt. |
+| K2 | Idle Ctrl+C at `›` **exits the process** (SIGINT not armed) | **Rigel 2026-08-21.** Fresh PTY at `›` (no in-flight turn): `^C` → **signal 2**, process exits (`› ^C`). **Turnip 2026-08-21:** first SIGINT now restores default disposition immediately (`TurnSIGINTSession.fire` → `restore()`), so a second Ctrl+C during `[done] cancelled` is fatal. `CLICancelTests.testFirstSIGINTRestoresDefaultDisposition` pass. |
 | K3 | TTY shell prompt `[y/n/always]`. `y`/`yes` → once. `always` → durable `ShellApprovalDecision.always`. Empty / `n` / `no` / unknown → **deny** | **Rigel 2026-08-21 00:58.** `CLIApprovalsTests` 10/10: `testParseShellYIsOnce`, `testParseShellAlways`, `testParseShellEmptyAndNDeny`, `testAlwaysPersistsDurableGrant`, `testOnceDoesNotPersistGrant`, `testScriptedEmptyDenies`. |
 | K4 | Patch `[y/n/always]`. `always` → accept + `RememberedGrants.alwaysAllowDirectory` for the common folder. Empty/`n`/unknown → reject all | **Rigel 2026-08-21 00:58.** `testParsePatchFailClosed`, `testPatchAlwaysPersistsDirectoryGrant`, `testPatchEmptyRejectsAndDoesNotGrant`. |
 
@@ -93,7 +93,7 @@ Keep these until the matching cell has evidence. Do not drop.
 | (e) not pushed | P4 | ship gate; Max — **not pushed** (`d08fb28`, 12 ahead) |
 | (f) rail-doc honesty mixed into uncommitted 99% diffs | P3 | **closed on the commit line** (Ada 2026-08-21): CLI sentences live in `eb507a5`; 99% app hunks stay uncommitted |
 
-Also inspect, not a 99% reopen: `--backend mlx` now **refuses** before `›` (B2 live exit 2). F2 down-server no longer `try?` empty-catalog. Live R5 non-git stderr + git `worktreeBranch` recorded. Residual: live F4 PTY log had no CSI because this shell exports `NO_COLOR=1` (Pixel: that is C2, not a miss; public `isatty` paints when `NO_COLOR` is unset). SIGINT during post-cancel `[done] cancelled` did not process-exit.
+Also inspect, not a 99% reopen: `--backend mlx` now **refuses** before `›` (B2 live exit 2). F2 down-server no longer `try?` empty-catalog. Live R5 non-git stderr + git `worktreeBranch` recorded. Residual: live F4 PTY log had no CSI because this shell exports `NO_COLOR=1` (Pixel: that is C2, not a miss; public `isatty` paints when `NO_COLOR` is unset). Post-cancel SIGINT race **closed** (Turnip 2026-08-21): first SIGINT restores default disposition.
 
 ---
 

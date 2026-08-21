@@ -50,28 +50,33 @@ public final class TurnCancelHandle: @unchecked Sendable {
     }
 }
 
-/// SIGINT → `TurnCancelHandle.cancel()`. Idle (disarmed) Ctrl+C keeps
-/// the default terminate-process action.
+/// SIGINT → `TurnCancelHandle.cancel()`, then restore default SIGINT so a
+/// second Ctrl+C during unwind (or at `›`) exits the process (K2).
 public final class TurnSIGINTSession: @unchecked Sendable {
     private let source: DispatchSourceSignal
     private let previous: sig_t?
-    private let onSignal: @Sendable () -> Void
+    private let handle: TurnCancelHandle
     private let lock = NSLock()
     private var restored = false
 
     init(
         source: DispatchSourceSignal,
         previous: sig_t?,
-        onSignal: @escaping @Sendable () -> Void
+        handle: TurnCancelHandle
     ) {
         self.source = source
         self.previous = previous
-        self.onSignal = onSignal
+        self.handle = handle
     }
 
     /// Same path as a delivered SIGINT (tests without a TTY).
     public func deliverForTesting() {
-        onSignal()
+        fire()
+    }
+
+    func fire() {
+        handle.cancel()
+        restore()
     }
 
     public func restore() {
@@ -88,9 +93,10 @@ public final class TurnSIGINTSession: @unchecked Sendable {
 
 public enum TurnSIGINT {
     /// `SIG_IGN` + DispatchSource so the default terminate action does not
-    /// fire. Event handler cancels `handle`. Caller must `restore()`.
+    /// fire. First SIGINT cancels the turn **and** restores the previous
+    /// disposition immediately (second Ctrl+C is fatal). Caller still
+    /// `restore()` on the normal path (idempotent).
     public static func install(cancelling handle: TurnCancelHandle) -> TurnSIGINTSession {
-        let onSignal: @Sendable () -> Void = { handle.cancel() }
         let previous = signal(SIGINT, SIG_IGN)
         let source = DispatchSource.makeSignalSource(
             signal: SIGINT,
@@ -99,10 +105,10 @@ public enum TurnSIGINT {
         let session = TurnSIGINTSession(
             source: source,
             previous: previous,
-            onSignal: onSignal
+            handle: handle
         )
         source.setEventHandler {
-            onSignal()
+            session.fire()
         }
         source.resume()
         return session

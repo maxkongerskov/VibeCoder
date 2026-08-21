@@ -102,6 +102,23 @@ final class CLICancelTests: XCTestCase {
         XCTAssertTrue(error is CancellationError, "expected CancellationError, got \(error)")
     }
 
+    func testFirstSIGINTRestoresDefaultDisposition() {
+        let previous = signal(SIGINT, SIG_DFL)
+        defer { signal(SIGINT, previous) }
+
+        let handle = TurnCancelHandle()
+        let session = TurnSIGINT.install(cancelling: handle)
+        session.deliverForTesting()
+        session.restore()
+
+        let after = signal(SIGINT, SIG_DFL)
+        XCTAssertEqual(
+            unsafeBitCast(after, to: Int.self),
+            unsafeBitCast(SIG_DFL as (@convention(c) (Int32) -> Void)?, to: Int.self),
+            "first SIGINT must restore default disposition so a second Ctrl+C exits"
+        )
+    }
+
     // MARK: - Helpers
 
     private func runHangTurn(
