@@ -6,9 +6,9 @@ Current shipped claims: `ARCHITECTURE.md` §1 / §17. Daily-driver bar: `docs/RE
 
 ## Now (99% batch)
 
-Finish the unpushed local line before new surfaces:
+Slice 0 is unblocked (`ARCHITECTURE-v2.md`). Finish only what that table names:
 
-1. App tests compile on the slash extract (`SlashCommandResult` vs `AgentCore.AgentCore`).
+1. App test bundle compiles (`f7bece1`). Done.
 2. Duplicate-worktree tests match `applyDefaultWorktree` (`agentcore/<copyId>`).
 3. Origin push stays Max (P4).
 

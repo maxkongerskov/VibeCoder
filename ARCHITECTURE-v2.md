@@ -1,53 +1,40 @@
 # ARCHITECTURE v2 — VibeCoder (target)
 
-This is the **target** rail. It is **not** a shipping claim.
+Shipped product: [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1 / §17. Bars: `docs/RELEASE_BAR.md`, `docs/CLI_RELEASE_BAR.md`. Order: [`PLAN.md`](./PLAN.md).
 
-Shipped product stays in [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1 / §17. Daily-driver bar: `docs/RELEASE_BAR.md`. CLI bar: `docs/CLI_RELEASE_BAR.md`. Implementation order: [`PLAN.md`](./PLAN.md).
-
-Do not treat anything below as present in the app until a freeze §17 row says it shipped.
+This file is the CloudBots contract. **§1 of the freeze does not change** until a later §17 row says the slice landed in the app.
 
 ---
 
-## 1. Product (v2 target)
+## Slice 0 — now (thin, not a platform)
 
-**VibeCoder** remains a **MIT** native macOS coding agent: SwiftUI app + `AgentCore` + `vibecoder` REPL. **Not Electron.** BYO OpenAI-compatible HTTP for the in-app loop (LM Studio, oMLX, Ollama, Unsloth Studio, EXO, custom `/v1`). No Sparkle, Sentry, license key, bundled llama.cpp, or in-process MLX.
+App test bundle compiles (`f7bece1`). This cut is unblocked.
 
-**CloudBots** (early / v1 of this surface, **v2 of the product**) are **named cloud teammates** inside the same app: specialists, a shared room, a merge bar. Bound to a git project. Same worktree isolation as the main agent (`<project>-agentcore-<id>` / `agentcore/<id>`, default on bind-git; escape hatch edit main tree; merge user-driven).
+| Who | Ships in this cut |
+|---|---|
+| Atlas | AgentCore **host stub** (named CloudBot handle, no Electron, no marketplace) |
+| Sable | Settings + UI **cloud** label (cannot read as local-first / BYO HTTP) |
+| Mira | Honesty tests: labeled **cloud**; never “nothing leaves your Mac” |
+| Nash | `pr.yml` does **not** phone home |
+| Reed | This slice freeze |
 
-They **may leave the Mac**. Label them **cloud** in Settings, README, and UI. They are **not** a local-inference path and **not** a replacement for BYO HTTP.
+**In:** opt-in CloudBot entry, always labeled **cloud**. Host, not storefront. Default agent stays in-app `AgentLoop` + BYO HTTP. Same worktree rule if a git project is bound (`agentcore/<id>`). MIT. Native SwiftUI + AgentCore.
 
-**Host, not a storefront.** A CloudBot is a tool-using teammate, not a skills marketplace (§10.3 of the freeze still: marketplace is not v1).
+**Out of this cut:** shared room, merge bar, specialist roster, skills marketplace, cloud runtime that replaces local inference, Electron, mlx-swift, llama.cpp, Sparkle, Sentry, license keys, LAN remote, `agentos`.
 
-Default project agent stays the in-app `AgentLoop` against BYO HTTP. CloudBots are **opt-in**.
+## Later (only after slice 0)
 
-## 2. What does not move
+Named specialists, a shared room, a merge bar. Still labeled cloud. Still not a storefront. Still not a local-inference path.
 
-The v1 line still has to compile and honor the 99% bars. CloudBots code does **not** start until App tests compile (`ClusterPaneUITests` and the rest of the unpushed batch). Origin push stays Max.
+## Honesty
 
-Out: Electron, mlx-swift daily driver, bundled llama.cpp, Sparkle, Sentry, license keys, LAN/phone remote control, `agentos` CLI, “nothing leaves your Mac.”
+- Freeze §1 stays BYO HTTP local agent. CloudBots are **not** shipped there.
+- Weights leave the Mac for CloudBots (cloud) and for any remote `/v1` the user sets. Say that.
+- Origin push stays Max.
 
-## 3. Surfaces
-
-| Surface | Runtime | Label |
-|---|---|---|
-| In-app chat / `AgentLoop` | Local BYO HTTP | local (remote `/v1` only if the user points there) |
-| `vibecoder` REPL | Same AgentCore, local | local |
-| Local API loopback | Proxy `tools: []` default; opt-in bounded AgentLoop | local |
-| **CloudBots** | Cloud | **cloud** — always labeled |
-| Skills marketplace | — | not this cut |
-
-Worktrees, PathConfinement, merge/discard UX stay the v1 contract (`RELEASE_BAR` W1–W7). CloudBots bound to a git project get the same isolation; they do not silently edit main.
-
-## 4. Honesty
-
-- Freeze doc §1/§17 remain the source of truth for **what ships today**.
-- This file is what we **aim** at after the 99% compile batch.
-- Mira: tests that CloudBots are labeled cloud; never “nothing leaves your Mac.”
-- Nash: `pr.yml` must not phone home.
-- Reed: no CloudBots architecture claimed as shipped in the freeze.
-
-## 5. Amendments
+## Amendments
 
 | Date | Change | Reason |
 |---|---|---|
-| 2026-08-21 | First draft. CloudBots named cloud teammates; native stack; 99% bars stay on v1. | Max architecture v2; Lead Chief: do not rewrite freeze in place |
+| 2026-08-21 | Slice 0 freeze: stub + cloud label + honesty tests + no CI phone-home. Platform deferred. | Lead Chief: thin slice, not a platform |
+| 2026-08-21 | First draft | Max architecture v2 |
