@@ -45,7 +45,7 @@ final class ClusterPaneUITests: XCTestCase {
 
     func testCommandPaletteClusterItemIsEXOGated() throws {
         let root = try appSource("Views/RootView.swift")
-        guard let itemRange = root.range(of: "id: \\"open-cluster\\"") else {
+        guard let itemRange = root.range(of: "id: \"open-cluster\"") else {
             return XCTFail("RootView palette is missing open-cluster")
         }
         let gateStart = root.index(itemRange.lowerBound, offsetBy: -350, limitedBy: root.startIndex)
@@ -55,9 +55,9 @@ final class ClusterPaneUITests: XCTestCase {
             gateWindow.contains("app.settings.backend == .exo"),
             "open-cluster must be appended only when EXO is selected"
         )
-        XCTAssertTrue(root.contains("title: \\"Cluster\\""))
+        XCTAssertTrue(root.contains("title: \"Cluster\""))
         XCTAssertTrue(root.contains("EXO topology (/state) and pin Model ID"))
-        guard let run = root.range(of: "case \\"open-cluster\\":") else {
+        guard let run = root.range(of: "case \"open-cluster\":") else {
             return XCTFail("palette runner missing open-cluster")
         }
         let runEnd = root.index(run.upperBound, offsetBy: 80, limitedBy: root.endIndex) ?? root.endIndex
@@ -103,7 +103,7 @@ final class ClusterPaneUITests: XCTestCase {
         XCTAssertTrue(clusterVM.contains("fetchTopology"), "topology comes from EXOBackend.fetchTopology")
         XCTAssertTrue(clusterVM.contains("fetchCatalog"), "catalog is GET /models")
         XCTAssertTrue(clusterView.contains("app.pinEXOModel(model.id)"), "Pin copies Model ID into settings")
-        XCTAssertTrue(clusterView.contains("Text(\\"Pin\\")"))
+        XCTAssertTrue(clusterView.contains("Text(\"Pin\")"))
         XCTAssertTrue(
             clusterView.contains("You load models in EXO itself — Pin just copies")
                 || clusterView.contains("Pin this as the EXO Model ID"),
@@ -111,16 +111,16 @@ final class ClusterPaneUITests: XCTestCase {
         )
 
         for (name, src) in [("ClusterView", clusterView), ("ClusterViewModel", clusterVM)] {
-            XCTAssertFalse(src.contains("httpMethod"), "\\(name) must not set HTTP methods")
-            XCTAssertFalse(src.contains("\\"POST\\""), "\\(name) is not a write client")
-            XCTAssertFalse(src.contains("\\"PUT\\""), "\\(name) is not a write client")
-            XCTAssertFalse(src.contains("\\"DELETE\\""), "\\(name) is not a write client")
-            XCTAssertFalse(src.contains("startInstance"), "\\(name) must not start cluster nodes")
-            XCTAssertFalse(src.contains("stopInstance"), "\\(name) must not stop cluster nodes")
-            XCTAssertFalse(src.contains("/start"), "\\(name) must not hit start endpoints")
-            XCTAssertFalse(src.contains("/stop"), "\\(name) must not hit stop endpoints")
-            XCTAssertFalse(src.contains("loadModel"), "\\(name) must not load on the cluster")
-            XCTAssertFalse(src.contains("unloadModel"), "\\(name) must not unload on the cluster")
+            XCTAssertFalse(src.contains("httpMethod"), "\(name) must not set HTTP methods")
+            XCTAssertFalse(src.contains("\"POST\""), "\(name) is not a write client")
+            XCTAssertFalse(src.contains("\"PUT\""), "\(name) is not a write client")
+            XCTAssertFalse(src.contains("\"DELETE\""), "\(name) is not a write client")
+            XCTAssertFalse(src.contains("startInstance"), "\(name) must not start cluster nodes")
+            XCTAssertFalse(src.contains("stopInstance"), "\(name) must not stop cluster nodes")
+            XCTAssertFalse(src.contains("/start"), "\(name) must not hit start endpoints")
+            XCTAssertFalse(src.contains("/stop"), "\(name) must not hit stop endpoints")
+            XCTAssertFalse(src.contains("loadModel"), "\(name) must not load on the cluster")
+            XCTAssertFalse(src.contains("unloadModel"), "\(name) must not unload on the cluster")
         }
     }
 
@@ -129,7 +129,7 @@ final class ClusterPaneUITests: XCTestCase {
         let coord = BackendConnectionCoordinator()
         coord.pinEXOModel("  mlx-community/MiniMax-M2.7-4bit  ")
         XCTAssertEqual(coord.selectedModelID, "mlx-community/MiniMax-M2.7-4bit")
-        XCTAssertEqual(coord.availableModels.map(\\.id), ["mlx-community/MiniMax-M2.7-4bit"])
+        XCTAssertEqual(coord.availableModels.map(\.id), ["mlx-community/MiniMax-M2.7-4bit"])
         XCTAssertEqual(coord.availableModels.first?.backend, .exo)
     }
 
@@ -137,7 +137,7 @@ final class ClusterPaneUITests: XCTestCase {
     func testPinEXOModelIgnoresBlank() {
         let coord = BackendConnectionCoordinator()
         coord.selectedModelID = "keep"
-        coord.pinEXOModel("   \\n")
+        coord.pinEXOModel("   \n")
         XCTAssertEqual(coord.selectedModelID, "keep")
         XCTAssertTrue(coord.availableModels.isEmpty)
     }
@@ -146,13 +146,13 @@ final class ClusterPaneUITests: XCTestCase {
 
     func testClusterViewHasNoStartStopLoadUnloadControls() throws {
         let view = try appSource("Views/Cluster/ClusterView.swift")
-        XCTAssertFalse(view.contains("Text(\\"Start\\")"))
-        XCTAssertFalse(view.contains("Text(\\"Stop\\")"))
-        XCTAssertFalse(view.contains("Text(\\"Unload\\")"))
-        XCTAssertFalse(view.contains("Text(\\"Load\\")"))
-        XCTAssertFalse(view.contains("Text(\\"Use on cluster\\")"))
+        XCTAssertFalse(view.contains("Text(\"Start\")"))
+        XCTAssertFalse(view.contains("Text(\"Stop\")"))
+        XCTAssertFalse(view.contains("Text(\"Unload\")"))
+        XCTAssertFalse(view.contains("Text(\"Load\")"))
+        XCTAssertFalse(view.contains("Text(\"Use on cluster\")"))
         XCTAssertEqual(
-            view.components(separatedBy: "Text(\\"Pin\\")").count - 1,
+            view.components(separatedBy: "Text(\"Pin\")").count - 1,
             1,
             "only the Pin control should be a labeled action"
         )
@@ -167,7 +167,7 @@ final class ClusterPaneUITests: XCTestCase {
             "RemoteControlSheet.swift leftover must be deleted"
         )
         let found = leftoverRemoteControlSheets(under: appRoot.appendingPathComponent("Views"))
-        XCTAssertTrue(found.isEmpty, "RemoteControlSheet.swift still on disk: \\(found)")
+        XCTAssertTrue(found.isEmpty, "RemoteControlSheet.swift still on disk: \(found)")
 
         let root = try appSource("Views/RootView.swift")
         XCTAssertFalse(root.contains("RemoteControlSheet"))
