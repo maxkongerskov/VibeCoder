@@ -19,8 +19,8 @@
 # Exit non-zero on unit failure, harness failure, or baseline regression.
 # Evals/baseline.json stays T0-only (000-harness-alive). 012 and 013 are
 # --strict without --baseline so tool-using tasks cannot regress the T0 ratchet.
-# 012/013 mock scripts are optional until present in-tree. Skip those cells if
-# the JSON is missing; T0 still required. Do not fail a clean tree on them.
+# 012/013 mock scripts are in-tree and required. Missing JSON fails the job.
+# They are mock-only, not live-backend proof.
 
 set -euo pipefail
 
@@ -144,6 +144,14 @@ fi
 
 SCRIPT_012="$ROOT/Evals/support/scripts/012-write-file.json"
 SCRIPT_013="$ROOT/Evals/support/scripts/013-apply-patch.json"
+if [[ ! -f "$SCRIPT_012" ]]; then
+  echo "012 mock script missing: $SCRIPT_012" >&2
+  exit 1
+fi
+if [[ ! -f "$SCRIPT_013" ]]; then
+  echo "013 mock script missing: $SCRIPT_013" >&2
+  exit 1
+fi
 
 start_mock() {
   local script_path="${1:-}"
@@ -198,24 +206,16 @@ run_mock_eval 000 5 --baseline "$BASELINE"
 # eval.sh stamps results with second resolution; wait so T0 JSON is not overwritten.
 sleep 1
 
-if [[ -f "$SCRIPT_012" ]]; then
-  echo "==> [ci-pr] restart mock with 012 write_file script"
-  start_mock "$SCRIPT_012"
-  echo "==> [ci-pr] mock A1 eval (filter 012) --strict (no baseline; T0-only ratchet)"
-  run_mock_eval 012 8
-else
-  echo "==> [ci-pr] skip 012 — mock script not in tree ($SCRIPT_012)"
-fi
+echo "==> [ci-pr] restart mock with 012 write_file script"
+start_mock "$SCRIPT_012"
+echo "==> [ci-pr] mock A1 eval (filter 012) --strict (no baseline; T0-only ratchet)"
+run_mock_eval 012 8
 
 sleep 1
 
-if [[ -f "$SCRIPT_013" ]]; then
-  echo "==> [ci-pr] restart mock with 013 apply_patch script"
-  start_mock "$SCRIPT_013"
-  echo "==> [ci-pr] mock A2 eval (filter 013) --strict (no baseline; T0-only ratchet)"
-  run_mock_eval 013 8
-else
-  echo "==> [ci-pr] skip 013 — mock script not in tree ($SCRIPT_013)"
-fi
+echo "==> [ci-pr] restart mock with 013 apply_patch script"
+start_mock "$SCRIPT_013"
+echo "==> [ci-pr] mock A2 eval (filter 013) --strict (no baseline; T0-only ratchet)"
+run_mock_eval 013 8
 
-echo "✓ ci-pr done (unit + T0 ratchet + 012/013 if in-tree)"
+echo "✓ ci-pr done (unit + T0 ratchet + 012 write_file + 013 apply_patch)"
