@@ -15,7 +15,7 @@ Four locked decisions, updated to what 1.0.5 actually ships:
 1. **Visual density: Claude.ai-spacious.** Generous whitespace, comfortable line height, large-ish text. Calm enough for 4-hour sessions. Built for big screens; graceful at the 960 × 620 minimum.
 2. **Aesthetic: polished + warm.** System typography (SF Pro for UI and prose, SF Mono for code/data), one signature orange, subtle decorative touches only when they communicate something. Not minimalist-cold, not consumer-busy. Voice: “the senior engineer who keeps their workspace nice.”
 3. **Color: single accent + neutrals.** One orange accent (§2.3). Grayscale everywhere else. Semantic green/red/amber/blue reserved for status. Dark-mode parity is enforced — every token has both appearances.
-4. **Animation: restrained delight.** Functional motion as the baseline; signature moments only where they communicate state (shimmer on “Working…”, send-circle fill). 150–300 ms easeOut for most, spring for pulses. **Reduced-motion respect is an open item** — tokens exist; the app does not yet query `accessibilityDisplayShouldReduceMotion`.
+4. **Animation: restrained delight.** Functional motion as the baseline; signature moments only where they communicate state (shimmer on “Working…”, send-circle fill). 150–300 ms easeOut for most, spring for pulses. **Reduced motion:** `Theme.Motion` tokens query `NSWorkspace.accessibilityDisplayShouldReduceMotion` and collapse to zero-duration when set.
 
 The principles that fall out:
 

@@ -238,8 +238,9 @@ final class ConversationCoordinator: ObservableObject {
         guard let source = conversations.first(where: { $0.id == id }) else { return }
         // Copy session metadata users expect to keep: pin, deferred tools,
         // sampling, rail pref. Do NOT copy archived (a duplicate should appear
-        // in the sidebar). Do not share the source worktree branch — bind
-        // creates a fresh `agentcore/<copyId>` worktree when the source is git.
+        // in the sidebar). Do not share the source worktree branch or opt-out:
+        // RELEASE_BAR contract 4 — git `projectRoot` gets the default isolation
+        // rule via `applyDefaultWorktree` (fresh `agentcore/<copyId>`).
         var copy = Conversation(
             id: UUID(),
             title: source.title.isEmpty ? "Untitled (copy)" : "\(source.title) (copy)",

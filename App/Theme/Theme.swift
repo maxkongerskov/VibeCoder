@@ -338,16 +338,25 @@ enum Theme {
     // MARK: - Motion (UI_DESIGN.md §2.5)
 
     enum Motion {
+        /// Instant when the user asked for reduced motion; otherwise `base`.
+        private static func motion(_ base: Animation) -> Animation {
+            NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                ? .linear(duration: 0)
+                : base
+        }
+
         /// 150 ms easeOut — hover, focus, button press.
-        static let quick    = Animation.easeOut(duration: 0.15)
+        static var quick: Animation { motion(.easeOut(duration: 0.15)) }
         /// 250 ms easeOut — sheets, sidebar selection, tab switch.
-        static let standard = Animation.easeOut(duration: 0.25)
+        static var standard: Animation { motion(.easeOut(duration: 0.25)) }
         /// 300 ms easeInOut — disclosure, patch hunk reveal.
-        static let gentle   = Animation.easeInOut(duration: 0.30)
+        static var gentle: Animation { motion(.easeInOut(duration: 0.30)) }
         /// Spring — chip pulse, build pass.
-        static let pulse    = Animation.spring(response: 0.4, dampingFraction: 0.65, blendDuration: 0)
+        static var pulse: Animation {
+            motion(.spring(response: 0.4, dampingFraction: 0.65, blendDuration: 0))
+        }
         /// Per-token stream — 80 ms easeOut.
-        static let stream   = Animation.easeOut(duration: 0.08)
+        static var stream: Animation { motion(.easeOut(duration: 0.08)) }
     }
 }
 

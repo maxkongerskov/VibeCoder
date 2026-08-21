@@ -104,7 +104,7 @@ Write results under `docs/orchestration/` or `Evals/results/` with date. A score
 1. `ConversationCoordinator.newConversation(in:)`
 2. `ConversationCoordinator.moveConversationToProject` when the new project is non-nil
 3. `ConversationListViewModel.newConversation(..., projectRoot:)`
-4. Duplicate of a conversation that has a `projectRoot` (today `worktreeBranch` is forced `nil` — **change that** to the default rule)
+4. Duplicate of a conversation that has a `projectRoot` → default worktree rule (`ConversationCoordinator.duplicateConversation` → `applyDefaultWorktree`). Fresh `agentcore/<copyId>`; does not share the source branch. Dead `ConversationListViewModel.duplicate` removed.
 5. Scheduled task with a `projectFolder` that is a git repo (headless still isolates)
 
 **Do not fire** on: every `send`, conversation reload, Local API agent-loop (stays bound-project + PathConfinement), or a conversation whose user chose **Edit main tree**.
@@ -150,7 +150,7 @@ BLOCKERS: …
 NEXT_ASSIGNMENT: …
 ```
 
-**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts. Those cells are filled (2026-08-20; L2 named live POST 2026-08-21). Accepted residuals (not 99% gates): no in-app window / live model server; no ⌘Q or SIGKILL; no mid-stream persist checkpoint; 012/013 mock-worker only (not a real model). Cluster/worktree App tests landed: `ClusterPaneUITests`, `WorktreeReviewSheetTests` (e72a114) — characterization, not XCUI; GHA `SKIP_APP_TESTS=1` (local App tests WARN unless `APP_TESTS_STRICT=1`) so they do not gate CI. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` is a dead leftover (zero callers) — not a gate.
+**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts. Those cells are filled (2026-08-20; L2 named live POST 2026-08-21). Accepted residuals (not 99% gates): no in-app window / live model server; no ⌘Q or SIGKILL; no mid-stream persist checkpoint; 012/013 mock-worker only (not a real model). Cluster/worktree App tests landed: `ClusterPaneUITests`, `WorktreeReviewSheetTests` (e72a114) — characterization, not XCUI; GHA `SKIP_APP_TESTS=1` (local App tests WARN unless `APP_TESTS_STRICT=1`) so they do not gate CI. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
 
 ### Five-way (2026-08-21)
 

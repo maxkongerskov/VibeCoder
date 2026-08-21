@@ -121,35 +121,6 @@ final class ConversationListViewModel: ObservableObject {
         conversations.sort { $0.updatedAt > $1.updatedAt }
     }
 
-    /// Duplicate a conversation. The copy starts fresh (new id, "(copy)"
-    /// suffix on the title, current timestamps). Keeps pin / deferred tools
-    /// (C2 parity with ConversationCoordinator.duplicateConversation).
-    @discardableResult
-    func duplicate(_ conversation: Conversation) -> Conversation {
-        // `Conversation.id` is `let`, so we have to build a new
-        // value-init'd copy rather than mutate in place.
-        let copy = Conversation(
-            id: UUID(),
-            title: conversation.title + " (copy)",
-            createdAt: Date(),
-            updatedAt: Date(),
-            messages: conversation.messages,
-            modelID: conversation.modelID,
-            projectRoot: conversation.projectRoot,
-            worktreeBranch: nil,                         // copy starts off any worktree
-            systemPromptOverride: conversation.systemPromptOverride,
-            samplingOverride: conversation.samplingOverride,
-            unlockedDeferredTools: conversation.unlockedDeferredTools,
-            pinned: conversation.pinned,
-            archived: false,
-            railUserPreference: conversation.railUserPreference
-        )
-        conversations.insert(copy, at: 0)
-        selectedConversationID = copy.id
-        persistSnapshotInBackground(copy, context: "duplicate")
-        return copy
-    }
-
     /// Rename a conversation. Persists the new title and re-sorts.
     func rename(_ conversation: Conversation, to newTitle: String) {
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)

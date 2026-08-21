@@ -420,6 +420,41 @@ final class BugHuntViewModelsTests: XCTestCase {
             "fork/duplicate must keep sticky context pins")
     }
 
+    /// RELEASE_BAR contract 4: duplicate of a git-bound conversation gets a
+    /// fresh worktree, not `worktreeBranch: nil` and not the source branch.
+    func testDuplicateGitBoundConversationGetsDefaultWorktree() throws {
+        let project = try makeGitRepo(prefix: "dup-default-wt")
+        defer { try? FileManager.default.removeItem(at: project) }
+
+        let app = makeApp()
+        var source = Conversation(title: "isolated")
+        source.projectRoot = project
+        source.worktreeBranch = "agentcore/sourceid"
+        app.conversationsCoordinator.host = app
+        app.conversations = [source]
+        app.duplicateConversation(source.id)
+
+        let copy = app.conversations.first { $0.id != source.id }
+        XCTAssertNotNil(copy)
+        XCTAssertEqual(copy?.projectRoot?.path, project.path)
+        XCTAssertNotNil(copy?.worktreeBranch, "git duplicate must isolate by default")
+        XCTAssertNotEqual(
+            copy?.worktreeBranch, source.worktreeBranch,
+            "copy must not share the source worktree branch")
+        XCTAssertFalse(copy?.worktreeOptOut ?? true)
+        XCTAssertTrue(
+            copy?.worktreeBranch?.hasPrefix("agentcore/") == true,
+            "got \(copy?.worktreeBranch ?? "nil")")
+        if let copy, let branch = copy.worktreeBranch {
+            let short = WorktreeService.conversationShortId(from: copy.id)
+            let path = project.path + "-agentcore-" + short
+            try? WorktreeService.discard(
+                worktreePath: path,
+                branch: branch,
+                projectFolder: project.path)
+        }
+    }
+
     // MARK: 6 — /clear leaves plan approval chrome
 
     func testClearRemovesPlanSnapshot() {
