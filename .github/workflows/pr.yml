@@ -7,6 +7,10 @@
 # Do not set USE_EVAL_GATE=1 here (that replaces the full suite).
 # baseline.json stays T0-only; 012/013 are --strict without --baseline.
 # 012/013 mock scripts are in-tree and required; missing JSON fails the job.
+#
+# Slice 0 (ARCHITECTURE-v2.md): this workflow does not phone home.
+# No CloudBots, Sentry, telemetry, or non-loopback HTTP from CI.
+# Mock evals in ci-pr.sh hit 127.0.0.1 only.
 name: PR
 
 on:
