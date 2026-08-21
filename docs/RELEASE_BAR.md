@@ -29,7 +29,7 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 | F1 | Cold launch, **no** wizard, lands on main UI | **Unit, not launched:** `VibeCoderApp` force-sets `hasCompletedOnboarding`. `WorkspaceChatRouting` wait→seed→showChat — `MenuChromeUITests` 10/10 (2026-08-20 Rigel xcodebuild). No screenshot. |
 | F2 | Server **down** → empty chat tells the user to start a local server (all live HTTP backends named, including Unsloth) and Send is not a silent no-op | **Unit:** `SettingsDiscoverabilityCopyTests.testEmptyChatCopyListsUnslothOnNoBackend` (LM Studio/Ollama/oMLX/Unsloth) + `testComposerSendDisabledUntilModelUnlessRunning` pass. `BugHuntViewModelsTests.testEnsureFirstConversationWaitsForStoreThenSeedsOnce` pass. App not launched. |
 | F3 | Server **up**, no model → pick a model (composer chip / Connection Test) | **Copy only:** same EmptyChatCopy test → title `"Pick a model to start"`. No live server. |
-| F4 | Server up + model selected → first user turn streams tokens | **PASS-with-eval-runner (Ada 2026-08-20).** 99% does **not** require an in-app window. The first turn that streams is `InferenceBackend.stream` → `AgentLoop` — same path as `eval-runner`. Proven by mock A1/A2: `Evals/results/2026-08-20-091027-mock-mock-worker.json` (012 `write_file` pass, 1 tool) and `Evals/results/2026-08-20-091614-mock-mock-worker.json` (013 `apply_patch` pass, 2 tools), wired in `scripts/ci-pr.sh`. SwiftUI token paint is a **manual residual** when a local server is up — not a 99% gate. No LM Studio/Ollama on this machine. |
+| F4 | Server up + model selected → first user turn streams tokens | **Mock-worker, not a live model (3487777).** 99% does **not** require an in-app window. Stream path is `InferenceBackend.stream` → `AgentLoop` (same as `eval-runner`). 012/013 are in-tree mock scripted cells (`Evals/support/scripts/012-write-file.json`, `013-apply-patch.json`); Nash runs them in `scripts/ci-pr.sh`. Artifacts `Evals/results/2026-08-20-091027-mock-mock-worker.json` (012, 1 `write_file`) and `Evals/results/2026-08-20-091614-mock-mock-worker.json` (013, 2 tools). **Not** live-backend proof. **Not** in-app chat. SwiftUI token paint is a **manual residual** when a local server is up — not a 99% gate. No LM Studio/Ollama on this machine. |
 
 ### Local backends
 
@@ -44,8 +44,8 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| A1 | One turn: model → tool call → tool result → model continues | **In ci-pr (2026-08-20):** `SKIP_UNIT=1 SKIP_APP_TESTS=1 FORCE_REBUILD_EVAL=0 ./scripts/ci-pr.sh` — T0 000 pass (0 tools, baseline) then 012 pass (1 `write_file`). `Evals/results/2026-08-20-091027-mock-mock-worker.json`. **Not in-app chat.** |
-| A2 | `edit_file` / `apply_patch` changes a file the user can open | **In ci-pr (2026-08-20):** `SKIP_UNIT=1 SKIP_APP_TESTS=1 FORCE_REBUILD_EVAL=0 ./scripts/ci-pr.sh` — 013 pass, 2 tools (`read_file`+`apply_patch`). `Evals/results/2026-08-20-091614-mock-mock-worker.json`. **Not in-app.** |
+| A1 | One turn: model → tool call → tool result → model continues | **Mock-worker 012 (3487777), not live-backend / not in-app.** In-tree `Evals/support/scripts/012-write-file.json`; Nash `ci-pr.sh` (T0 then 012). Artifact `Evals/results/2026-08-20-091027-mock-mock-worker.json` (1 `write_file`). Historical `SKIP_UNIT=1 SKIP_APP_TESTS=1` local `ci-pr.sh` is eval-only — does not prove the SwiftUI turn. |
+| A2 | `edit_file` / `apply_patch` changes a file the user can open | **Mock-worker 013 (3487777), not live-backend / not in-app.** In-tree `Evals/support/scripts/013-apply-patch.json`; Nash `ci-pr.sh`. Artifact `Evals/results/2026-08-20-091614-mock-mock-worker.json` (2 tools: `read_file`+`apply_patch`). Historical `SKIP_APP_TESTS=1` local runs are eval-only. |
 | A3 | `verifyEdits` default on: BuildGuard skip (no build system) or pass/fail inject, no hang | **PASS (Ada 2026-08-20).** `AppSettings.verifyEdits` default true; `AgentRunBootstrap` passes it through. Skip: `BuildGuardVerifyEditsTests.testVerifyNoBuildSystemInEmptyDir`. Fail inject: `AgentLoopFixesTests.testBuildGuardFailureProducesSingleTranscriptMessage` (broken Package.swift → one user-role BuildGuard reminder). Wire-only not in transcript. No live xcodebuild hang test. |
 | A4 | Cancel (⌘.) returns a persistable partial turn (no dangling `tool_calls`) | **PASS-with-unit (Ada 2026-08-20, same bar as F4).** `AgentLoopCancelPersistTests.testCancelMidToolPersistsPairedTranscript`: cancel while a mutator hangs; `ConversationStore.save` then `load`; `toolCallPairingIsValid`; no unclosed ids; hang + leftover `list_directory` both have tool results. Same store as ChatViewModel. Not in-app ⌘. |
 | A5 | Safe/Ask/Plan modes still fail closed (no YOLO-by-default) | existing executionMode default `.build` |
@@ -58,7 +58,7 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 | W2 | Main checkout files at HEAD are **unchanged** until the user merges | **Pass (2026-08-20):** `W13PathWorktreeGitTests.testWorktreeMutationDoesNotDirtyMain` — `write_file` lands in worktree; main has no file; `git status --porcelain` in main has no marker. Not a user-repo eval. |
 | W3 | Bind a **non-git** folder → no worktree, bind still succeeds, user-visible reason, edits go to `projectRoot` | **PASS (Ada 2026-08-20).** Bind succeeds, `worktreeBranch` nil (`testBindNonGitFolderDoesNotTrapAndLeavesWorktreeOff`). `WorktreeBindResult.userVisibleReason` = `notAGitRepo`. `ConversationCoordinator.applyDefaultWorktree` sets `host.worktreeError`. ChatView `.alert("Worktree error")`. |
 | W4 | Dirty main tree does **not** block create; worktree is `HEAD`, uncommitted main files stay in main | **PASS (Ada 2026-08-20).** `testDirtyMainDoesNotBlockWorktreeCreate`: untracked `uncommitted-main.txt` + modified `README.md` in main → bind `.enabled`; untracked absent from worktree; worktree README is HEAD (`readme`); main README stays `readme dirty`; porcelain still lists both. |
-| W5 | Merge / discard are **explicit user actions**. No auto-merge. | **Code:** `WorktreeCoordinator.merge/discard` only; chrome copy `WorktreeChromeCopy.editMain` tested. No UI click-through. |
+| W5 | Merge / discard are **explicit user actions**. No auto-merge. | **Code + sheet tests (e72a114):** `WorktreeCoordinator.merge/discard` only; chrome copy `WorktreeChromeCopy.editMain` tested. `WorktreeReviewSheetTests` = characterization of Merge/Discard/Continue (not XCUI). GHA `SKIP_APP_TESTS=1` — not a CI gate. |
 | W6 | Escape hatch “Edit main tree” persists for that conversation; later sends must **not** recreate the worktree | **Pass (clear branch):** `testDisableWorktreeModeClearsBranchWithoutDiscard`. Later-send must-not-recreate **not** re-run as a send loop. |
 | W7 | `git_commit` / `create_pull_request` run in the **worktree cwd / branch** when isolation is on — never silently commit the main checkout | **Pass:** bind+commit test + `GitWorkflowCommitPRTests.testCreatePullRequestPushDefaultsFalse`. |
 
@@ -77,7 +77,7 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 |---|-----|----------|
 | L1 | Default: `POST /v1/chat/completions` with `tools: []` (proxy) | **PASS (Lin/Ada 2026-08-20).** `ServeToolsPolicy.resolve(false) == .proxyOnly`. `testLocalAPIDefaultChatCompletionsSendsEmptyTools` live loopback POST → `lastToolsCount() == 0`. `testLocalAPICompletionToolsDefaultEmpty`. Opt-in is AgentLoop (`testLocalAPIOptInAgentLoopSendsToolsOnInnerRequest` inner `lastToolsCount > 0`), not schemas on the proxy helper. |
 | L2 | Opt-in + no usable project → 400 | **PASS (Rigel 2026-08-21).** `swift test --filter testLocalAPIOptInWithoutUsableProjectReturns400` → **1/1**. Loopback `POST /v1/chat/completions` with `agentToolsEnabled: true` and no bound project → HTTP **400**, body contains `Agent loop requires a project folder`. Unit/loopback POST, **not** in-app. |
-| L3 | Remote control port does **not** accept LAN/phone sessions | **PASS (Ada 2026-08-20).** `RemoteControlServer.isEnabled == false`; `start()` throws `.disabled`, no listener/token/URL (`testRemoteControlStartDoesNotBindListener`, `testStartRefusesAndDoesNotBindOrPublishURL`). ChatView does not mount `RemoteControlSheet`. |
+| L3 | Remote control port does **not** accept LAN/phone sessions | **PASS (Ada 2026-08-20).** `RemoteControlServer.isEnabled == false`; `start()` throws `.disabled`, no listener/token/URL (`testRemoteControlStartDoesNotBindListener`, `testStartRefusesAndDoesNotBindOrPublishURL`). Leftover `RemoteControlSheet.swift` **deleted** (b7db51f); `ClusterPaneUITests.testRemoteControlSheetIsGone` (characterization, not XCUI; GHA `SKIP_APP_TESTS=1`). |
 
 ### Proof pack (Rigel owns the folder)
 
@@ -150,7 +150,7 @@ BLOCKERS: …
 NEXT_ASSIGNMENT: …
 ```
 
-**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts. Those cells are filled (2026-08-20; L2 named live POST 2026-08-21). Accepted residuals (not 99% gates): no in-app window / live LM Studio; no ⌘Q or SIGKILL; W5 no UI click-through; no mid-stream persist checkpoint. `ConversationListViewModel.duplicate` is a dead leftover (zero callers) — not a gate.
+**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts. Those cells are filled (2026-08-20; L2 named live POST 2026-08-21). Accepted residuals (not 99% gates): no in-app window / live model server; no ⌘Q or SIGKILL; no mid-stream persist checkpoint; 012/013 mock-worker only (not a real model). Cluster/worktree App tests landed: `ClusterPaneUITests`, `WorktreeReviewSheetTests` (e72a114) — characterization, not XCUI; GHA `SKIP_APP_TESTS=1` (local App tests WARN unless `APP_TESTS_STRICT=1`) so they do not gate CI. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` is a dead leftover (zero callers) — not a gate.
 
 ### Five-way (2026-08-21)
 
@@ -158,8 +158,8 @@ NEXT_ASSIGNMENT: …
 |-----|------------|------|
 | Ada | 99% | Required cells filled; L2 named test is scorecard honesty not a product gate |
 | Lin | 99% | W/L/A3–A5/P; landed `testLocalAPIOptInWithoutUsableProjectReturns400` |
-| Pixel | 99% | F1–F3, W5/W6 chrome; live window / W5 click-through are residuals |
+| Pixel | 99% | F1–F3, W5/W6 chrome; live window residual. W5 sheet = `WorktreeReviewSheetTests` (not XCUI; not a GHA gate) |
 | Rigel | 99% | Re-ran L2 **1/1**; rewrote L2 evidence cell |
 | Turnip | 99% | Re-ran L2 **1/1** (0.014s); five-way collected |
 
-Uncommitted dirty tree. Do not mix the CLI five-way push (HEAD `fd3a99e`, P4 = Max).
+Untracked duplicate mock result dumps stay untracked. Do not mix CLI/app code. Do not push (P4 = Max).
