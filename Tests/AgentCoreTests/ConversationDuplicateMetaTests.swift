@@ -8,7 +8,9 @@ import XCTest
 
 final class ConversationDuplicateMetaTests: XCTestCase {
 
-    /// Mirrors the fields ConversationCoordinator.duplicateConversation must copy.
+    /// Metadata the App coordinator copies before `applyDefaultWorktree`.
+    /// Git isolation for a duplicate is `testDuplicateGitBoundConversationGetsDefaultWorktree`
+    /// (RELEASE_BAR contract 4 / `3a9e73c`) — not this value-init.
     func testDuplicateInitPreservesPinAndDeferredTools() {
         var source = Conversation(title: "Pinned work")
         source.pinned = true
@@ -17,7 +19,8 @@ final class ConversationDuplicateMetaTests: XCTestCase {
         source.railUserPreference = true
         source.samplingOverride = SamplingParams(temperature: 0.2)
 
-        // Same shape as coordinator duplicate (new id, unarchived, no worktree).
+        // Pre-bind copy: new id, unarchived. `worktreeBranch` starts nil;
+        // coordinator bind then creates `agentcore/<copyId>` for git roots.
         let copy = Conversation(
             id: UUID(),
             title: source.title + " (copy)",
@@ -42,6 +45,5 @@ final class ConversationDuplicateMetaTests: XCTestCase {
         XCTAssertEqual(copy.railUserPreference, true)
         XCTAssertEqual(copy.samplingOverride?.temperature, 0.2)
         XCTAssertNotEqual(copy.id, source.id)
-        XCTAssertNil(copy.worktreeBranch)
     }
 }
