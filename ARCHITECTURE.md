@@ -12,32 +12,15 @@
 
 ## 2. Target user (precise)
 
-**(Historical persona — not current pricing.)** The original NEW DAY draft pictured a buyer at $430. **There is no $430 product, trial, or paid SKU.** The user we still design for:
+People who already run a local OpenAI-compatible server on Apple Silicon and want an agent loop with tools, diffs, and git worktree isolation on top. Swift / Apple-platform first; other languages work through the same tools. **CloudBots** (early/v1) are **cloud** and labeled — they are not this local path.
 
-- Owns an Apple Silicon Mac with **≥32 GB unified memory** (the 7B floor) and aspires to 64–128 GB (the 32B/70B target).
-- Writes **Swift or Apple-platform code primarily**, with secondary work in TypeScript, Python, Rust, or Go.
-- Already runs **LM Studio, Ollama, or EXO** on their own machine. Knows what GGUF, Q4_K_M, and `-ngl 99` mean without looking them up.
-- **Privacy non-negotiable.** Either professional (legal, medical, defence-adjacent) or temperamental.
-- Already pays for **Cursor or Claude Code** today and is fatigued by subscription pricing + cloud dependency.
-- Wants the agent loop, not just chat. Has hit the wall on raw LM Studio for real coding work.
-- Solo or 1–5 person team. Not enterprise.
-
-VibeCoder is **explicitly not for**: web developers who only touch HTML/CSS/JS, beginners learning to code, anyone whose codebase doesn't need privacy, hobbyists with <32 GB RAM (LM Studio is free, that's the floor for them).
+Not a paid SKU. Not a Cursor replacement pitch. MIT; fork it.
 
 ## 3. Positioning
 
-**Current answers use VibeCoder (MIT, BYO HTTP).** Rows that still say “NEW DAY” are the 2026-06 draft voice.
+Open-source project, not a product pitch. MIT. BYO HTTP backends. GitHub Releases / DMG if you want a binary; no Sparkle, no license key, no trial.
 
-| If they say... | We answer... |
-|---|---|
-| "Why not Cursor?" | Subscription, cloud, your code goes to a third party. VibeCoder runs on your Mac against a local model server you run. Binding a git project isolates edits in a sibling worktree by default. |
-| "Why not Claude Code?" | Same — cloud and subscription. Plus VibeCoder is native macOS, not Node/CLI-first. |
-| "Why not LM Studio?" | LM Studio is chat. VibeCoder is the *agent on top of* LM Studio (and we can use it as a backend). |
-| "Why not Ollama + Cursor with a self-hosted endpoint?" | That stack doesn't have a real agent loop with tools, build verification, or worktree isolation. VibeCoder is that layer. |
-| "Why not free / open-source?" | **It is.** MIT as of 2026-08-15. The closed-source / $430 pitch below this table is historical. |
-| "Why one-time and not subscription?" | **Historical.** There is no paid SKU. The app is MIT; no license key. |
-
-**No product license keys, trials, or activation gate.** MIT; distribution is GitHub Releases / DMG (no Sparkle feed). `$430` / Paddle / LemonSqueezy copy elsewhere in this file is historical.
+This file is the plan. There is no PLAN.md. CloudBots are early/v1 **cloud** (labeled); they are not the local BYO path in §1.
 
 ## 4. Product surface (every screen, every modal)
 
@@ -654,21 +637,16 @@ These are decisions, not omissions:
 | **v1.5** | Sub-agent + planner depth | Better planner outputs, sub-agent inheritance refinement, parallel investigation patterns |
 | **v2.0** | Cross-chat intelligence + collaboration | **MemoryTool + MEMORY.md / DECISIONS.md** auto-inject with embedding-based skill auto-attach (cheap context patterns suited to small models — see V2 ARCHITECTURE), Route B MLX, shared MEMORY.md sync, team license, collaboration session, shared skill libraries |
 
-## 15. Pricing & business model
+## 15. Distribution
 
-- **No product license key.** App is not gated by trial or activation.
-- **No subscription.**
-- **MIT open source.** `$430` / refund-policy / merchant-of-record copy is **historical**.
-
-Distribution: signed DMG (GitHub Releases or any host). Apple App Store **not** used (sandbox would forbid LocalAPI + agent tools as shipped). Direct `agentos.tools` storefront is **not** current.
+MIT. GitHub Releases / DMG. No App Store (sandbox would block LocalAPI + agent tools as shipped). No storefront, no paid SKU.
 
 ## 16. Brand & voice
 
-- Name: **VibeCoder** (shipping). **AgentOS NEW DAY** is a historical/internal draft name — **not** current product.
-- Tagline: **BYO local OpenAI-compatible server.** Weights leave the Mac only if **you** point at a remote endpoint. Do not say "nothing leaves your Mac."
-- Voice: precise, technical, dry. No hype. Talk to developers like developers.
-- Visual: SF + orange accent (`UI_DESIGN.md`). Geist / Azure are retired. No animation for animation's sake.
-- The product personality is "the senior engineer who sits next to you" — not "AI assistant."
+- Name: **VibeCoder**. Draft names (AgentOS / NEW DAY) are not current.
+- One line: native macOS BYO OpenAI-compatible HTTP coding agent. MIT.
+- Weights leave the Mac only if **you** point at a remote `/v1`. CloudBots are labeled cloud.
+- Voice: precise, dry, no hype. Visual: SF + orange (`UI_DESIGN.md`).
 
 ## 17. Amendments log
 
@@ -676,6 +654,7 @@ When this doc is amended, log the change here with date + reason. The doc itself
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
+| 2026-08-21 | README, §2–§3, §15–§16, DESIGN.md, BRAND.md | **Open source, not a product pitch.** README is what it is / how to build / BYO HTTP. Stripped $430 / SKU / trial / “why not Cursor” sales. CloudBots early/v1 cloud, labeled. No PLAN.md — this file is the plan. | Max: scratch selling; repo already MIT |
 | 2026-08-21 | §10.3, §16, DESIGN.md | **Rail honesty:** tagline is not "nothing leaves your Mac"; skill marketplace is not v1; DESIGN LocalAPI is NWListener / VibeCoder logs — not Swift NIO, AgentOS-NewDay, or `/v1/embeddings`. | Match §1/§17; Lead Chief leftover rail 2026-08-21 |
 | 2026-08-21 | §4.2, §4.3, §4.5, §6.1, README | **Chrome honesty:** Settings is the shipped grouped tabs (not 2026-06 five-tab). ⌘K is command palette. Persist path `~/Library/Application Support/VibeCoder/conversations/`. Sidebar Chat/Projects/Models/Notes/Scheduled (+ Cluster on EXO). Do not restyle Settings back to 5 tabs. | Match `UI_DESIGN.md` §4.3 / §4.8; Lead Chief 2026-08-21 |
 | 2026-08-21 | §5.8 | **C3 CLI honesty:** SIGINT mid-turn cancels via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C exits. TTY y/n/always (empty/`n`/unknown deny); patch `always` → directory grant. | Turnip verified `VibeCoderCLILib` 24/24 |

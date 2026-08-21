@@ -1,8 +1,6 @@
 # BRAND — VibeCoder
 
-> **2026-08-20:** Shipping product is **VibeCoder** (MIT). AgentOS NEW DAY / `$430` / trial / license / “paid once” copy below is **historical draft voice**, not current product. Live UI identity is `UI_DESIGN.md` (orange + SF). Voice principles (precision, no hype) still apply.
->
-> When marketing copy drifts from the claim freeze in `DESIGN.md` / `ARCHITECTURE.md` / `docs/RELEASE_BAR.md`, those rails win.
+> **VibeCoder** is MIT open source. Live UI identity: `UI_DESIGN.md` (orange + SF). Voice: precision, no hype. `ARCHITECTURE.md` §1/§17 win. This file is not a sales deck.
 
 ---
 
@@ -10,25 +8,19 @@
 
 ### 1.1 One-sentence brand
 
-**AgentOS — the local-first coding agent for developers who own their work.**
+**VibeCoder — native macOS BYO OpenAI-compatible HTTP coding agent (MIT).**
 
 ### 1.2 What we stand for
 
-Privacy, autonomy, craft. We believe code is private, that your tools should run on your own hardware, and that AI assistance shouldn't require a subscription. We respect users' intelligence and their ownership of their work.
+Privacy, autonomy, craft. Tools run on your hardware against a server you run. CloudBots (early/v1) are cloud and labeled.
 
 ### 1.3 What we're not
 
-We're not the cheapest. We're not the loudest. We're not for everyone. We're for the developer who's already running LM Studio or Ollama on their Mac and wants the agent loop on top — built native, polished, MIT.
+For developers already running LM Studio / Ollama / oMLX / Unsloth / EXO who want the agent loop on top. Native macOS. MIT.
 
 ### 1.4 Competitive voice
 
-| Competitor | Their voice | Ours |
-|---|---|---|
-| **Cursor** | Fast, enthusiastic, AI-forward | Calm, deliberate, craftspeople |
-| **Claude Code** | Anthropic-clean, sophisticated | Local-first, no cloud asterisk |
-| **LM Studio** | Technical, dense, power-user | Refined version of the same audience |
-| **Ollama** | Open-source friendly, command-line | Polished, GUI-first, local agent loop |
-| **Continue.dev** | Plugin-y, integrative | Standalone, native, with its own surface |
+Do not sell against Cursor / Claude Code in-repo. Describe what VibeCoder is (BYO HTTP, worktrees, MIT). CloudBots stay labeled cloud.
 
 ---
 
@@ -87,7 +79,7 @@ We're not the cheapest. We're not the loudest. We're not for everyone. We're for
 | Performance | "47 tok/s on Qwen 32B" | "fast" / "blazing" / "lightning" |
 | The agent loop | "agent" or "loop" | "AI assistant" / "smart helper" |
 | Errors | "X failed: <specific reason>" | "Oops" / "Something went wrong" |
-| Payment | "MIT" / "no license key" | "subscription" / "$430" / "trial" as current |
+| License | "MIT" | paid SKU / trial / subscription as current |
 | Updates | "update" | "upgrade" |
 | Models in catalog | "tested model configs" / "starter model" | "recommended for you" / "suggested" / "best pick for your Mac" |
 | Hardware fit | "fits in 24 GB" / "needs 48 GB" | "perfect for your Mac" / "optimized for your hardware" |
