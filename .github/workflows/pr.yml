@@ -6,6 +6,7 @@
 # Skip them on this runner so the merge bar is AgentCore + eval T0 + 012 + 013.
 # Do not set USE_EVAL_GATE=1 here (that replaces the full suite).
 # baseline.json stays T0-only; 012/013 are --strict without --baseline.
+# 012/013 mock scripts stay with Mira; ci-pr.sh skips those cells if missing.
 name: PR
 
 on:
