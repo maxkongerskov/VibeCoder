@@ -93,12 +93,12 @@ open "App/VibeCoder.xcodeproj"
 Then ⌘R inside Xcode. The project references the SPM package at `..` (the repo root) for `AgentCore` and `MLXBackend`, so building the app implicitly builds the library.
 
 **What you'll see on ⌘R:**
-- Sidebar with the conversation list (bound to `ConversationStore` on disk)
-- Toolbar model-picker chip showing the active backend + selected model
-- Chat pane: streaming assistant content, tool-call stubs, expandable tool-result cards
-- Multi-line composer (Enter to send, Shift+Enter for newline) with inline cancel
-- Settings sheet (gear icon) with Connection / Sampling / System Prompt / Agent / Local API tabs
-- Local API toggle that starts an OpenAI-compatible **proxy** on a configurable port (loopback-only); agent-loop on that port is a separate Settings opt-in
+- Sidebar: Chat / Projects / Models / Notes / Scheduled (Cluster only when EXO is selected). Recents bound to `ConversationStore` on disk at `~/Library/Application Support/VibeCoder/conversations/`
+- Chat: slim title + worktree chip; composer model picker (not header Safe/model pills)
+- Multi-line composer (Return to send, Shift-Return for newline) with inline cancel (⌘.)
+- Command palette (⌘K)
+- Settings sheet (⌘, / gear) with grouped tabs (Agent, Connection, Model & Backend, MCP, Tools, …) — **not** Connection / Sampling / System Prompt. Do not restyle back to five tabs.
+- Connection → Local API starts an OpenAI-compatible **proxy** on a configurable port (loopback-only); agent-loop on that port is a separate Settings opt-in
 
 An XcodeGen `project.yml` is also included as an alternate generator if you'd rather regenerate the `.xcodeproj` from a declarative spec — useful if the pbxproj ever gets messy from manual edits in Xcode. `brew install xcodegen && cd App && xcodegen generate`.
 

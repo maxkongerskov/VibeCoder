@@ -54,75 +54,43 @@ Lands in a new conversation with Coder defaults once a backend answers `/v1/mode
 
 ### 4.2 Main window
 
-NavigationSplitView. Three columns conceptually, two visually (sidebar + detail; the third column is the inline patch/worktree review sheet when triggered).
+`NavigationSplitView`. Sidebar + detail; patch / approval / worktree review are **sheets**, not a third column. Visual rail: `UI_DESIGN.md` (orange + SF). Do not resurrect 2026-06 chrome (4-icon sidebar, Geist/Azure, license, onboarding, header Safe/model pills).
 
-**Sidebar** (~260 pt, claude.ai-style):
-- **Conversations** (default) — list, newest first, with relative timestamp + first user message snippet. Right-click: rename, delete, export, duplicate.
-- **Projects** — folder bindings. Each shows project name, last activity, conversation count. Click to filter conversations to that project.
-- **Skills** — bundled + user-added. Pinned skills section + available. Click to inspect / pin / unpin.
-- **Models** — Library (downloaded + catalog browse) + Developer tab (server status, port, logs, endpoint). Live download progress for in-flight downloads.
+**Sidebar** (Claude-style, not a 4-list segmented bar):
+- **Chat** — Recents / tasks. ⌘N new task.
+- **Projects** — folder bindings.
+- **Models** — active HTTP backend's list (not Library/Discover/GGUF download).
+- **Notes**, **Scheduled**.
+- **Cluster** — mounted only when the active backend is EXO (read-only `/state` + pin Model ID).
 
-Sidebar has a segmented tab bar pinned to its top to switch between these four lists. ⌘N anywhere → new conversation.
+Footer: Delete all + **Settings**. Command palette is ⌘K (not a sidebar row).
 
-**Detail pane**, top to bottom:
+**Chat surface** (`UI_DESIGN` §4 / chat header):
+- Slim title + chevron: Rename, Duplicate, Export/Copy as Markdown, Isolate work in git worktree / Review worktree… / Edit main tree…, Delete.
+- **Worktree** chip when isolated, or **Isolate in worktree** when a git folder is bound. Merge/Discard/Continue live on the review sheet. LAN/phone remote control is **off** — not in the title menu.
+- No header model / project / Safe pills. Model picker lives on the composer.
+- Transcript + composer share content width. Plan is a floating card, not an in-transcript PlanCard.
 
-- **Chat header.** Editable title (click to rename). Project chip ("⌘-K Bind project" if unbound). Worktree toggle (shield icon — off / "agentos/abc123" on). Safe Mode toggle. Context usage chip ("4,649 / 32,768 (14%)" — green/yellow/red). Stop button when running.
-- **Transcript.** Scrollable. User bubbles right-aligned accent; assistant content left-aligned with inline tool call stubs; tool result cards expandable showing the full output. Plan cards render as visual step trackers when the agent makes a plan. Streaming tokens render live with smooth replace. Auto-scroll to bottom on new content.
-- **Status line.** One row: spinner (when running) + iteration count + last tool + build status. "Iteration 4/30 · apply_patch ✓ · build ✓".
-- **Input bar.** Multi-line `TextEditor` with placeholder "Ask the agent…". Enter sends; Shift-Enter newline. Attached skills appear as removable chips above the input. Model picker chip floats top-right (mirrors the toolbar one).
+**Composer:** multi-line field; Return sends; Shift-Return newline; ⌘. stops. Empty-chat copy names LM Studio / Ollama / oMLX / Unsloth / EXO — not "Ask the agent…".
 
-**Toolbar:**
+### 4.3 Settings sheet (grouped tabs)
 
-- **Left:** Model picker chip (backend + model + load progress). Click → pick backend + model. Green/orange/red status dot.
-- **Right:** Settings (gear), History search (magnifier), New conversation (square.and.pencil).
+Modal sheet on `RootView` (⌘,, sidebar Settings, palette, `/settings`). **Not** a `Settings` scene. Default tab: **Agent**. Search field in the header.
 
-### 4.3 Settings sheet (5 tabs)
+**Do not restyle this back to the 2026-06 five-tab set** (General / Connection / Models load-sliders / Privacy & License / About). Shipped `SettingsTab` is grouped:
 
-Per-model load + inference + system prompt all live under **Models**, alongside a Connection tab for backend wiring. Top-level Sampling/SystemPrompt tabs are intentionally absent — sampling belongs to a specific model, not the app.
+| Group | Tabs |
+|---|---|
+| Agent | Agent, Skills, Subagents, Commands, Hooks |
+| Models & network | Connection, Model & Backend, MCP Servers |
+| Workspace | Tools, Context, Memory |
+| System | Appearance, Privacy, Advanced, About |
 
-1. **General** — appearance (light/dark/system), font size, agent trace toggle.
-2. **Connection** — active backend picker; per-backend host/port + "Test connection" button; Local API server toggle + port + "Run on app launch" + Xcode setup instructions.
-3. **Models** — see §4.3.1 below. The fattest tab; covers per-model load + inference + system prompt + reload-banner UX.
-4. **Privacy** — conversation backup (export/import/clear all). **No Sentry / no telemetry SDK.** (`crashReportingEnabled` is a leftover settings field and does not send reports.)
-5. **About** — version, build, credits, legal. (No Sparkle auto-update.)
+Connection hosts BYO HTTP (LM Studio / oMLX / Ollama / Unsloth Studio / EXO / custom `/v1`) plus Local API (proxy default; opt-in bounded AgentLoop). Model & Backend is providers/sampling — **no** GGUF load sliders, **no** GPU offload, **no** in-app weight download. Privacy is export/import/clear (**no license**). About is version/credits (**no Sparkle**). Hooks: project `.vibecoder/hooks.json` + user `~/.vibecoder/hooks.json`.
 
-#### 4.3.1 Models tab (the load-settings home)
+#### 4.3.1 Model & Backend (not a llama load panel)
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│ Model: [Qwen2.5-Coder 32B Instruct ▾]                           │
-├────────────────────────────────────────────────────────────────┤
-│ ⚠ Reload model to apply load changes   [Reload now] [×]        │  ← only when dirty
-├────────────────────────────────────────────────────────────────┤
-│ LOAD SETTINGS  (require reload)                                 │
-│   Context length         [────────●──] 32,768 / 262,144 max     │
-│   GPU offload layers     [─────────●─] 99 / 99                  │
-│   Flash attention                          [✓]                   │
-│   KV cache type          ( f16 │ q8_0 │ q4_0 )                  │
-│                                                                 │
-│ INFERENCE SETTINGS  (apply next turn — no reload)               │
-│   Temperature            [──●────────] 0.30                     │
-│   Top-P                  [─────────●─] 0.95                     │
-│   Top-K                  [──●────────] 40                       │
-│   Repeat penalty         [──●────────] 1.05                     │
-│   [Reset to Coder defaults]  [Reset to Balanced defaults]       │
-│                                                                 │
-│ SYSTEM PROMPT OVERRIDE  (per-model; falls back to global)       │
-│   ┌──────────────────────────────────────────────────────────┐  │
-│   │ [empty — inheriting global system prompt]                │  │
-│   └──────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────┘
-```
-
-Rules:
-
-- **Per-model JSON** at `~/Library/Application Support/AgentOS-NewDay/model-settings/<modelId>.json` is the canonical store. UI reads + writes it; never bypasses.
-- **Catalog-recommended defaults** populate the JSON on first activation per model — smart defaults out of the box.
-- **Load setting changes** mark the model dirty → non-modal "Reload model to apply" banner appears at top of the tab + on the chat header. Two actions: `Reload now` (5-second downtime) / `Apply on restart`.
-- **Inference setting changes** apply on the next agent turn — no reload, no banner.
-- **System prompt override** is optional; empty means "inherit global." Token count shown below the editor.
-- **Sliders** use Azure thumb on `bg.muted` track; live value to the right in mono.
-- **Per-backend constraints**: load fields that don't apply to a backend (e.g., `--cache-type-k` is only llama.cpp) are hidden when the active model belongs to that backend.
+The 2026-06 ASCII "LOAD SETTINGS / GPU offload / KV cache" panel is **retired**. BYO HTTP lists what the server exposes. Per-model files, if present, live under `~/Library/Application Support/VibeCoder/` — not `AgentOS-NewDay`. Reload-banner / `--cache-type-k` copy is historical llama.cpp product and must not return.
 
 ### 4.4 Modals & sheets
 
@@ -135,21 +103,21 @@ Rules:
 
 ### 4.5 Keyboard shortcuts
 
+Match `UI_DESIGN.md`. ⌘K is the **command palette**, not bind-project.
+
 | Shortcut | Action |
 |---|---|
-| ⌘N | New conversation |
-| ⌘W | Close window |
+| ⌘N | New task / conversation |
 | ⌘, | Settings |
-| ⌘K | Bind project to active conversation |
-| ⌘L | Toggle worktree mode |
-| ⌘⇧L | Toggle Safe Mode |
-| ⌘⏎ | Send (also: ⏎ alone in the input) |
-| ⌘. | Cancel running agent |
-| ⌘F | Search conversation history |
-| ⌘⇧F | Global search across all conversations |
-| ⌘1/2/3/4 | Switch sidebar tab (Conversations / Projects / Skills / Models) |
-| ⌘[ / ⌘] | Previous/next conversation |
-| Esc | Dismiss sheet |
+| ⌘K | Command palette |
+| ⌘. | Stop generation |
+| ⏎ | Send |
+| ⇧⏎ | Newline |
+| ⇧Tab | Cycle permission / execution mode |
+| Esc | Dismiss sheet / stop generation |
+| ↑ / ↓ | Prompt history (composer) |
+
+Project bind is the folder picker / Projects pane — not ⌘K. Palette items include Open Settings, Projects, Models, New Conversation, Stop agent (`UI_DESIGN` §4.8).
 
 ## 5. System architecture
 
@@ -438,20 +406,21 @@ Do not document `agentos run` / `agentos serve` as shipping. The historical `age
 
 ### 6.1 Persistence layout
 
-```
-~/Library/Application Support/AgentOS-NewDay/
-├── settings.plist                          # UserDefaults wrapper
-├── conversations/<uuid>.json               # one file per conversation, atomic write
-├── projects/<sha256-of-path>.json          # per-project settings + memory paths
-├── model-settings/<modelId>.json           # per-model: context, GPU layers, sampling
-├── skills/                                 # user-created skills
-├── catalog.cached.json                     # last-fetched catalog (stale-while-revalidate)
-├── traces/<conversation-id>.jsonl          # agent trace, opt-in
-└── logs/                                   # LocalAPIServer access log, llama-server stderr
+Canonical root is **`~/Library/Application Support/VibeCoder/`** (`AppSupport.folderName`). Conversations are atomic JSON at `conversations/<uuid>.json`. Legacy `AgentOS-NewDay` / `AgentOS` trees migrate one-shot into `VibeCoder`.
 
-~/.cache/huggingface/hub/                   # MLX + GGUF model weights (HF-standard layout)
-~/Library/Logs/AgentOS-NewDay/              # standard macOS logs (not in App Support)
 ```
+~/Library/Application Support/VibeCoder/
+├── conversations/<uuid>.json               # one file per conversation, atomic write
+├── projects/                               # per-project bindings
+├── notes/
+├── scheduledTasks/ + scheduledTaskArchive.json
+├── traces/<conversation-id>.jsonl          # agent trace, opt-in (Settings → Appearance)
+└── …                                       # other AppSupport children
+
+~/Library/Logs/VibeCoder/                   # standard macOS logs (not in App Support)
+```
+
+Do not document `~/Library/Application Support/AgentOS-NewDay/` as the live path. HuggingFace hub / GGUF cache is **not** a v1 product path (bundled llama.cpp removed; MLX is a stub).
 
 ### 6.2 Conversation schema
 
@@ -603,7 +572,7 @@ Skills can declare dependencies on tools (or MCP servers); installer verifies to
 
 ### 11.1 Diagnostics
 
-All failure paths route through `DiagnosticsHub`. UI surfaces severe events in a "Recent issues" panel. CLI prints to stderr. Optional log file at `~/Library/Logs/AgentOS-NewDay/diagnostics.log`.
+All failure paths route through `DiagnosticsHub`. UI surfaces severe events in a "Recent issues" panel. CLI prints to stderr. Optional log file at `~/Library/Logs/VibeCoder/diagnostics.log`.
 
 ### 11.2 Worktree safety (default on bind-git)
 
@@ -709,6 +678,7 @@ When this doc is amended, log the change here with date + reason. The doc itself
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
+| 2026-08-21 | §4.2, §4.3, §4.5, §6.1, README | **Chrome honesty:** Settings is the shipped grouped tabs (not 2026-06 five-tab). ⌘K is command palette. Persist path `~/Library/Application Support/VibeCoder/conversations/`. Sidebar Chat/Projects/Models/Notes/Scheduled (+ Cluster on EXO). Do not restyle Settings back to 5 tabs. | Match `UI_DESIGN.md` §4.3 / §4.8; Lead Chief 2026-08-21 |
 | 2026-08-21 | §5.8 | **C3 CLI honesty:** SIGINT mid-turn cancels via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C exits. TTY y/n/always (empty/`n`/unknown deny); patch `always` → directory grant. | Turnip verified `VibeCoderCLILib` 24/24 |
 | 2026-08-21 | §5.8 | **C2 CLI honesty:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = C1 plain text (no escapes). C3 cancel-in-turn + always grants still not shipped. | Turnip verified `EventPrinterTests` 5/5 |
 | 2026-08-21 | §5 diagram, §5.8, §11.4, claim-freeze header | **C1 CLI honesty:** interactive `vibecoder` REPL ships as C1 (BYO HTTP, same AgentCore, shared ConversationStore). Not `agentos`. Not eval-runner. C2 color / C3 cancel-in-turn + always grants not shipped. | Code already had `vibecoder`; rail still said CLI removed |
