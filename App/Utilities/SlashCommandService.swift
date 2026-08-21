@@ -12,16 +12,8 @@
 import Foundation
 import AgentCore
 
-/// The result of attempting to parse and run a slash command.
-enum SlashCommandResult: Equatable {
-    /// The text was consumed as a command. `message` is optional
-    /// feedback shown in the status line.
-    case handled(message: String?)
-    /// Markdown custom command expanded — send this string as the user turn.
-    case expandToMessage(String)
-    /// The text was NOT a slash command — send it as a normal message.
-    case notACommand
-}
+/// App tests and ChatViewModel keep using this name; the type lives in AgentCore.
+typealias SlashCommandResult = AgentCore.SlashCommandResult
 
 /// A slash command definition (name + description for /help and autocomplete).
 struct SlashCommand: Identifiable, Equatable {
@@ -244,17 +236,7 @@ enum SlashCommandService {
     /// name (first token) and remaining args. Aliases are resolved to
     /// the canonical command name.
     static func parse(_ text: String) -> (command: String, args: String)? {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.hasPrefix("/") else { return nil }
-
-        let parts = trimmed.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-        guard let first = parts.first else { return nil }
-        let rawCommand = String(first).lowercased()
-        let args = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines) : ""
-
-        // Resolve aliases (e.g. /m → /model, /title → /rename).
-        let command = aliasMap[rawCommand] ?? String(first)
-        return (command, args)
+        SlashCommandDispatcher.parse(text)
     }
 
     /// Check if a text string is a slash command (for live preview

@@ -196,6 +196,7 @@
 		F63E5B084B49D968E414045B /* ThinkingEffortPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C4ED287649C235BA95C35D6 /* ThinkingEffortPicker.swift */; };
 		F707D6F3FEBAD4395E4AB553 /* GrantManagerFormatting.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48966943BD43D135D41F0DF9 /* GrantManagerFormatting.swift */; };
 		F9B744C74921E6C2AE55311E /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0572FA5EE41783CBA806E3A3 /* ChatViewModel.swift */; };
+		F9B844C74921E6C2AE55311F /* ChatViewModel+SlashCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0574FA5EE41783CBA806E3A4 /* ChatViewModel+SlashCommands.swift */; };
 		FC93F2A66581CF52C6791A80 /* MentionSearchCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72474C46EA823DDEA0A37F8D /* MentionSearchCoordinatorTests.swift */; };
 		FF36EE08CD9AEC04A7EE0538 /* ShellApprovalCoordinatorServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 472EECF6C2A1852975D313D0 /* ShellApprovalCoordinatorServiceTests.swift */; };
 /* End PBXBuildFile section */
@@ -217,6 +218,7 @@
 		025C8E94D573E1ED4B41D347 /* InspectorSubagentsUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspectorSubagentsUITests.swift; sourceTree = "<group>"; };
 		0334B2156978A808F83F02A0 /* BackendConnectionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackendConnectionCoordinator.swift; sourceTree = "<group>"; };
 		0572FA5EE41783CBA806E3A3 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		0574FA5EE41783CBA806E3A4 /* ChatViewModel+SlashCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatViewModel+SlashCommands.swift"; sourceTree = "<group>"; };
 		0680FB4EF61FC12F31DD8D62 /* TerminalSessionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalSessionUITests.swift; sourceTree = "<group>"; };
 		08266659643AE601DE081ACC /* GrantManagerSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GrantManagerSettingsView.swift; sourceTree = "<group>"; };
 		0B5A2703BC2E861852C0031B /* ChatViewModelContextBudgetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModelContextBudgetTests.swift; sourceTree = "<group>"; };
@@ -600,6 +602,7 @@
 				60ED67F3BE411DACEFDF872B /* AppViewModel.swift */,
 				0334B2156978A808F83F02A0 /* BackendConnectionCoordinator.swift */,
 				0572FA5EE41783CBA806E3A3 /* ChatViewModel.swift */,
+				0574FA5EE41783CBA806E3A4 /* ChatViewModel+SlashCommands.swift */,
 				5035C4B041E0051B3318ECCB /* ConversationCoordinator.swift */,
 				75F3954034362EE84A298EE9 /* ConversationListViewModel.swift */,
 				511F80205BB8F926B7E73417 /* GrantManagerViewModel.swift */,
@@ -926,6 +929,7 @@
 				E7DB586F4BC551863175FF4F /* ChatTitleDropdown.swift in Sources */,
 				21F4A283E2E53B3B22CBCEBC /* ChatView.swift in Sources */,
 				F9B744C74921E6C2AE55311E /* ChatViewModel.swift in Sources */,
+				F9B844C74921E6C2AE55311F /* ChatViewModel+SlashCommands.swift in Sources */,
 				CF4C25A62D09EA78E6ADFF83 /* ClusterView.swift in Sources */,
 				F2825B7E96565C0A8E14FF63 /* ClusterViewModel.swift in Sources */,
 				C5D06081753C10601EAA7C57 /* CodeBlockView.swift in Sources */,
