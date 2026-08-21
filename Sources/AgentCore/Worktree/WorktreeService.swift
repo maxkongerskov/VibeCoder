@@ -40,6 +40,31 @@ public struct CreatedWorktree: Sendable, Equatable {
     }
 }
 
+/// Outcome of binding a conversation to a folder with default worktree isolation.
+public enum WorktreeBindResult: Sendable, Equatable {
+    /// `projectRoot` cleared; worktree mode off.
+    case unbound
+    /// Folder is not a git repo — project bound, worktree left off.
+    /// `path` is the bound folder; `userVisibleReason` matches `WorktreeError.notAGitRepo`.
+    case skippedNotGit(path: String)
+    /// User chose the main-checkout escape hatch (`worktreeOptOut`).
+    case skippedOptOut
+    /// `worktreeBranch` already set — isolation is on.
+    case alreadyIsolated
+    /// Git repo: worktree created or reused and `worktreeBranch` set.
+    case enabled(CreatedWorktree)
+
+    /// Bind still succeeded; callers should show this so non-git is not silent (ARCHITECTURE §11.2).
+    public var userVisibleReason: String? {
+        switch self {
+        case .skippedNotGit(let path):
+            return WorktreeError.notAGitRepo(path).errorDescription
+        default:
+            return nil
+        }
+    }
+}
+
 public enum WorktreeError: Error, LocalizedError, Equatable {
     case notAGitRepo(String)
     case gitFailed(String)
@@ -139,6 +164,91 @@ public enum WorktreeService {
             throw WorktreeError.gitFailed(combinedOutput(fallback, fallbackTo: create))
         }
         return CreatedWorktree(path: worktreePath, branch: branch)
+    }
+
+    /// First 8 hex chars of the conversation UUID, lowercased — matches
+    /// `WorktreeCoordinator` / `Conversation.worktreeRootURL` convention.
+    public static func conversationShortId(from id: UUID) -> String {
+        String(id.uuidString.prefix(8)).lowercased()
+    }
+
+    /// Bind `projectRoot` and, for git checkouts, create/reuse
+    /// `agentcore/<shortId>` by default.
+    ///
+    /// - Non-git folder: project is bound, `worktreeBranch` is nil (no crash).
+    /// - Git folder: worktree created/reused; `worktreeBranch` set.
+    /// - Git worktree create failure: previous `projectRoot` / `worktreeBranch`
+    ///   restored (or left unbound if there was no previous root) so the agent
+    ///   cannot silently edit main. Caller must surface the thrown error.
+    /// - `projectRoot == nil`: unbinds and clears the worktree branch.
+    @discardableResult
+    public static func bindProjectEnablingWorktree(
+        _ conversation: inout Conversation,
+        projectRoot: URL?
+    ) throws -> WorktreeBindResult {
+        let previousRoot = conversation.projectRoot
+        let previousBranch = conversation.worktreeBranch
+        let previousOptOut = conversation.worktreeOptOut
+
+        guard let projectRoot else {
+            conversation.projectRoot = nil
+            conversation.worktreeBranch = nil
+            conversation.worktreeOptOut = false
+            return .unbound
+        }
+
+        conversation.projectRoot = projectRoot
+        conversation.worktreeBranch = nil
+        conversation.worktreeOptOut = false
+
+        guard isGitRepository(projectRoot.path) else {
+            return .skippedNotGit(path: projectRoot.path)
+        }
+
+        do {
+            let created = try createOrReuseWorktree(
+                projectFolder: projectRoot.path,
+                conversationShortId: conversationShortId(from: conversation.id)
+            )
+            conversation.worktreeBranch = created.branch
+            conversation.worktreeOptOut = false
+            return .enabled(created)
+        } catch {
+            conversation.projectRoot = previousRoot
+            conversation.worktreeBranch = previousBranch
+            conversation.worktreeOptOut = previousOptOut
+            throw error
+        }
+    }
+
+    /// On load/select: isolate a git-bound conversation that was never
+    /// given a worktree, unless the user opted into the main checkout.
+    /// Does nothing on every subsequent call once isolated or opted out.
+    /// Does **not** unbind `projectRoot` on create failure (restore in-place).
+    @discardableResult
+    public static func ensureDefaultWorktreeIfNeeded(
+        _ conversation: inout Conversation
+    ) throws -> WorktreeBindResult {
+        if conversation.worktreeOptOut {
+            return .skippedOptOut
+        }
+        guard conversation.projectRoot != nil else {
+            return .unbound
+        }
+        if let branch = conversation.worktreeBranch, !branch.isEmpty {
+            return .alreadyIsolated
+        }
+        return try bindProjectEnablingWorktree(
+            &conversation, projectRoot: conversation.projectRoot)
+    }
+
+    /// Escape hatch: edit the main checkout. Clears `worktreeBranch` and
+    /// sets `worktreeOptOut` so load/select will not re-isolate.
+    /// Does **not** `git worktree remove`. Pair with `discard` to delete the
+    /// sibling tree.
+    public static func disableWorktreeMode(_ conversation: inout Conversation) {
+        conversation.worktreeBranch = nil
+        conversation.worktreeOptOut = true
     }
 
     /// `git status --short` plus `git diff --stat` inside the

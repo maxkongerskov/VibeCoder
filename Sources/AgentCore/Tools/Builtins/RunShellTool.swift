@@ -15,7 +15,8 @@ public struct RunShellTool: Tool {
     public static let schema = ToolSchema(
         name: name,
         description: """
-        Run a shell command. Working directory is the project (or worktree) root. \
+        Run a shell command. Working directory is the worktree root when isolation \
+        is on, otherwise the project root. Writes to the main checkout are fenced. \
         Output is truncated past maxBytes. Set background=true to return a task_id \
         immediately and continue the conversation; use get_task_output / wait_tasks / kill_task.
         """,
@@ -36,11 +37,14 @@ public struct RunShellTool: Tool {
         let command = try arguments.string("command")
         let background = arguments.bool("background", default: false)
         let maxBytes = arguments.intOptional("maxBytes") ?? 65_536
+        // Worktree wins — same cwd git_commit / write_file use.
+        let cwd = context.worktreeRoot ?? context.workingDirectory
 
         // PB8: optional seatbelt write fence (sandbox-exec). See SafeBash.
+        // Worktree present → fence is required even in yolo/full.
         let launch = SafeBash.resolveShellLaunch(
             command: command,
-            workingDirectory: context.workingDirectory,
+            workingDirectory: cwd,
             projectRoot: context.projectRoot,
             worktreeRoot: context.worktreeRoot,
             executionMode: context.executionMode
@@ -69,7 +73,7 @@ public struct RunShellTool: Tool {
             let timeout = TimeInterval(arguments.intOptional("timeoutSeconds") ?? 3600)
             let id = try await BackgroundJobManager.shared.startShell(
                 command: bgCommand,
-                workingDirectory: context.workingDirectory,
+                workingDirectory: cwd,
                 timeout: timeout,
                 conversationID: context.conversationID)
             var body =
@@ -89,7 +93,7 @@ public struct RunShellTool: Tool {
         let result = ShellRunner.run(
             executable: launch.executable,
             arguments: launch.arguments,
-            workingDirectory: context.workingDirectory,
+            workingDirectory: cwd,
             timeout: timeout,
             shouldCancel: { Task.isCancelled }
         )

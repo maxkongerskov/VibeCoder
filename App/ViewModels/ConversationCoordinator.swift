@@ -18,6 +18,8 @@ enum ConversationSaveMerge {
         live.pinned = listRow.pinned
         live.archived = listRow.archived
         live.projectRoot = listRow.projectRoot
+        live.worktreeBranch = listRow.worktreeBranch
+        live.worktreeOptOut = listRow.worktreeOptOut
         live.updatedAt = listRow.updatedAt
         return live
     }
@@ -32,16 +34,25 @@ final class ConversationCoordinator: ObservableObject {
     var conversationStore: any ConversationStoring = ConversationStore.shared
 
     @Published var conversations: [Conversation] = []
+    /// True after the first `refreshConversations()` finishes (success or fail).
+    /// First-run seeding must wait so we do not create a task before disk load.
+    @Published var conversationsDidLoad = false
     @Published var selectedConversationID: UUID? {
         // Session-scoped permission grants ("Allow for this session") are
         // keyed by conversation — keep the coordinator's scope in sync.
-        didSet { host?.shellApprovalCoordinatorService.activeConversationID = selectedConversationID }
+        didSet {
+            host?.shellApprovalCoordinatorService.activeConversationID = selectedConversationID
+            if oldValue != selectedConversationID {
+                ensureWorktreeOnSelect(selectedConversationID)
+            }
+        }
     }
     /// JSON files `listDirectory()` could not decode. Sidebar banner + Show in Finder.
     @Published var unloadableConversations: [ConversationLoadFailure] = []
 
     private var chatViewModels: [UUID: ChatViewModel] = [:]
     private var scheduler: SchedulerService?
+    private var isSeedingFirstConversation = false
 
     func startScheduler() async {
         let store = ScheduledTaskStore()
@@ -67,10 +78,12 @@ final class ConversationCoordinator: ObservableObject {
         var convo = Conversation(title: task.name.isEmpty ? "Scheduled task" : task.name)
         convo.modelID = host.selectedModelID
         if let folder = task.projectFolder, !folder.isEmpty {
-            convo.projectRoot = URL(fileURLWithPath: (folder as NSString).expandingTildeInPath)
+            applyDefaultWorktree(
+                to: &convo,
+                projectRoot: URL(fileURLWithPath: (folder as NSString).expandingTildeInPath))
         }
         conversations.insert(convo, at: 0)
-        try? await conversationStore.save(convo)
+        _ = await persistCreatedConversation(convo, context: "runScheduledTask")
 
         let prompt = [task.shortPrompt, task.longPrompt]
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
@@ -98,7 +111,18 @@ final class ConversationCoordinator: ObservableObject {
         convo.modelID = host.selectedModelID
         conversations.insert(convo, at: 0)
         selectedConversationID = convo.id
-        Task { try? await conversationStore.save(convo) }
+        persistCreatedConversationInBackground(convo, context: "newConversation")
+    }
+
+    /// First-run: one visible task so ChatView's connect-hero is the first screen.
+    /// No-ops before the store loads, when a task already exists, or if a seed is in flight.
+    func ensureFirstConversationIfNeeded() {
+        guard conversationsDidLoad else { return }
+        guard !conversations.contains(where: { !$0.archived }) else { return }
+        guard !isSeedingFirstConversation else { return }
+        isSeedingFirstConversation = true
+        newConversation()
+        isSeedingFirstConversation = false
     }
 
     @discardableResult
@@ -106,10 +130,10 @@ final class ConversationCoordinator: ObservableObject {
         guard let host else { return UUID() }
         var convo = Conversation()
         convo.modelID = host.selectedModelID
-        convo.projectRoot = project.url
+        applyDefaultWorktree(to: &convo, projectRoot: project.url)
         conversations.insert(convo, at: 0)
         selectedConversationID = convo.id
-        Task { try? await conversationStore.save(convo) }
+        persistCreatedConversationInBackground(convo, context: "newConversation(in:)")
         return convo.id
     }
 
@@ -193,9 +217,11 @@ final class ConversationCoordinator: ObservableObject {
 
     func moveConversationToProject(_ id: UUID, project: Project?) {
         guard let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
-        conversations[idx].projectRoot = project?.url
+        applyDefaultWorktree(to: &conversations[idx], projectRoot: project?.url)
         if let vm = chatViewModels[id] {
-            vm.conversation.projectRoot = project?.url
+            vm.conversation.projectRoot = conversations[idx].projectRoot
+            vm.conversation.worktreeBranch = conversations[idx].worktreeBranch
+            vm.conversation.worktreeOptOut = conversations[idx].worktreeOptOut
         }
         persistMergedConversation(id: id)
     }
@@ -212,15 +238,16 @@ final class ConversationCoordinator: ObservableObject {
         guard let source = conversations.first(where: { $0.id == id }) else { return }
         // Copy session metadata users expect to keep: pin, deferred tools,
         // sampling, rail pref. Do NOT copy archived (a duplicate should appear
-        // in the sidebar). Worktree branch is intentionally not shared.
-        let copy = Conversation(
+        // in the sidebar). Do not share the source worktree branch — bind
+        // creates a fresh `agentcore/<copyId>` worktree when the source is git.
+        var copy = Conversation(
             id: UUID(),
             title: source.title.isEmpty ? "Untitled (copy)" : "\(source.title) (copy)",
             createdAt: Date(),
             updatedAt: Date(),
             messages: source.messages,
             modelID: source.modelID,
-            projectRoot: source.projectRoot,
+            projectRoot: nil,
             worktreeBranch: nil,
             systemPromptOverride: source.systemPromptOverride,
             samplingOverride: source.samplingOverride,
@@ -231,6 +258,9 @@ final class ConversationCoordinator: ObservableObject {
             railUserPreference: source.railUserPreference,
             stickyContextPins: source.stickyContextPins
         )
+        if let root = source.projectRoot {
+            applyDefaultWorktree(to: &copy, projectRoot: root)
+        }
         conversations.insert(copy, at: 0)
         selectedConversationID = copy.id
         Task {
@@ -277,9 +307,13 @@ final class ConversationCoordinator: ObservableObject {
                         || !list.contains(where: { $0.id == selectedConversationID }) {
                 selectedConversationID = visible.first?.id
             }
+            // Load path: isolate the visible selection even when the id
+            // did not change (didSet would not re-run).
+            ensureWorktreeOnSelect(selectedConversationID)
         } catch {
             Diagnostics.error("refreshConversations: \(error.localizedDescription)")
         }
+        conversationsDidLoad = true
     }
 
     // MARK: - Project binding (Projects pane delete/rename)
@@ -294,8 +328,12 @@ final class ConversationCoordinator: ObservableObject {
             guard let root = conversations[i].projectRoot else { continue }
             guard SafeModeConfig.normalizePath(root.path) == target else { continue }
             conversations[i].projectRoot = nil
+            conversations[i].worktreeBranch = nil
+            conversations[i].worktreeOptOut = false
             if let vm = chatViewModels[conversations[i].id] {
                 vm.conversation.projectRoot = nil
+                vm.conversation.worktreeBranch = nil
+                vm.conversation.worktreeOptOut = false
             }
             persistMergedConversation(id: conversations[i].id)
         }
@@ -309,11 +347,74 @@ final class ConversationCoordinator: ObservableObject {
         for i in conversations.indices {
             guard let root = conversations[i].projectRoot else { continue }
             guard SafeModeConfig.normalizePath(root.path) == old else { continue }
-            conversations[i].projectRoot = newPath
+            if conversations[i].worktreeBranch != nil {
+                applyDefaultWorktree(to: &conversations[i], projectRoot: newPath)
+            } else {
+                conversations[i].projectRoot = newPath
+            }
             if let vm = chatViewModels[conversations[i].id] {
-                vm.conversation.projectRoot = newPath
+                vm.conversation.projectRoot = conversations[i].projectRoot
+                vm.conversation.worktreeBranch = conversations[i].worktreeBranch
+                vm.conversation.worktreeOptOut = conversations[i].worktreeOptOut
             }
             persistMergedConversation(id: conversations[i].id)
+        }
+    }
+
+    /// Load/select: isolate saved git chats that never got a worktree.
+    /// Opt-out stays on main. Not called from send.
+    private func ensureWorktreeOnSelect(_ id: UUID?) {
+        guard let id, let idx = conversations.firstIndex(where: { $0.id == id }) else { return }
+        let beforeBranch = conversations[idx].worktreeBranch
+        let beforeOptOut = conversations[idx].worktreeOptOut
+        do {
+            _ = try WorktreeService.ensureDefaultWorktreeIfNeeded(&conversations[idx])
+        } catch let err as WorktreeError {
+            host?.worktreeError = err.errorDescription
+            return
+        } catch {
+            host?.worktreeError = "Worktree create failed: \(error.localizedDescription)"
+            return
+        }
+        let after = conversations[idx]
+        guard after.worktreeBranch != beforeBranch || after.worktreeOptOut != beforeOptOut else {
+            return
+        }
+        if let vm = chatViewModels[id] {
+            vm.conversation.projectRoot = after.projectRoot
+            vm.conversation.worktreeBranch = after.worktreeBranch
+            vm.conversation.worktreeOptOut = after.worktreeOptOut
+        }
+        persistMergedConversation(id: id)
+    }
+
+    /// Git folders get an `agentcore/<shortId>` worktree by default.
+    /// Create failure is surfaced on `host.worktreeError` and does not leave
+    /// the conversation bound to the git main tree. Non-git bind succeeds and
+    /// surfaces `notAGitRepo` (ARCHITECTURE §11.2) — it does not throw.
+    @discardableResult
+    private func applyDefaultWorktree(to convo: inout Conversation, projectRoot: URL?) -> WorktreeBindResult {
+        do {
+            let result = try WorktreeService.bindProjectEnablingWorktree(&convo, projectRoot: projectRoot)
+            if let reason = result.userVisibleReason {
+                host?.worktreeError = reason
+                if let vm = chatViewModels[convo.id] {
+                    vm.statusLine = reason
+                }
+            }
+            return result
+        } catch let err as WorktreeError {
+            host?.worktreeError = err.errorDescription
+            if let path = convo.projectRoot?.path {
+                return .skippedNotGit(path: path)
+            }
+            return .unbound
+        } catch {
+            host?.worktreeError = "Worktree create failed: \(error.localizedDescription)"
+            if let path = convo.projectRoot?.path {
+                return .skippedNotGit(path: path)
+            }
+            return .unbound
         }
     }
 
@@ -337,6 +438,22 @@ final class ConversationCoordinator: ObservableObject {
 
     func saveConversationSnapshot(at index: Int) {
         persistMergedConversation(id: conversations[index].id)
+    }
+
+    /// Persist a newly created conversation. Logs on disk failure (Ada P2).
+    @discardableResult
+    func persistCreatedConversation(_ snapshot: Conversation, context: String) async -> Bool {
+        do {
+            try await conversationStore.save(snapshot)
+            return true
+        } catch {
+            Diagnostics.error("\(context)(\(snapshot.id)): \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func persistCreatedConversationInBackground(_ snapshot: Conversation, context: String) {
+        Task { _ = await persistCreatedConversation(snapshot, context: context) }
     }
 
     /// Persist list-row metadata + the live VM transcript (if one exists).

@@ -85,6 +85,34 @@ final class SafeBashSeatbeltTests: XCTestCase {
         XCTAssertFalse(roots2.contains(proj.path))
     }
 
+    func testProfileOmitsTempRootWhenMainProjectLivesThere() {
+        let proj = URL(fileURLWithPath: "/tmp/vc-main-in-tmp")
+        let wt = URL(fileURLWithPath: "/tmp/vc-wt-in-tmp")
+        let profile = SafeBash.makeSeatbeltProfile(
+            writableRoots: [wt.path],
+            excludingWritesUnder: proj
+        )
+        XCTAssertTrue(
+            profile.contains("(subpath \(SafeBash.sbplString((wt.path as NSString).standardizingPath)))"),
+            profile)
+        let tmp = ("/tmp" as NSString).standardizingPath
+        let privateTmp = ("/private/tmp" as NSString).standardizingPath
+        XCTAssertFalse(
+            profile.contains("(subpath \(SafeBash.sbplString(tmp)))"),
+            "blanket /tmp must not be writable when main lives there:\n\(profile)")
+        XCTAssertFalse(
+            profile.contains("(subpath \(SafeBash.sbplString(privateTmp)))"),
+            "blanket /private/tmp must not be writable when main lives there:\n\(profile)")
+    }
+
+    func testProfileKeepsTempWhenProjectIsOutsideTemp() {
+        let profile = SafeBash.makeSeatbeltProfile(
+            writableRoots: ["/Users/me/proj"],
+            excludingWritesUnder: URL(fileURLWithPath: "/Users/me/proj")
+        )
+        XCTAssertTrue(profile.contains("/tmp") || profile.contains("/private/tmp"), profile)
+    }
+
     // MARK: - Dry-run launch path
 
     func testSeatbeltInvocationDryRunShape() {
@@ -138,6 +166,45 @@ final class SafeBashSeatbeltTests: XCTestCase {
         XCTAssertEqual(launch.executable, "/bin/zsh")
         XCTAssertTrue(launch.note?.contains("fail-open") == true)
         XCTAssertFalse(SafeBash.isSeatbeltRefusal(launch))
+    }
+
+    func testYoloWorktreeForcesSeatbeltEvenWhenEnvOff() {
+        let proj = URL(fileURLWithPath: "/tmp/vc-yolo-main")
+        let wt = URL(fileURLWithPath: "/tmp/vc-yolo-wt")
+        let env = ["VIBECODER_SHELL_SEATBELT": "0"]
+        let launch = SafeBash.resolveShellLaunch(
+            command: "echo hi",
+            workingDirectory: wt,
+            projectRoot: proj,
+            worktreeRoot: wt,
+            executionMode: .yolo,
+            environment: env,
+            sandboxExecPath: "/usr/bin/sandbox-exec"
+        )
+        if FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") {
+            XCTAssertTrue(launch.sandboxed, launch.note ?? "expected worktree fence in yolo")
+            XCTAssertTrue(launch.profile.contains(wt.path), launch.profile)
+            XCTAssertFalse(launch.profile.contains("(subpath \"\(proj.path)\")"))
+        } else {
+            XCTAssertTrue(SafeBash.isSeatbeltRefusal(launch), launch.note ?? "")
+        }
+    }
+
+    func testYoloWorktreeMissingBinaryFailClosed() {
+        let proj = URL(fileURLWithPath: "/tmp/vc-yolo-main")
+        let wt = URL(fileURLWithPath: "/tmp/vc-yolo-wt")
+        let launch = SafeBash.resolveShellLaunch(
+            command: "echo hi",
+            workingDirectory: wt,
+            projectRoot: proj,
+            worktreeRoot: wt,
+            executionMode: .yolo,
+            environment: ["VIBECODER_SHELL_SEATBELT_FAIL": "open"],
+            sandboxExecPath: "/nonexistent/sandbox-exec-\(UUID().uuidString)"
+        )
+        XCTAssertTrue(
+            SafeBash.isSeatbeltRefusal(launch),
+            "worktree isolation must fail-closed without sandbox-exec: \(launch.note ?? "")")
     }
 
     func testResolveEnabledMissingBinaryFailClosed() {

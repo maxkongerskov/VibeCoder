@@ -1,18 +1,18 @@
-# ARCHITECTURE — NEW DAY as a Finished Product
+# ARCHITECTURE — VibeCoder (rail)
 
-> This file describes what AgentOS NEW DAY *is* when complete. Not the path to get there, not what fits in a week — the target itself. Every other doc (`ROADMAP.md`, `WEEK_PLAN.md`, `SPRINT.md`) is a tactical projection of this.
+> **Current product (claim freeze 2026-08-20):** VibeCoder is a native macOS **BYO OpenAI-compatible HTTP** coding agent. MIT, no license gate, no Sparkle, no Sentry. Binding a **git** project **enables worktree isolation by default** (escape hatch: edit main tree; merge is user-driven). Historical “AgentOS NEW DAY” / `$430` / wizard / `agentos` CLI copy below is **not** current — treat it as target archaeology unless a later §17 row says otherwise. Interactive **`vibecoder` REPL is C1** (same AgentCore; not agentos; not eval-runner). Daily-driver bar: `docs/RELEASE_BAR.md`.
 >
-> When tactical work and this document disagree, this document is the rail. Amendments require a written justification logged under §17.
+> When tactical work and this document disagree, **shipped-status claims in §1 and §17 win**. Amendments require a written justification logged under §17.
 
 ---
 
 ## 1. The one-paragraph product
 
-NEW DAY is a native macOS coding agent that runs on your own hardware **against a bring-your-own local OpenAI-compatible model server**. **Working backends today:** LM Studio, oMLX, Ollama, EXO, and custom `/v1` (all HTTP). **In-process Swift MLX** is an adapter **stub** (`mlx-swift` not wired — generation throws). **Bundled llama.cpp/GGUF** was a planned path and is **removed as a product** (no vendored binary; no `LiteLocalBackend`; legacy settings migrate to Ollama). The agent iterates plan → tool calls → verify → repeat, edits via SEARCH/REPLACE and unified diffs, isolates work in git worktrees (`<project>-agentcore-<id>` / `agentcore/<id>`), and can verify mutations with builds. It also exposes an OpenAI-compatible HTTP server on loopback for Xcode Intelligence — **v1 is a backend proxy** (`tools: []`); full agent-loop routing on that endpoint is not the default. **Public open-source snapshot (amended 2026-08-15): MIT-licensed and distributed as VibeCoder** — the closed-source positioning below is historical. No product license key or trial. No subscription. Model weights leave the Mac only if **you** point at a remote endpoint. Apple Silicon.
+**VibeCoder** is a native macOS coding agent that runs on your own hardware **against a bring-your-own local OpenAI-compatible model server**. **Working backends today:** LM Studio, oMLX, Ollama, **Unsloth Studio**, EXO, and custom `/v1` (all HTTP). **In-process Swift MLX** is an adapter **stub** (`mlx-swift` not wired — generation throws). **Bundled llama.cpp/GGUF** was a planned path and is **removed as a product** (no vendored binary; no `LiteLocalBackend`; legacy settings migrate to Ollama). The agent iterates plan → tool calls → verify → repeat, edits via SEARCH/REPLACE and unified diffs, isolates work in git worktrees (`<project>-agentcore-<id>` / `agentcore/<id>`) **by default when a git project is bound** (escape hatch: edit main tree; merge/discard are user-driven), and can verify mutations with builds. It also exposes an OpenAI-compatible HTTP server on loopback for Xcode Intelligence — **default is a backend proxy** (`tools: []`); **opt-in** Settings toggle runs a **bounded multi-step AgentLoop** (cap 8) against the **bound project** (no worktree/review/MCP parity with in-app chat). **LAN/phone remote control (`RemoteControlServer`) is OFF** — not password-gated, not a shipping feature. MIT-licensed. No product license key or trial. No subscription. No Sparkle. No Sentry. Model weights leave the Mac only if **you** point at a remote endpoint. Apple Silicon.
 
 ## 2. Target user (precise)
 
-The person who buys NEW DAY for $430:
+**(Historical persona — not current pricing.)** The original NEW DAY draft pictured a buyer at $430. **There is no $430 product, trial, or paid SKU.** The user we still design for:
 
 - Owns an Apple Silicon Mac with **≥32 GB unified memory** (the 7B floor) and aspires to 64–128 GB (the 32B/70B target).
 - Writes **Swift or Apple-platform code primarily**, with secondary work in TypeScript, Python, Rust, or Go.
@@ -22,31 +22,33 @@ The person who buys NEW DAY for $430:
 - Wants the agent loop, not just chat. Has hit the wall on raw LM Studio for real coding work.
 - Solo or 1–5 person team. Not enterprise.
 
-NEW DAY is **explicitly not for**: web developers who only touch HTML/CSS/JS, beginners learning to code, anyone whose codebase doesn't need privacy, hobbyists with <32 GB RAM (LM Studio is free, that's the floor for them).
+VibeCoder is **explicitly not for**: web developers who only touch HTML/CSS/JS, beginners learning to code, anyone whose codebase doesn't need privacy, hobbyists with <32 GB RAM (LM Studio is free, that's the floor for them).
 
 ## 3. Positioning
 
+**Current answers use VibeCoder (MIT, BYO HTTP).** Rows that still say “NEW DAY” are the 2026-06 draft voice.
+
 | If they say... | We answer... |
 |---|---|
-| "Why not Cursor?" | Subscription, cloud, your code goes to a third party. NEW DAY runs entirely on your Mac. Worktree isolation is real. |
-| "Why not Claude Code?" | Same — cloud and subscription. Plus NEW DAY is native macOS, not Node/CLI-first. |
-| "Why not LM Studio?" | LM Studio is chat. NEW DAY is the *agent on top of* LM Studio (and we can use it as a backend). |
-| "Why not Ollama + Cursor with a self-hosted endpoint?" | That stack doesn't have a real agent loop with tools, build verification, or worktree isolation. NEW DAY is that layer, designed for it. |
-| "Why not free / open-source?" | **(Historical — superseded 2026-08-15: the repo is public MIT open source.)** Closed-source means we ship a polished single binary. The economics fund continuous development. Free alternatives exist; we're the polished one. |
-| "Why one-time and not subscription?" | We bet that "buy once, own it" is a defensible position against the entire competitive set. It's also honest — local-first software doesn't have ongoing cloud cost. |
+| "Why not Cursor?" | Subscription, cloud, your code goes to a third party. VibeCoder runs on your Mac against a local model server you run. Binding a git project isolates edits in a sibling worktree by default. |
+| "Why not Claude Code?" | Same — cloud and subscription. Plus VibeCoder is native macOS, not Node/CLI-first. |
+| "Why not LM Studio?" | LM Studio is chat. VibeCoder is the *agent on top of* LM Studio (and we can use it as a backend). |
+| "Why not Ollama + Cursor with a self-hosted endpoint?" | That stack doesn't have a real agent loop with tools, build verification, or worktree isolation. VibeCoder is that layer. |
+| "Why not free / open-source?" | **It is.** MIT as of 2026-08-15. The closed-source / $430 pitch below this table is historical. |
+| "Why one-time and not subscription?" | **Historical.** There is no paid SKU. The app is MIT; no license key. |
 
-Distribution/pricing TBD. **No product license keys, trials, or activation gate in the app.**
+**No product license keys, trials, or activation gate.** MIT; distribution is GitHub Releases / DMG (no Sparkle feed). `$430` / Paddle / LemonSqueezy copy elsewhere in this file is historical.
 
 ## 4. Product surface (every screen, every modal)
 
 ### 4.1 First launch
 
-**Target design (below) is not the current app path.** As of 2026-07-23 the app opens straight into the main UI (onboarding flag is force-completed; no in-app weight download). **Practical first run:** install and start a local model server (LM Studio recommended), load a tool-capable model, then Settings → Connection → Test. See README “First-run: start a model server”.
+**Target design (below) is not the current app path.** As of 2026-07-23 the app opens straight into the main UI (onboarding flag is force-completed; no in-app weight download). **2026-08-20 freeze:** there is **no** current onboarding wizard, **no** in-app weight download, **no** Sentry. **Practical first run:** install and start a local model server (LM Studio recommended), load a tool-capable model, then Settings → Connection → Test. See README “First-run: start a model server”.
 
-**Aspirational wizard (future):**
+**Aspirational wizard (not current product — do not market):**
 
-1. **Welcome.** "AgentOS NEW DAY. Local-first coding agent. Nothing leaves your Mac *when you use a local server*." Hardware detected inline. No crash-reporting SDK shipped (Sentry removed). Continue.
-2. **Connect a server / pick a model.** Prefer detecting LM Studio / oMLX / Ollama / EXO on loopback over promising in-app GGUF/MLX downloads. Optional curated cards remain valid as *catalog infrastructure*, not “we host the engine.”
+1. **Welcome.** Local-first coding agent. Nothing leaves your Mac *when you use a local server*. Hardware detected inline. No crash-reporting SDK. Continue.
+2. **Connect a server / pick a model.** Prefer detecting LM Studio / oMLX / Ollama / Unsloth Studio / EXO on loopback over promising in-app GGUF/MLX downloads. Optional curated cards remain valid as *catalog infrastructure*, not “we host the engine.”
 
 Lands in a new conversation with Coder defaults once a backend answers `/v1/models`.
 
@@ -81,7 +83,7 @@ Per-model load + inference + system prompt all live under **Models**, alongside 
 1. **General** — appearance (light/dark/system), font size, agent trace toggle.
 2. **Connection** — active backend picker; per-backend host/port + "Test connection" button; Local API server toggle + port + "Run on app launch" + Xcode setup instructions.
 3. **Models** — see §4.3.1 below. The fattest tab; covers per-model load + inference + system prompt + reload-banner UX.
-4. **Privacy** — Sentry opt-in (with full explanation of what's sent), conversation backup (export/import/clear all).
+4. **Privacy** — conversation backup (export/import/clear all). **No Sentry / no telemetry SDK.** (`crashReportingEnabled` is a leftover settings field and does not send reports.)
 5. **About** — version, build, credits, legal. (No Sparkle auto-update.)
 
 #### 4.3.1 Models tab (the load-settings home)
@@ -153,10 +155,11 @@ Rules:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                  Surfaces (3, sharing one core)                  │
+│                  Surfaces                                        │
 │  ┌──────────────┐    ┌──────────────┐    ┌────────────────────┐ │
-│  │ AgentOS.app  │    │ vibecoder    │    │ LocalAPIServer     │ │
-│  │ (SwiftUI)    │    │ REPL (C1–C3) │    │ (OpenAI-compat)    │ │
+│  │ VibeCoder.app│    │ vibecoder    │    │ LocalAPIServer     │ │
+│  │ (SwiftUI) ✓  │    │ REPL (C1)    │    │ (proxy default;    │ │
+│  │              │    │              │    │  AgentLoop opt-in) │ │
 │  └──────┬───────┘    └──────┬───────┘    └─────────┬──────────┘ │
 └─────────┼──────────────────────┼──────────────────────┼──────────┘
           ▼                      ▼                      ▼
@@ -180,6 +183,7 @@ Rules:
 │  Inference layer:                                                │
 │    InferenceBackend protocol                                     │
 │       ├─ LMStudioBackend / OMLXBackend / OllamaBackend (HTTP)  ✓ │
+│       ├─ UnslothStudioBackend (HTTP + load/unload)             ✓ │
 │       ├─ EXOBackend (HTTP + /state topology)                   ✓ │
 │       ├─ OpenAICompatibleBackend (custom /v1)                  ✓ │
 │       ├─ MLXBackend (in-process — STUB; mlx-swift not wired)     │
@@ -276,6 +280,7 @@ Output: pass / fail / no-build-system. Fail injects truncated stderr (8 KB cap) 
 | **LM Studio** | ✓ HTTP | function calling | SSE | loaded-only via `/api/v0/models` | via LM Studio app | Strongest day-1 path |
 | **oMLX** | ✓ HTTP | function calling | SSE | load/unload + status API | via oMLX | Separate process, not in-process MLX |
 | **Ollama** | ✓ HTTP | function calling | SSE | `/v1/models` (all tags; no loaded filter yet) | via Ollama | Replaces removed llama.cpp product |
+| **Unsloth Studio** | ✓ HTTP | function calling | SSE | Studio folder + cache; load/unload | via Studio | Default `:8888/v1`; bearer or local agent key |
 | **EXO** | ✓ HTTP | function calling | SSE | pin Model ID in Settings | n/a | `/state` topology; avoid full catalog flood |
 | **Custom** | ✓ HTTP | function calling | SSE | `/v1/models` | n/a | Any OpenAI-compat base URL |
 | **MLX (in-process)** | ❌ stub | Route B target | throws | HF cache helpers only | `MLXHubDownloader` real; UI not product path | `Package.swift`: mlx-swift not wired |
@@ -285,7 +290,7 @@ All **HTTP** adapters implement the same `InferenceBackend` protocol; the agent 
 
 ### 5.4 Tool surface (v1)
 
-**Honesty rule:** names below match `ToolRegistry.registerBuiltins()` as of 2026-07-24. Do not invent aliases (`build_xcode`, `git_log`, …) for marketing — check the registry.
+**Honesty rule:** names below match `ToolRegistry.registerBuiltins()` as of 2026-08-20. Do not invent aliases (`build_xcode`, `git_log`, …) for marketing — check the registry.
 
 **Filesystem (core)**
 - `read_file`, `write_file`, `edit_file` (SEARCH/REPLACE primary), `apply_patch`
@@ -295,7 +300,7 @@ All **HTTP** adapters implement the same `InferenceBackend` protocol; the agent 
 - `run_shell` — synchronous, bounded output; optional **seatbelt** (`sandbox-exec`) for child processes when Settings enable it — **not** macOS App Sandbox for the app binary
 
 **Git (core)**
-- `git_status`, `git_diff` only (no registered `git_log` / `git_show` / `git_blame` / `git_commit` tools)
+- `git_status`, `git_diff`, **`git_commit`**, **`create_pull_request`** (no registered `git_log` / `git_show` / `git_blame`)
 
 **Build / Xcode (core)**
 - `xcode_build`, `xcode_project_editor` (not a full build-matrix tool family)
@@ -315,6 +320,7 @@ All **HTTP** adapters implement the same `InferenceBackend` protocol; the agent 
 
 **Worktree (service + task isolation — not worktree_* tools)**
 - `WorktreeService`: path `<project>-agentcore-<shortid>`, branch `agentcore/<shortid>`.
+- **Default (2026-08-20):** binding a **git** project creates/reuses that worktree. Not a repo → bind still works, no worktree. Escape hatch: edit main tree. Merge/discard remain user actions. Contract: §11.2 and `docs/RELEASE_BAR.md`.
 - `task` supports `isolation: worktree`. **No** registered `worktree_create` / `worktree_merge` tools.
 
 **Agent meta (core)**
@@ -336,7 +342,7 @@ All **HTTP** adapters implement the same `InferenceBackend` protocol; the agent 
 - In-process MLX generation (stub only)
 - Zero-deps / auto-spawn model runner (bundled llama.cpp **removed**)
 - LocalAPI multi-step agent-loop is **opt-in** (D1; default still proxy — §5.7)
-- Grok-class **`monitor_*` tool product** (`JobMonitor` is a thin BackgroundJob listing helper only)
+- Grok-class process-watch **monitor product** — registered `list_background_jobs` / `monitor_jobs` list **in-app** jobs only (`JobMonitor`); not arbitrary stdout watch
 - macOS **App Sandbox** entitlements redesign (current app entitlements are empty; seatbelt ≠ App Sandbox)
 - First-run Connection wizard (app currently skips onboarding)
 
@@ -346,7 +352,7 @@ MCP client, sub-agents (`task`), plan tools, checkpoints, and skills index are p
 
 Curated catalog data in-tree (e.g. MLX/GGUF seed entries, hardware-fit helpers) is **infrastructure**, not a promise that the app downloads and runs those weights itself.
 
-1. **BYO server remains the v1 download path** — models are loaded in LM Studio / oMLX / Ollama / EXO; the app lists what the server exposes.
+1. **BYO server remains the v1 download path** — models are loaded in LM Studio / oMLX / Ollama / Unsloth Studio / EXO; the app lists what the server exposes.
 2. **Tested model configs** — known families may carry sampling / context defaults when ids match.
 3. **Hardware-fit hints** — RAM-aware helpers exist for future wizard / Discover; do not claim an in-app GGUF/MLX storefront is shipping.
 
@@ -409,18 +415,22 @@ Endpoints:
 **Headless serve (`AgentOSServeServer`):** same OpenAI-compat routes. When
 `configure(backend:)` is set, completions proxy that backend; when unset,
 responses use the intentional **`agentos-echo`** stub (not a real model).
-`agentToolsEnabled` default-off; agent-loop multi-step is the LocalAPI
-opt-in path (serve may still be proxy/schemas-oriented — check configure).
+`agentToolsEnabled` default-off. **LocalAPI** (`LocalAPIServer`) is the
+in-app path whose Settings toggle maps `true → .agentLoop` (execute +
+re-prompt, cap 8). Headless serve is **not** the same: it may still attach
+schemas or proxy depending on `configure` — check the server you started.
+Do **not** document serve as “schemas-only Local API”; that was PB7 and is
+**wrong** for the Settings opt-in (D1).
 
-Usage: Xcode 16 → Settings → Intelligence → Add provider → `http://localhost:11435/v1`. With the agent-loop toggle **off** (default), completions are a plain proxy. With it **on**, clients that can tolerate multi-step tool latency get a capped agent turn. The full in-app chat remains the primary agent surface (worktrees, review UI, MCP).
+Usage: Xcode 16 → Settings → Intelligence → Add provider → `http://localhost:11435/v1`. With the agent-loop toggle **off** (default), completions are a plain proxy. With it **on**, the request runs a **bounded AgentLoop** against the bound project: tools **execute** server-side (PathConfinement to that root; no worktree, no patch-review sheet, no shell-approval coordinator — shell/MCP `.ask` hard-deny). Still **not** “Xcode is Cursor.” The full in-app chat remains the primary agent surface (worktrees, review UI, MCP).
 
 **The local server is started from the app (Settings → Local API → Start).** Headless automation can construct `AgentOSServeServer` / `LocalAPIServer` with an explicit backend.
 
 ### 5.8 CLI surface
 
-Interactive **`vibecoder`** REPL (`Sources/VibeCoderCLI` + `VibeCoderCLILib`). Same `AgentCore` / BYO HTTP backends / `ConversationStore` as the app; TTY y/n/always (empty/`n`/unknown deny); worktree bind on git projects. **Not** `agentos`. **Not** `eval-runner` (`Evals/` stays separate). **Not** a TUI. Native app remains the primary surface.
+Interactive **`vibecoder`** REPL is **C1** (`Sources/VibeCoderCLI` + `VibeCoderCLILib`). Same `AgentCore` / BYO HTTP backends / `ConversationStore` as the app; TTY y/n/always approvals (empty/`n`/unknown deny); worktree bind on git projects. **Not** `agentos`. **Not** `eval-runner` (`Evals/` stays separate). Native app remains the primary surface.
 
-**C2:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = plain text (no escapes). **C3:** SIGINT during a turn cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C still exits. TTY `always` is durable; patch `always` → directory grant.
+**C2:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = C1 plain text (no escapes). **C3:** SIGINT during a turn cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C still exits. TTY `always` is durable; patch `always` → directory grant.
 
 Do not document `agentos run` / `agentos serve` as shipping. The historical `agentos` CLI remains removed.
 
@@ -506,11 +516,11 @@ Speculative decoding (when draft model is set) target: **1.5×–2× throughput*
 
 - **~300+ tests, all passing.** No flakiness in CI for 7 consecutive days before release.
 - **Zero `try?` in production code paths.** Audited in CI via grep.
-- **Crash-free rate >99.5%** (via Sentry opt-in telemetry, anonymized stack traces only).
+- **Crash-free rate >99.5%** — **no Sentry**; this bar is process/quality, not a shipping telemetry SDK.
 - **Notarized, hardened runtime, signed with Developer ID.**
-- **All four backends end-to-end-validated** with at least one real model each.
+- **HTTP backends end-to-end-validated** with at least one real model each (LM Studio / oMLX / Ollama / Unsloth / EXO / custom as applicable).
 - **LocalAPIServer validated against Xcode Intelligence + curl + Postman.**
-- **First-launch onboarding completes in <60 seconds on a fresh Mac.**
+- **First-launch:** no wizard. Empty chat + Settings → Connection is the path (not a 60-second onboarding SLA).
 - **No memory leaks under 4-hour sustained use** (verified via Instruments).
 - **All keyboard shortcuts (§4.5) work and are documented.**
 - **The DMG installs cleanly on a clean Mac** with no Gatekeeper warnings.
@@ -527,10 +537,9 @@ git push → CI (macos-14)
   ├─ codesign with Developer ID Application
   ├─ notarytool submit + wait
   ├─ stapler staple
-  ├─ create-dmg → AgentOS NEW DAY-<version>.dmg
+  ├─ create-dmg → VibeCoder-<version>.dmg
   ├─ codesign DMG + notarize DMG + staple DMG
-  ├─ generate Sparkle appcast entry
-  └─ upload to agentos.tools/releases/
+  └─ publish DMG (e.g. GitHub Releases) — **no Sparkle appcast**
 ```
 
 ### 9.2 License system (removed)
@@ -547,23 +556,16 @@ git push → CI (macos-14)
 
 ### 9.3 Updater
 
-Sparkle 2.x with `SUFeedURL = "https://agentos.tools/appcast.xml"`. Delta updates when possible. EdDSA-signed appcast.
+**Removed.** Sparkle is not in the shipping package. `Release/appcast.xml` is a **tombstone** (historical AgentOS feed; not consumed by VibeCoder). Users install new DMGs manually. Do not invent a replacement updater in this rail.
 
 ### 9.4 Telemetry
 
-Sentry SDK, **off by default**. Opt-in in onboarding step 4 and Settings → Privacy. When enabled:
-
-- Anonymized stack traces only
-- No conversation content
-- No model data
-- No file paths from user's project
-- DSN-locked to NEW DAY's project; Sentry's data retention is 90 days
+**Removed.** No Sentry SDK. Settings `crashReportingEnabled` is unused schema compatibility. Do not claim opt-in crash reporting as current.
 
 ### 9.5 Distribution sites
 
-- `agentos.tools` — landing page, download, docs, buy button (Paddle/LemonSqueezy checkout)
-- `agentos.tools/appcast.xml` — Sparkle feed
-- `agentos.tools/catalog.json` — model catalog (refreshed at app launch, stale-while-revalidate)
+- GitHub Releases (or any host) for signed DMGs — **current**
+- `agentos.tools` / Paddle / LemonSqueezy / Sparkle appcast — **historical, not current**
 
 ## 10. Integration architecture
 
@@ -573,7 +575,7 @@ Sentry SDK, **off by default**. Opt-in in onboarding step 4 and Settings → Pri
 
 **Why it matters:** one local OpenAI-compatible base URL. Default path is safe for Xcode. Opt-in path is for clients that want server-side tool execute without using the SwiftUI app. See §5.7.
 
-**Honesty (PB7):** do not market this as “Cursor-level agentic Xcode.” Opt-in `agentToolsEnabled` only attaches tool **schemas** to the proxy request; it is not a full agent gateway. Multi-step tool execution stays in-app.
+**Honesty (2026-08-20, supersedes PB7 “schemas-only”):** do not market this as “Cursor-level agentic Xcode.” Default remains proxy `tools: []`. Opt-in `agentToolsEnabled` runs a **bounded AgentLoop** (execute + re-prompt, cap 8) on the bound project — **not** schemas-only (that mapping is leftover `ServeToolsPolicy.schemasOnly`, unused by the Settings flag). It is still **not** a full agent gateway: no worktree, no review UI, no MCP/Xcode-bridge by default. See §5.7.
 
 ### 10.2 MCP (Model Context Protocol) — shipped client
 
@@ -587,7 +589,11 @@ User skills (markdown files with front matter) get an export bundle format (`.ag
 
 Skills can declare dependencies on tools (or MCP servers); installer verifies tool availability before activating.
 
-### 10.4 Other (post-v1)
+### 10.4 Remote control — **OFF (not shipping)**
+
+`RemoteControlServer` / LAN / phone QR is **shut down as a product**. It is **not** password-gated and is **not** a shipping feature. Do not document QR remote, Tailscale probe, or “mobile parity” as current. Code may still exist in-tree while Lin/Pixel disable the surface; treat any remaining UI as dead until a later §17 row says otherwise.
+
+### 10.5 Other (post-v1)
 
 - **Linear / GitHub / Jira tool integrations** as bundled MCP servers
 - **Voice transcription input** (whisper.cpp via subprocess) — possibly v2
@@ -599,9 +605,24 @@ Skills can declare dependencies on tools (or MCP servers); installer verifies to
 
 All failure paths route through `DiagnosticsHub`. UI surfaces severe events in a "Recent issues" panel. CLI prints to stderr. Optional log file at `~/Library/Logs/AgentOS-NewDay/diagnostics.log`.
 
-### 11.2 Worktree safety
+### 11.2 Worktree safety (default on bind-git)
 
-Toggle on the chat header creates a real `git worktree` at `<project>-agentcore-<id>` on branch `agentcore/<id>` (see `WorktreeService`). All file mutations route to the worktree when active. Review sheet shows the diff vs main; merge/discard dispose the branch + worktree.
+**Product contract (2026-08-20).** Full bind-site list and Lin notes: `docs/RELEASE_BAR.md`.
+
+A real `git worktree` at `<project>-agentcore-<id>` on branch `agentcore/<id>` (`WorktreeService.createOrReuseWorktree`). When `conversation.worktreeBranch` is set, mutating tools use `worktreeRootURL` (not the main checkout). Review sheet shows diff vs main. Merge/discard dispose the branch + worktree.
+
+| Situation | Behavior |
+|-----------|----------|
+| Bind / new chat in a **git** project | Create or reuse the sibling worktree. Isolation **on**. |
+| Bind a **non-git** folder | Bind succeeds. No worktree. Surface `notAGitRepo`. Edits go to `projectRoot`. |
+| Main tree is **dirty** | Do **not** block. Worktree is a clean checkout of **HEAD**. Uncommitted main files stay in main. |
+| Path exists but is not this project’s worktree | Fail closed (today’s error). Do not delete foreign dirs. |
+| Escape hatch **Edit main tree** | `worktreeBranch = nil` for that conversation. Do not recreate on `send`. |
+| **Merge / discard** | User-driven only (`WorktreeCoordinator`). Never auto-merge on turn end, quit, or bind. |
+| Local API agent-loop | **Unchanged:** bound project + PathConfinement; **no** worktree. |
+| Existing chats with `projectRoot` and nil branch | Do **not** migrate on load. Default applies on the next **bind** (or explicit enable). |
+
+`git_commit` / `create_pull_request` must use the worktree cwd when isolation is on (Lin gate). Do not implement this policy inside `AgentLoop`.
 
 ### 11.3 Safe Mode + shell seatbelt (not App Sandbox)
 
@@ -613,11 +634,11 @@ Toggle on the chat header creates a real `git worktree` at `<project>-agentcore-
 
 ### 11.4 Headless mode
 
-App “Headless” / unattended posture (notifications, conservative system prompt). The historical **`agentos` CLI remains removed** — do not document `agentos run --headless`. Interactive `vibecoder` REPL is C1–C3 and is **not** that headless path. Headless eval/script paths live under `Evals/` (`eval-runner`) when present. Pairs with Safe Mode for unattended work.
+App “Headless” / unattended posture (notifications, conservative system prompt). The historical **`agentos` CLI remains removed** — do not document `agentos run --headless`. Interactive `vibecoder` REPL is C1 and is **not** that headless path. Headless eval/script paths live under `Evals/` (`eval-runner`) when present. Pairs with Safe Mode for unattended work.
 
 ### 11.5 Job monitor (not Grok monitor product)
 
-`JobMonitor` / scheduler status snapshots list **background jobs** already tracked by `BackgroundJobManager` / scheduled tasks. This is **lightweight observability** (status strings for UI/settings). There is **no** registered agent tool named `monitor` / `monitor_*`, no continuous stdout streaming product, and no claim of Grok Build monitor parity. See polish P9 for UI copy.
+`JobMonitor` / scheduler status snapshots list **background jobs** already tracked by `BackgroundJobManager` / scheduled tasks. Registered tools `list_background_jobs` and `monitor_jobs` are **in-app job listing only**. No continuous stdout watch product; no Grok Build monitor parity. See polish P9 for UI copy.
 
 ### 11.6 Agent trace
 
@@ -637,7 +658,7 @@ Off by default. When enabled (Settings → General), writes one JSONL entry per 
 | Build fails (BuildGuard) | Truncated stderr injected; agent retries on next turn. After 3 consecutive build failures: stall trigger, halt loop, surface to user. |
 | Disk full | Diagnostics fatal. App refuses to write conversation; user prompted. |
 | (removed) Product license expired | N/A — no product license gate. |
-| Network unavailable | **Local tools + local model server on loopback still work.** Public-net tools (`web_search`, `fetch_url`, …) fail. App does not need cloud for the agent loop. Sparkle update check fails gracefully. (No product license phone-home.) |
+| Network unavailable | **Local tools + local model server on loopback still work.** Public-net tools (`web_search`, `fetch_url`, …) fail. App does not need cloud for the agent loop. (No Sparkle; no product license phone-home.) |
 
 ## 13. The 10 explicit non-goals
 
@@ -649,8 +670,8 @@ These are decisions, not omissions:
 4. **No model training.** Inference only. No fine-tuning UI.
 5. **No voice / audio in v1.** Whisper/TTS deferred to v2.
 6. **No translation / localization.** English-only at launch. Adding later is cheap if there's demand.
-7. **No free tier.** Trial + paid. A free tier would dilute the price anchor and the "ownership" pitch.
-8. **No open-source plugin marketplace.** Closed-core, possibly with curation if a marketplace emerges in v1.2. **(Amended 2026-08-15: core is public MIT; the non-goal is the *marketplace*, not openness.)**
+7. **No paid SKU / trial / license key.** **(Amended 2026-08-20: MIT; the old “no free tier / $430” pitch is obsolete.)**
+8. **No skill marketplace in v1.** **(Amended 2026-08-15: core is public MIT; the non-goal is the *marketplace*, not openness.)**
 9. **Not a replacement for Xcode.** We integrate via Intelligence; we don't rebuild the IDE.
 10. **Not a generic macOS assistant.** Coding-focused. No "what's the weather" surface.
 
@@ -658,7 +679,7 @@ These are decisions, not omissions:
 
 | Version | Theme | Major adds |
 |---|---|---|
-| **v1.0** | Foundation | Live backends: **LM Studio, oMLX, Ollama, EXO, custom HTTP**. In-process MLX = stub; bundled GGUF/llama = **removed**. Worktree (`agentcore/`), scheduled runs, per-project instructions, LocalAPIServer as **backend proxy**, Notes instead of Skills. Tool/memory surface: see `ToolRegistry` + §5.4/§5.6 honesty updates (2026-07-23). |
+| **v1.0** | Foundation | Live backends: **LM Studio, oMLX, Ollama, Unsloth Studio, EXO, custom HTTP**. In-process MLX = stub; bundled GGUF/llama = **removed**. Worktree (`agentcore/`, **default on bind-git**), scheduled runs, per-project instructions, LocalAPIServer **proxy default / bounded AgentLoop opt-in**. Tool/memory surface: see `ToolRegistry` + §5.4/§5.6. |
 | **v1.1** | Polish + MCP | MCP client + server, per-hunk patch review polish, WorktreeReviewSheet → real `git diff`, Settings cascade UI refinement, performance tuning |
 | **v1.2** | Skills marketplace | User skill creation UI, export bundle, marketplace listing at agentos.tools/skills, rating + install |
 | **v1.3** | Catalog expansion | Auto-update catalog with monthly model curation, hardware-tier suggestions, draft-model speculative decoding for all GGUF models |
@@ -669,14 +690,14 @@ These are decisions, not omissions:
 ## 15. Pricing & business model
 
 - **No product license key.** App is not gated by trial or activation.
-- **No subscription, ever.**
-- **Refund policy:** 30 days, no questions asked.
+- **No subscription.**
+- **MIT open source.** `$430` / refund-policy / merchant-of-record copy is **historical**.
 
-Distribution: Paddle or LemonSqueezy as merchant of record. Sales tax / VAT handled. Apple App Store **not** used (would forbid the LocalAPIServer behavior under sandbox rules). Direct distribution from agentos.tools.
+Distribution: signed DMG (GitHub Releases or any host). Apple App Store **not** used (sandbox would forbid LocalAPI + agent tools as shipped). Direct `agentos.tools` storefront is **not** current.
 
 ## 16. Brand & voice
 
-- Name: **AgentOS NEW DAY** (full), **AgentOS** (short). **(Amended 2026-08-15: the public snapshot ships as *VibeCoder* — `AppBranding.displayName`; AgentOS NEW DAY remains the internal/architectural name used across these docs.)**
+- Name: **VibeCoder** (shipping). **AgentOS NEW DAY** is a historical/internal draft name — **not** current product.
 - Tagline: "Local-first coding agent. Nothing leaves your Mac."
 - Voice: precise, technical, dry. No hype. Talk to developers like developers.
 - Visual: Geist Mono + Geist Sans. Minimal chrome. Dark mode parity with light. SF Symbols. No animation for animation's sake.
@@ -688,7 +709,11 @@ When this doc is amended, log the change here with date + reason. The doc itself
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
-| 2026-08-21 | §5 diagram, §5.8, §11.4 | **C1–C3 CLI honesty:** interactive `vibecoder` REPL (BYO HTTP, same AgentCore). Not `agentos`. Not eval-runner. C2 TTY color / `NO_COLOR`. C3 SIGINT cancel-in-turn + TTY always. | Code landed `7baddb2`; rail still said CLI removed |
+| 2026-08-21 | §5.8 | **C3 CLI honesty:** SIGINT mid-turn cancels via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C exits. TTY y/n/always (empty/`n`/unknown deny); patch `always` → directory grant. | Turnip verified `VibeCoderCLILib` 24/24 |
+| 2026-08-21 | §5.8 | **C2 CLI honesty:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = C1 plain text (no escapes). C3 cancel-in-turn + always grants still not shipped. | Turnip verified `EventPrinterTests` 5/5 |
+| 2026-08-21 | §5 diagram, §5.8, §11.4, claim-freeze header | **C1 CLI honesty:** interactive `vibecoder` REPL ships as C1 (BYO HTTP, same AgentCore, shared ConversationStore). Not `agentos`. Not eval-runner. C2 color / C3 cancel-in-turn + always grants not shipped. | Code already had `vibecoder`; rail still said CLI removed |
+| 2026-08-20 | §1, §3, §5.4, §11.2, `docs/RELEASE_BAR.md` | **Worktree default:** bind-git enables isolation; escape hatch edit-main-tree; merge user-driven; dirty HEAD allowed; non-git binds without a worktree. Daily-driver bar checked in. (Not §5.6 — that section is Memory.) | Max standing order: daily-driver isolation, not opt-in-only |
+| 2026-08-20 | §1, §2, §4.1, §4.3, §5 diagram, §5.3, §5.4, §5.7, §8–§10.4, §12–§16 | **Claim freeze:** current product is **VibeCoder** MIT BYO HTTP (LM Studio / oMLX / Ollama / **Unsloth** / EXO / custom). No Sparkle, Sentry, bundled llama, in-process MLX, $430 SKU, wizard, or CLI. Local API **default = proxy `tools: []`**; opt-in = **bounded AgentLoop** on bound project (supersedes PB7 “schemas-only” in §10.1). `git_commit` + `create_pull_request` registered. **Remote control OFF.** `Release/appcast.xml` tombstoned. BYO is the v1 inference decision. | Max-approved product claim 2026-08-20; GROK_PORT/§10.1 contradicted `ServeToolsPolicy` |
 | 2026-08-18 | §17 + companion scorecards | **Docs flip:** MCP GET `/sse` (not HTTP alias); default-IGNORE project hooks (user-scope still runs); commands editor + `$ARGUMENTS`; sidebar archive list + Find Files scope; mid-run `metadata.json`; terminal CSI 33/33 incl. Grok Build smoke; XCTest parent-child suite. Still unchecked: `node_repl`, mermaid, `mlx-swift`, queue Edit. | Product-architect honesty pass after those landings |
 | 2026-08-18 | §17 + companion scorecards | **Hooks events wired:** `PermissionRequest` + `PostToolUseFailure` + MCP `preToolDetailed`. Scorecards flipped. | Docs-only; Build verified 53/53 + 84/84 |
 | 2026-08-18 | §17 + companion scorecards | **Wave 4 `memory_update`:** `MemoryUpdateReminder` extras + `AgentLoop` `pendingNudges` hook landed. Scorecards flipped. Still unchecked: typed memory kinds, ignore-project-hooks, SSE GET, node REPL, `mlx-swift`, commands editor, mermaid. | Wave 4 docs pass — do not list mid-turn memory refresh as open |

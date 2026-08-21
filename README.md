@@ -5,7 +5,7 @@ Native macOS agentic coder that runs on your own hardware.
 **Inference model (honest):** bring-your-own **local OpenAI-compatible HTTP server**. Live first-class backends: **LM Studio**, **oMLX**, **Ollama**, **Unsloth Studio**, **EXO**, and **custom** `/v1` endpoints.  
 **Not shipped:** in-process Swift MLX generation (`mlx-swift` not wired — adapter stub only), bundled llama.cpp/GGUF runner (product **removed**; use Ollama or any OpenAI-compat server). There is no `LiteLocalBackend`.
 
-Open-source under the [MIT License](./LICENSE). Apple Silicon, macOS 14+. SwiftUI app sharing the core library, plus an interactive `vibecoder` REPL.
+Open-source under the [MIT License](./LICENSE). Apple Silicon, macOS 14+. SwiftUI app sharing the core library, plus an interactive `vibecoder` REPL (C1).
 
 > **Where this project came from.** This is the second pass on Max's AgentOS DEV PLAN. A full critique and architectural diff from v1 lives in [`DESIGN.md`](./DESIGN.md). Read that first — including the **shipped status box** at the top of DESIGN.
 
@@ -22,8 +22,8 @@ VibeCoder is the missing layer: a real agent loop, real tools, real diff-aware e
 
 Two anchors (with honest caveats):
 
-1. **Local agent + git worktree isolation.** The agent works inside `<project>-agentcore-<id>` on branch `agentcore/<id>` — a sibling git worktree you can review and merge before it touches the main checkout. Requires a reachable local model server for the LLM turns.
-2. **OpenAI-compatible local server for Xcode.** Point Xcode 16's Intelligence tab at `http://localhost:11435/v1` and completions run against your configured backend — loopback-only. **Today this is a backend proxy** (`tools: []`); full agent-loop routing (tools, BuildGuard, worktrees) is **not** enabled on this endpoint by default. See ARCHITECTURE §5.7.
+1. **Local agent + git worktree isolation.** Binding a **git** project enables a sibling worktree `<project>-agentcore-<id>` on branch `agentcore/<id>` **by default**. Review and merge before it touches the main checkout (escape hatch: edit main tree). Requires a reachable local model server for the LLM turns. Non-git folders bind without a worktree.
+2. **OpenAI-compatible local server for Xcode.** Point Xcode 16's Intelligence tab at `http://localhost:11435/v1` and completions run against your configured backend — loopback-only. **Default is a backend proxy** (`tools: []`). Settings opt-in runs a **bounded AgentLoop** (cap 8) on the **bound project** — tools execute server-side; this is **not** schemas-only and **not** in-app worktree/review/MCP parity. See ARCHITECTURE §5.7.
 
 ---
 
@@ -32,7 +32,8 @@ Two anchors (with honest caveats):
 - **MIT open source** — see [LICENSE](./LICENSE) and [LEGAL.md](./LEGAL.md).
 - **No telemetry / no Sparkle / no Sentry** in the shipping package.
 - **Empty entitlements** (not App Sandboxed): agent tools and shell run with full user privileges, gated by Safe Mode / approvals.
-- **Local API** defaults to loopback completions proxy (`tools: []`); multi-step agent loop is **opt-in**.
+- **Local API** defaults to loopback completions proxy (`tools: []`); multi-step agent loop is **opt-in** (bounded AgentLoop on the bound project).
+- **LAN / phone remote control is OFF** — not password-gated, not a shipping feature.
 - **“Stays on your Mac”** is true for loopback backends. A **custom remote `/v1`** endpoint you configure will receive prompts and tool context — by design.
 
 
@@ -67,8 +68,8 @@ VibeCoder/                      repo root (ships as VibeCoder.app)
 ├── Sources/
 │   ├── AgentCore/              Pure Swift core — backends, tools, agent loop
 │   ├── MLXBackend/             Optional MLX adapter **stub** (depends on AgentCore)
-│   ├── VibeCoderCLI/           Interactive `vibecoder` REPL entry (not eval-runner)
-│   ├── VibeCoderCLILib/        REPL, TTY y/n/always, TurnRunner → AgentLoop
+│   ├── VibeCoderCLI/           Interactive `vibecoder` REPL entry (C1; not eval-runner)
+│   ├── VibeCoderCLILib/        REPL, TTY y/n, TurnRunner → AgentLoop
 │   └── Harness/                Experimental rewrite (not the app daily driver)
 ├── Tests/
 │   ├── AgentCoreTests/
@@ -97,19 +98,19 @@ Then ⌘R inside Xcode. The project references the SPM package at `..` (the repo
 - Chat pane: streaming assistant content, tool-call stubs, expandable tool-result cards
 - Multi-line composer (Enter to send, Shift+Enter for newline) with inline cancel
 - Settings sheet (gear icon) with Connection / Sampling / System Prompt / Agent / Local API tabs
-- Local API toggle that starts an OpenAI-compatible **proxy** on a configurable port (loopback-only)
+- Local API toggle that starts an OpenAI-compatible **proxy** on a configurable port (loopback-only); agent-loop on that port is a separate Settings opt-in
 
 An XcodeGen `project.yml` is also included as an alternate generator if you'd rather regenerate the `.xcodeproj` from a declarative spec — useful if the pbxproj ever gets messy from manual edits in Xcode. `brew install xcodegen && cd App && xcodegen generate`.
 
-### CLI (`vibecoder`)
+### CLI (`vibecoder`, C1)
 
-Interactive REPL on the same `AgentCore` / BYO HTTP backends / `ConversationStore` as the app. Shared worktree bind. TTY ask-mode is y/n/always (empty, `n`, or unknown = deny). **Not** `agentos`. **Not** `eval-runner`. **Not** a TUI. Native app remains primary.
+Interactive REPL on the same `AgentCore` / BYO HTTP backends / `ConversationStore` as the app. Shared worktree bind. TTY ask-mode is y/n/always (empty, `n`, or unknown = deny). **Not** `agentos`. **Not** `eval-runner`.
 
 ```bash
 swift run vibecoder --project /path/to/repo --backend ollama --model qwen
 ```
 
-**C2:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = plain text (no escapes). **C3:** SIGINT during a turn cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C still exits. TTY `always` is durable; patch `always` → directory grant. The historical `agentos` CLI is gone.
+**C2:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = C1 plain text (no escapes). **C3:** SIGINT during a turn cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C still exits. TTY `always` is durable; patch `always` → directory grant. The historical `agentos` CLI is gone.
 
 ## Backends
 

@@ -127,6 +127,23 @@ final class GitWorkflowCommitPRTests: XCTestCase {
         XCTAssertTrue(names.contains("create_pull_request"))
     }
 
+    func testCreatePullRequestPushDefaultsFalse() {
+        let desc = CreatePullRequestTool.schema.parameters.properties["push"]?.description ?? ""
+        XCTAssertTrue(
+            desc.lowercased().contains("default false"),
+            "schema must not advertise push-by-default: \(desc)")
+        XCTAssertTrue(
+            CreatePullRequestTool.schema.description.lowercased().contains("does not push"),
+            CreatePullRequestTool.schema.description)
+        // Omitted `pushIfRemote` must not push: no remote → fail at remote
+        // check, never "git push failed before opening PR".
+        let r = GitWorkflow.createPullRequest(title: "No push default", workingDirectory: repo)
+        XCTAssertFalse(r.success)
+        XCTAssertFalse(
+            r.message.lowercased().contains("git push failed before opening pr"),
+            r.display)
+    }
+
     func testResolveGHReturnsPathOrNil() {
         // Should not crash; may return path when gh installed.
         let path = GitWorkflow.resolveGH()

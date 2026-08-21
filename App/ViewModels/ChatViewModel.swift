@@ -6,10 +6,27 @@
 //  handle (for cancel), and the persistence write-back.
 //
 
-import Foundation
+@preconcurrency import Foundation
+@preconcurrency import ObjectiveC
 import SwiftUI
 import AppKit
 import AgentCore
+
+/// NotificationCenter tokens live here so `@MainActor` `ChatViewModel.deinit`
+/// never touches non-Sendable `NSObjectProtocol`.
+private final class NotificationObserverBox: @unchecked Sendable {
+    private var tokens: [NSObjectProtocol] = []
+
+    func add(_ token: NSObjectProtocol) {
+        tokens.append(token)
+    }
+
+    deinit {
+        for token in tokens {
+            NotificationCenter.default.removeObserver(token)
+        }
+    }
+}
 
 @MainActor
 final class ChatViewModel: ObservableObject {
@@ -227,10 +244,9 @@ final class ChatViewModel: ObservableObject {
     /// not persist and resurrect it.
     private var persistSuppressed = false
 
-    /// Turn-end card Undo → existing `/rewind` path for this conversation.
-    private var turnRewindObserver: NSObjectProtocol?
-    /// Composer Compress button → `/compact` for the selected conversation.
-    private var compactConversationObserver: NSObjectProtocol?
+    /// NotificationCenter tokens. Owned off the MainActor so `deinit`
+    /// does not touch non-Sendable `NSObjectProtocol`.
+    private let notificationObservers = NotificationObserverBox()
     private var composerNotificationsStarted = false
 
     /// Whether the in-flight run is headless. Set at `send`, read in
@@ -428,25 +444,19 @@ final class ChatViewModel: ObservableObject {
         self.isRehydratingStickyPins = true
         self.stickyContextPins = conversation.stickyContextPins.map(StickyContextPin.init(record:))
         self.isRehydratingStickyPins = false
-        turnRewindObserver = NotificationCenter.default.addObserver(
+        let rewind = NotificationCenter.default.addObserver(
             forName: .turnRewindRequested,
             object: nil,
             queue: .main
         ) { [weak self] note in
-            Task { @MainActor [weak self] in
-                self?.handleTurnRewindNotification(note)
+            let posted = (note.userInfo?["conversationID"] as? UUID)
+                ?? (note.object as? UUID)
+            MainActor.assumeIsolated {
+                self?.handleTurnRewind(postedConversationID: posted)
             }
         }
+        notificationObservers.add(rewind)
         startComposerNotifications()
-    }
-
-    deinit {
-        if let turnRewindObserver {
-            NotificationCenter.default.removeObserver(turnRewindObserver)
-        }
-        if let compactConversationObserver {
-            NotificationCenter.default.removeObserver(compactConversationObserver)
-        }
     }
 
     /// Replace sticky pins from a conversation snapshot (e.g. after list reload).
@@ -465,9 +475,25 @@ final class ChatViewModel: ObservableObject {
 
     /// Write the current conversation snapshot to disk (e.g. after attaching skills).
     func persistConversation() {
-        guard !persistSuppressed else { return }
         let snapshot = conversation
-        Task { try? await ConversationStore.shared.save(snapshot) }
+        Task { await persistConversationSnapshot(snapshot) }
+    }
+
+    /// Persist `snapshot`. Logs on disk failure (Ada P2 — no silent `try?`).
+    /// Sets `statusLine` when the turn is idle so the existing status chip shows it.
+    func persistConversationSnapshot(
+        _ snapshot: Conversation,
+        store: (any ConversationStoring)? = nil
+    ) async {
+        guard !persistSuppressed else { return }
+        do {
+            try await (store ?? ConversationStore.shared).save(snapshot)
+        } catch {
+            Diagnostics.error("ChatViewModel.save(\(snapshot.id)): \(error.localizedDescription)")
+            if !isRunning {
+                statusLine = "Couldn't save conversation."
+            }
+        }
     }
 
     /// Flip archive without changing the Conversation JSON schema.
@@ -628,15 +654,18 @@ final class ChatViewModel: ObservableObject {
     func startComposerNotifications() {
         guard !composerNotificationsStarted else { return }
         composerNotificationsStarted = true
-        compactConversationObserver = NotificationCenter.default.addObserver(
+        let compact = NotificationCenter.default.addObserver(
             forName: .compactConversationRequested,
             object: nil,
             queue: .main
         ) { [weak self] note in
-            Task { @MainActor [weak self] in
-                self?.handleCompactConversationNotification(note)
+            let posted = (note.userInfo?["conversationID"] as? UUID)
+                ?? (note.object as? UUID)
+            MainActor.assumeIsolated {
+                self?.handleCompactConversation(postedConversationID: posted)
             }
         }
+        notificationObservers.add(compact)
     }
 
     /// Record a prompt to the shared store and update our in-memory copy.
@@ -907,7 +936,7 @@ final class ChatViewModel: ObservableObject {
         let seedModel = preferredModel(backend: backend, app: app)
         guard executingRole != nil || seedModel != nil else {
             if app.availableModels.isEmpty {
-                statusLine = "No models from \(app.settings.backend.shortLabel) — open Settings → Connection, confirm oMLX/Ollama is running, then pick a model."
+                statusLine = "No models from \(app.settings.backend.shortLabel) — open Settings → Connection, confirm LM Studio, Ollama, oMLX, or Unsloth is running, then pick a model."
             } else {
                 statusLine = "Select a model in the picker (bottom-right) before sending. Listing models is not the same as selecting one."
             }
@@ -1255,6 +1284,7 @@ final class ChatViewModel: ObservableObject {
                 let persisted: Conversation? = await MainActor.run {
                     var merged = finalConvo
                     merged.worktreeBranch = self.conversation.worktreeBranch
+                    merged.worktreeOptOut = self.conversation.worktreeOptOut
                     merged.projectRoot = self.conversation.projectRoot
                     // The loop's finalConvo doesn't carry the orchestrator
                     // briefs (they're UI-side state set during the run) —
@@ -1277,7 +1307,7 @@ final class ChatViewModel: ObservableObject {
                     return self.persistSuppressed ? nil : merged
                 }
                 if let persisted {
-                    try? await ConversationStore.shared.save(persisted)
+                    await persistConversationSnapshot(persisted)
                     await app.refreshConversations()
                 }
             } catch {
@@ -1296,7 +1326,7 @@ final class ChatViewModel: ObservableObject {
                     return self.persistSuppressed ? nil : self.conversation
                 }
                 if let partial {
-                    try? await ConversationStore.shared.save(partial)
+                    await persistConversationSnapshot(partial)
                 }
             }
         }
@@ -1731,7 +1761,7 @@ final class ChatViewModel: ObservableObject {
 
         case .contextCompacted(let preview, let dropped):
             handleContextCompacted(preview: preview, dropped: dropped)
-        case .usage(let promptTokens, let completionTokens):
+        case .usage(let promptTokens, _):
             recordUsageAnchor(promptTokens: promptTokens)
         }
     }
@@ -2039,7 +2069,7 @@ final class ChatViewModel: ObservableObject {
             // P8: custom agent / subagent tool strip → status line.
             handleInfoStatus(summary)
 
-        case .usage(let promptTokens, let completionTokens):
+        case .usage(let promptTokens, _):
             recordUsageAnchor(promptTokens: promptTokens)
         }
     }
@@ -2457,7 +2487,7 @@ final class ChatViewModel: ObservableObject {
                 app.renameConversation(id: conversation.id, to: title)
             } else {
                 conversation.title = title
-                Task { try? await ConversationStore.shared.save(conversation) }
+                persistConversation()
             }
             return .handled(message: "Renamed to \"\(title)\".")
 
@@ -2602,7 +2632,7 @@ final class ChatViewModel: ObservableObject {
         let convoID = conversation.id
         Task {
             await PlanStore.shared.clear(for: convoID)
-            try? await ConversationStore.shared.save(self.conversation)
+            await persistConversationSnapshot(self.conversation)
         }
     }
 
@@ -2685,7 +2715,7 @@ final class ChatViewModel: ObservableObject {
                 // Keep slash feedback explicit for /undo.
                 self.statusLine =
                     "Compacted — dropped \(result.droppedCount) older messages. /undo to restore."
-                try? await ConversationStore.shared.save(self.conversation)
+                await persistConversationSnapshot(self.conversation)
             } else {
                 // Still clear buffers; history already small or cut failed.
                 self.statusLine = "History already compact (buffers cleared)."
@@ -2715,18 +2745,14 @@ final class ChatViewModel: ObservableObject {
                 ? files.statusSummary
                 : "conversation only (no file checkpoint)"
             self.statusLine = "Undid last send — \(filePart)."
-            try? await ConversationStore.shared.save(self.conversation)
+            await persistConversationSnapshot(self.conversation)
         }
         return .handled(message: "Undoing last send (files + conversation)…")
     }
 
     /// Compress button. Only the selected conversation's VM runs `/compact`.
-    func handleCompactConversationNotification(_ note: Notification) {
-        if let posted = (note.userInfo?["conversationID"] as? UUID)
-            ?? (note.object as? UUID),
-           posted != conversation.id {
-            return
-        }
+    func handleCompactConversation(postedConversationID posted: UUID?) {
+        if let posted, posted != conversation.id { return }
         if let selected = app?.selectedConversationID, selected != conversation.id {
             return
         }
@@ -2737,12 +2763,8 @@ final class ChatViewModel: ObservableObject {
     }
 
     /// Turn-end Undo. Ignores notifications aimed at another conversation.
-    func handleTurnRewindNotification(_ note: Notification) {
-        if let posted = (note.userInfo?["conversationID"] as? UUID)
-            ?? (note.object as? UUID),
-           posted != conversation.id {
-            return
-        }
+    func handleTurnRewind(postedConversationID posted: UUID?) {
+        if let posted, posted != conversation.id { return }
         let result = handleRewind()
         if case .handled(let message) = result, let message, !message.isEmpty {
             statusLine = message
@@ -2774,7 +2796,7 @@ final class ChatViewModel: ObservableObject {
                 : "conversation only (no file checkpoint)"
             self.statusLine =
                 "Rewound last turn (\(removed) messages) — \(filePart)."
-            try? await ConversationStore.shared.save(self.conversation)
+            await persistConversationSnapshot(self.conversation)
         }
         return .handled(message: "Rewinding last turn (files + conversation)…")
     }
@@ -2855,7 +2877,7 @@ final class ChatViewModel: ObservableObject {
         }
         Task {
             await app.activateModel(id: model.id)
-            try? await ConversationStore.shared.save(conversation)
+            await persistConversationSnapshot(conversation)
         }
         return .handled(message: "Switched to \(model.displayName).")
     }
@@ -3187,9 +3209,7 @@ final class ChatViewModel: ObservableObject {
     func closeRail() {
         railVisible = false
         conversation.railUserPreference = false
-        Task {
-            try? await ConversationStore.shared.save(conversation)
-        }
+        persistConversation()
     }
 
     private func syncArtifacts(messageID: UUID, createdAt: Date) {

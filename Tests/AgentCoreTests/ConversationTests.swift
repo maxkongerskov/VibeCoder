@@ -28,6 +28,55 @@ final class ConversationWorktreeRootURLTests: XCTestCase {
         XCTAssertNil(c.worktreeRootURL)
     }
 
+    /// Daily-driver: binding a git project isolates without `enableWorktree`.
+    func testBoundProjectIsolatesInWorktreeByDefault() throws {
+        let project = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("vc-bound-default-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: project) }
+        func git(_ args: [String]) -> ShellResult {
+            ShellRunner.run(
+                executable: "/usr/bin/env",
+                arguments: ["git"] + args,
+                workingDirectory: project,
+                timeout: 15)
+        }
+        XCTAssertEqual(git(["init"]).exitCode, 0)
+        _ = git(["config", "user.email", "test@example.com"])
+        _ = git(["config", "user.name", "Test"])
+        try "readme".write(to: project.appendingPathComponent("README.md"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(git(["add", "README.md"]).exitCode, 0)
+        XCTAssertEqual(git(["commit", "-m", "init"]).exitCode, 0)
+
+        var convo = Conversation()
+        let result = try WorktreeService.bindProjectEnablingWorktree(
+            &convo, projectRoot: project)
+        guard case .enabled(let created) = result else {
+            return XCTFail("bound git project must isolate by default, got \(result)")
+        }
+        defer {
+            try? WorktreeService.discard(
+                worktreePath: created.path,
+                branch: created.branch,
+                projectFolder: project.path)
+        }
+        XCTAssertNotNil(convo.worktreeRootURL)
+        XCTAssertEqual(convo.worktreeRootURL?.path, created.path)
+        XCTAssertFalse(convo.worktreeOptOut)
+    }
+
+    func testWorktreeOptOutMissingInJSONDefaultsFalse() throws {
+        var c = Conversation()
+        c.projectRoot = URL(fileURLWithPath: "/tmp/proj")
+        c.worktreeBranch = nil
+        let data = try JSONEncoder().encode(c)
+        var obj = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        obj.removeValue(forKey: "worktreeOptOut")
+        let stripped = try JSONSerialization.data(withJSONObject: obj)
+        let loaded = try JSONDecoder().decode(Conversation.self, from: stripped)
+        XCTAssertFalse(loaded.worktreeOptOut)
+    }
+
     func testReturnsNilWhenWorktreeBranchIsEmpty() {
         var c = Conversation()
         c.projectRoot = URL(fileURLWithPath: "/Users/m/Projects/foo")

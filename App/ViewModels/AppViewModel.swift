@@ -296,7 +296,15 @@ final class AppViewModel: ObservableObject {
         conversationsCoordinator.chatViewModel(for: conversationID)
     }
 
+    var conversationsDidLoad: Bool {
+        conversationsCoordinator.conversationsDidLoad
+    }
+
     func newConversation() { conversationsCoordinator.newConversation() }
+
+    func ensureFirstConversationIfNeeded() {
+        conversationsCoordinator.ensureFirstConversationIfNeeded()
+    }
 
     func newConversation(in project: Project) -> UUID {
         conversationsCoordinator.newConversation(in: project)
@@ -336,6 +344,9 @@ final class AppViewModel: ObservableObject {
     }
     func discardWorktree(for conversationID: UUID) {
         worktreeCoordinator.discardWorktree(for: conversationID)
+    }
+    func disableWorktree(for conversationID: UUID) {
+        worktreeCoordinator.disableWorktree(for: conversationID)
     }
 
     // MARK: - Backend connection (delegated)

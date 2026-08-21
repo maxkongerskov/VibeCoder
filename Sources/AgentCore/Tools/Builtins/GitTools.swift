@@ -258,15 +258,16 @@ public enum GitWorkflow: Sendable {
     }
 
     /// Open a pull request via GitHub CLI (`gh`). Honest errors if gh/remote missing.
-    /// When `pushIfRemote` is true (default) and a remote exists, pushes the
-    /// current branch (`git push -u` when no upstream) before `gh pr create`.
+    /// When `pushIfRemote` is true and a remote exists, pushes the current
+    /// branch (`git push -u` when no upstream) before `gh pr create`.
+    /// Default is **false** — never push to the user's remote unless asked.
     public static func createPullRequest(
         title: String,
         body: String? = nil,
         base: String? = nil,
         head: String? = nil,
         draft: Bool = false,
-        pushIfRemote: Bool = true,
+        pushIfRemote: Bool = false,
         workingDirectory: URL
     ) -> Result {
         let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -480,12 +481,37 @@ public struct GitCommitTool: Tool {
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let stageAll = arguments.bool("stage_all", default: true)
         let paths = arguments.stringArray("paths")
+        // Worktree wins: never `git add -A` the main checkout while isolated.
+        let cwd = context.worktreeRoot ?? context.workingDirectory
+        if let denied = Self.refuseMainCheckoutIfWorktreeActive(cwd: cwd, context: context) {
+            return denied
+        }
         let result = GitWorkflow.commit(
             message: message,
-            workingDirectory: context.workingDirectory,
+            workingDirectory: cwd,
             stageAll: stageAll,
             paths: paths)
         return ToolResult(content: result.display, isError: !result.success)
+    }
+
+    /// When a worktree is active, refuse to run git writes against the main tree.
+    fileprivate static func refuseMainCheckoutIfWorktreeActive(
+        cwd: URL,
+        context: ToolContext
+    ) -> ToolResult? {
+        guard let wt = PathConfinement.usableWorkspaceRoot(context.worktreeRoot),
+              let main = PathConfinement.usableWorkspaceRoot(context.projectRoot) else {
+            return nil
+        }
+        let cwdN = SafeModeConfig.normalizePath(cwd.path)
+        let mainN = SafeModeConfig.normalizePath(main.path)
+        let wtN = SafeModeConfig.normalizePath(wt.path)
+        guard cwdN == mainN, wtN != mainN else { return nil }
+        return ToolResult(
+            content: "Refused: worktree mode is on. git writes run in the worktree "
+                + "(\(wt.path)), not the main checkout (\(main.path)). "
+                + "Disable worktree mode to edit main.",
+            isError: true)
     }
 }
 
@@ -498,9 +524,8 @@ public struct CreatePullRequestTool: Tool {
         name: name,
         description: """
         Open a GitHub pull request using the `gh` CLI for the current project/worktree. \
-        Requires `gh` on PATH and an authenticated remote. By default pushes the current \
-        branch first when a remote exists. Does not create a PR if gh is missing — \
-        returns an honest error instead.
+        Requires `gh` on PATH and an authenticated remote. Does not push unless \
+        `push` is true. Does not create a PR if gh is missing — returns an honest error instead.
         """,
         parameters: .init(
             properties: [
@@ -511,7 +536,7 @@ public struct CreatePullRequestTool: Tool {
                 "draft": .init(type: "boolean", description: "Create as draft PR. Default false."),
                 "push": .init(
                     type: "boolean",
-                    description: "Push current branch before opening the PR when a remote exists. Default true."),
+                    description: "Push current branch before opening the PR when a remote exists. Default false — never push unless asked."),
             ],
             required: ["title"]
         )
@@ -524,7 +549,11 @@ public struct CreatePullRequestTool: Tool {
         let base = arguments.stringOptional("base")
         let head = arguments.stringOptional("head")
         let draft = arguments.bool("draft", default: false)
-        let push = arguments.bool("push", default: true)
+        let push = arguments.bool("push", default: false)
+        let cwd = context.worktreeRoot ?? context.workingDirectory
+        if let denied = GitCommitTool.refuseMainCheckoutIfWorktreeActive(cwd: cwd, context: context) {
+            return denied
+        }
         let result = GitWorkflow.createPullRequest(
             title: title,
             body: body,
@@ -532,7 +561,7 @@ public struct CreatePullRequestTool: Tool {
             head: head,
             draft: draft,
             pushIfRemote: push,
-            workingDirectory: context.workingDirectory)
+            workingDirectory: cwd)
         return ToolResult(content: result.display, isError: !result.success)
     }
 }

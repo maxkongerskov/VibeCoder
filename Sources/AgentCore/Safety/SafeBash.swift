@@ -853,11 +853,16 @@ public enum SafeBash: Sendable {
     /// entitlements for product apps). We still use it as an optional
     /// child-process fence for local agent tools; profiles are best-effort
     /// and do not replace Safe Mode / authorization.
-    public static func makeSeatbeltProfile(writableRoots: [String]) -> String {
+    public static func makeSeatbeltProfile(
+        writableRoots: [String],
+        excludingWritesUnder projectRoot: URL? = nil
+    ) -> String {
         var roots = writableRoots
             .map { ($0 as NSString).standardizingPath }
             .filter { !$0.isEmpty }
-        // Always allow system temp areas used by shells and package tools.
+        // System temp areas shells/package tools use — except any temp that
+        // contains the main checkout. A `/tmp` (or `/var/folders`) allow
+        // would unfence a worktree-isolated project living there.
         let temps = [
             "/tmp",
             "/private/tmp",
@@ -865,9 +870,12 @@ public enum SafeBash: Sendable {
             "/var/folders",
             NSTemporaryDirectory(),
         ]
+        let excluded = projectRoot.map { ($0.path as NSString).standardizingPath }
         for t in temps {
             let p = (t as NSString).standardizingPath
-            if !p.isEmpty { roots.append(p) }
+            guard !p.isEmpty else { continue }
+            if let excluded, Self.path(excluded, isInside: p) { continue }
+            roots.append(p)
         }
         // De-dupe while preserving order.
         var seen = Set<String>()
@@ -901,6 +909,14 @@ public enum SafeBash: Sendable {
         lines.append("  (literal \"/dev/tty\")")
         lines.append(")")
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// True when `path` is `root` or a descendant (`root/…`).
+    public static func path(_ path: String, isInside root: String) -> Bool {
+        let p = (path as NSString).standardizingPath
+        let r = (root as NSString).standardizingPath
+        guard !p.isEmpty, !r.isEmpty else { return false }
+        return p == r || p.hasPrefix(r + "/")
     }
 
     /// Quote a path/string for SBPL string literals.
@@ -952,11 +968,15 @@ public enum SafeBash: Sendable {
     public static func seatbeltInvocation(
         command: String,
         writableRoots: [String],
+        excludingWritesUnder projectRoot: URL? = nil,
         shellPath: String = "/bin/zsh",
         sandboxExecPath: String = "/usr/bin/sandbox-exec"
     ) -> ShellLaunch? {
         guard !writableRoots.isEmpty else { return nil }
-        let profile = makeSeatbeltProfile(writableRoots: writableRoots)
+        let profile = makeSeatbeltProfile(
+            writableRoots: writableRoots,
+            excludingWritesUnder: projectRoot
+        )
         return ShellLaunch(
             executable: sandboxExecPath,
             arguments: ["-p", profile, shellPath, "-c", command],
@@ -991,9 +1011,16 @@ public enum SafeBash: Sendable {
             note: nil
         )
 
-        guard isSeatbeltEnabled(environment: environment, executionMode: executionMode) else {
+        // Worktree isolation is not optional: yolo/full must not write the
+        // main checkout. Seatbelt preference / env-off cannot punch through.
+        let isolating = PathConfinement.usableWorkspaceRoot(worktreeRoot) != nil
+        let wantSeatbelt = isolating
+            || isSeatbeltEnabled(environment: environment, executionMode: executionMode)
+        guard wantSeatbelt else {
             return bare
         }
+        let failClosed = isolating
+            || seatbeltFailMode(environment: environment) == .closed
 
         let roots = writableRoots(
             workingDirectory: workingDirectory,
@@ -1001,8 +1028,7 @@ public enum SafeBash: Sendable {
             worktreeRoot: worktreeRoot
         )
         guard !roots.isEmpty else {
-            let fail = seatbeltFailMode(environment: environment)
-            if fail == .closed {
+            if failClosed {
                 return ShellLaunch(
                     executable: shellPath,
                     arguments: ["-c", command],
@@ -1020,7 +1046,7 @@ public enum SafeBash: Sendable {
 
         let binaryOK = fileManager.isExecutableFile(atPath: sandboxExecPath)
         guard binaryOK else {
-            if seatbeltFailMode(environment: environment) == .closed {
+            if failClosed {
                 return ShellLaunch(
                     executable: shellPath,
                     arguments: ["-c", command],
@@ -1039,9 +1065,18 @@ public enum SafeBash: Sendable {
         guard let boxed = seatbeltInvocation(
             command: command,
             writableRoots: roots,
+            excludingWritesUnder: isolating ? projectRoot : nil,
             shellPath: shellPath,
             sandboxExecPath: sandboxExecPath
         ) else {
+            if failClosed {
+                return ShellLaunch(
+                    executable: shellPath,
+                    arguments: ["-c", command],
+                    sandboxed: false,
+                    note: "seatbelt: refused — no writable project/worktree root (fail-closed)"
+                )
+            }
             return bare
         }
         return boxed

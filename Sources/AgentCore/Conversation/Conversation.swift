@@ -55,6 +55,11 @@ public struct Conversation: Codable, Identifiable, Sendable {
     /// Worktree branch name when worktree mode is on; nil otherwise.
     public var worktreeBranch: String?
 
+    /// User chose the escape hatch: edit the main checkout, do not
+    /// auto-create an `agentcore/<shortId>` worktree. Missing in old
+    /// JSON → `false` (daily-driver isolation, not silent main edits).
+    public var worktreeOptOut: Bool
+
     /// Per-conversation override of the system prompt. nil falls through
     /// to project → global.
     public var systemPromptOverride: String?
@@ -111,6 +116,7 @@ public struct Conversation: Codable, Identifiable, Sendable {
                 modelID: String? = nil,
                 projectRoot: URL? = nil,
                 worktreeBranch: String? = nil,
+                worktreeOptOut: Bool = false,
                 systemPromptOverride: String? = nil,
                 samplingOverride: SamplingParams? = nil,
                 unlockedDeferredTools: [String] = [],
@@ -129,6 +135,7 @@ public struct Conversation: Codable, Identifiable, Sendable {
         self.modelID = modelID
         self.projectRoot = projectRoot
         self.worktreeBranch = worktreeBranch
+        self.worktreeOptOut = worktreeOptOut
         self.systemPromptOverride = systemPromptOverride
         self.samplingOverride = samplingOverride
         self.unlockedDeferredTools = unlockedDeferredTools
@@ -143,7 +150,7 @@ public struct Conversation: Codable, Identifiable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, createdAt, updatedAt, messages, modelID, projectRoot,
-             worktreeBranch, systemPromptOverride,
+             worktreeBranch, worktreeOptOut, systemPromptOverride,
              samplingOverride, unlockedDeferredTools,
              pinned, archived, orchestratorBriefs, railUserPreference,
              attachedSkillIds, stickyContextPins, sessionReadPaths
@@ -159,6 +166,7 @@ public struct Conversation: Codable, Identifiable, Sendable {
         self.modelID = try c.decodeIfPresent(String.self, forKey: .modelID)
         self.projectRoot = try c.decodeIfPresent(URL.self, forKey: .projectRoot)
         self.worktreeBranch = try c.decodeIfPresent(String.self, forKey: .worktreeBranch)
+        self.worktreeOptOut = try c.decodeIfPresent(Bool.self, forKey: .worktreeOptOut) ?? false
         // pinnedSkills was removed in the Notes pivot. Older conversation
         // JSON files on disk may still have the key; we intentionally don't
         // decode it (Codable silently ignores unknown keys), so they load

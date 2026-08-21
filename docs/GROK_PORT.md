@@ -13,18 +13,19 @@ Open source upstream: https://github.com/xai-org/grok-build (Apache-2.0).
 
 ## Local inference (not a Grok-port invent)
 
-Grok Build and VibeCoder are the **same class** for models: **BYO OpenAI-compatible HTTP** (custom `base_url` / LM Studio / oMLX / Ollama / EXO). Neither is an in-process MLX runtime.
+Grok Build and VibeCoder are the **same class** for models: **BYO OpenAI-compatible HTTP** (custom `base_url` / LM Studio / oMLX / Ollama / Unsloth Studio / EXO). Neither is an in-process MLX runtime.
 
 | Claim to avoid | Reality |
 |----------------|---------|
 | “In-process MLX is daily-driver” | `Sources/MLXBackend` + `MLXInferenceService` **stub**; generation throws until mlx-swift is a Package dependency |
 | “Bundled GGUF / LiteLocalBackend” | **No** `LiteLocalBackend`; bundled llama.cpp product **removed**; legacy `"llamaCpp"` → `.ollama` |
 | “Fully offline zero-deps agent” | Offline **agent tools** work if a **local** model server is up; app does not embed weights |
-| “Full agent loop inside Xcode” | `LocalAPIServer` is a **loopback proxy** (`tools: []` by default). Opt-in `agentToolsEnabled` only **attaches schemas** — does **not** run multi-step tool execution, BuildGuard, or worktrees for Xcode. Full agent loop is **in-app chat only**. See ARCHITECTURE §5.7 / §10.1 |
+| “Full agent loop inside Xcode” / “opt-in is schemas-only” | `LocalAPIServer` **default** is a loopback **proxy** (`tools: []`). Opt-in `agentToolsEnabled` maps to **`.agentLoop`**: bounded multi-step `AgentLoop` (cap 8) on the **bound project** — tools **execute** and the model is re-prompted. **Not** schemas-only (that was PB7; `ServeToolsPolicy.schemasOnly` is unused by the Settings flag). Still **not** in-app parity: no worktree, no review UI, no MCP/Xcode-bridge by default. See ARCHITECTURE §5.7 / §10.1 |
 | “App Sandbox hardened” | `App/VibeCoder.entitlements` is **empty**. Optional **seatbelt** (`sandbox-exec`) fences **`run_shell` children** only (`SafeBash`) — not macOS App Sandbox for the app process |
-| “Grok-class monitor product” | `JobMonitor` lists background jobs already tracked by `BackgroundJobManager`. **No** `monitor_*` agent tool; no continuous stdout watch product |
+| “Grok-class monitor product” | `list_background_jobs` / `monitor_jobs` list **in-app** jobs (`JobMonitor` / `BackgroundJobManager`). Not arbitrary process watch / continuous stdout |
 | “Embeddings / vector dream” | `dreamEnabled` → **extractive** `MemoryDream`; search is keyword/FTS (`MemoryIndex`). **No** embedding model or MMR store |
 | “Skills marketplace / SkillStore UI” | `SkillDiscovery` + `load_skill` ship; **no** marketplace install UI / SkillStore sidebar |
+| “LAN / phone remote control ships” | `RemoteControlServer` is **OFF** — not password-gated, not a shipping feature (2026-08-20) |
 
 Port work (memory, compaction, hooks, retry policy, etc.) sits **above** that HTTP seam. See README first-run server table and DESIGN status box for product wording.
 
@@ -41,7 +42,7 @@ Port work (memory, compaction, hooks, retry policy, etc.) sits **above** that HT
 | task / task_output | task / get_task_output / wait_tasks / kill_task |
 | ask_user_question | ask_user |
 | skill | load_skill (SKILL.md discovery + progressive index) |
-| monitor / watch | **not ported as agent tool** — thin `JobMonitor` status helper only |
+| monitor / watch | `list_background_jobs` / `monitor_jobs` — in-app job listing only, not Grok watch |
 
 ## Modules
 
@@ -59,7 +60,7 @@ Port work (memory, compaction, hooks, retry policy, etc.) sits **above** that HT
 | Job monitor | `Sources/AgentCore/Tasks/JobMonitor.swift` (listing only) |
 | Agent definitions | `Sources/AgentCore/Agent/AgentDefinitionDiscovery.swift` |
 | Code nav | `Sources/AgentCore/CodeIndex/` + `find_symbol` (`backend: lsp\|text-index`) |
-| LocalAPI / Xcode | `Sources/AgentCore/Server/LocalAPIServer.swift` (proxy, not agent gateway) |
+| LocalAPI / Xcode | `Sources/AgentCore/Server/LocalAPIServer.swift` (proxy default; bounded AgentLoop opt-in) |
 
 ## Feature flags (`AppSettings` / `AgentLoop.Config`)
 
@@ -68,10 +69,11 @@ Port work (memory, compaction, hooks, retry policy, etc.) sits **above** that HT
 - `fullReplaceCompactEnabled` (default true)
 - `injectProjectMemory` (default true)
 - Seatbelt preference — Auto/edit default for shell children; **not** App Sandbox entitlement
-- LocalAPI `agentToolsEnabled` — schemas-only opt-in; default **false**
+- LocalAPI `agentToolsEnabled` — **false → proxy `tools: []`**; **true → bounded AgentLoop** (not schemas-only). Default **false**
 
 ## Honesty changelog
 
 | Date | Note |
 |------|------|
+| 2026-08-20 | **Claim freeze:** Unsloth in BYO list; Local API opt-in is **AgentLoop** not schemas-only; `monitor_jobs` registered as in-app listing; remote control **OFF** |
 | 2026-07-24 | **P7:** expanded claim→reality table (Xcode, seatbelt vs App Sandbox, monitor, dream, marketplace); modules + flags aligned to code |
