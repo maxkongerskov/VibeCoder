@@ -79,3 +79,8 @@ HANDOFF/
 
 # ── Build artifacts (regenerated locally; never commit) ─────────
 Release/build/
+
+# ── Leftover local mock eval dumps (keep cited 012/013 artifacts tracked) ──
+Evals/results/*-mock-mock-worker.json
+!Evals/results/2026-08-20-091027-mock-mock-worker.json
+!Evals/results/2026-08-20-091614-mock-mock-worker.json
