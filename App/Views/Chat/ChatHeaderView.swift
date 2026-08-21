@@ -20,6 +20,8 @@ struct ChatHeaderView: View {
     /// Capabilities to render as chips (tool/reason/vision).
     let capabilities: [ModelCapability]
     let worktreeActive: Bool
+    /// Settings opt-in. When true, chrome must say Cloud (not local).
+    var cloudBotsEnabled: Bool = false
     /// Context usage values. Pass nil to hide the chip.
     let contextTokens: Int?
     let contextLimit: Int?
@@ -79,6 +81,7 @@ struct ChatHeaderView: View {
         HStack(spacing: 8) {
             titleMenu
             Spacer(minLength: 8)
+            cloudChip
             worktreeChip
         }
         .padding(.horizontal, 16)
@@ -182,6 +185,29 @@ struct ChatHeaderView: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
+    }
+
+    // MARK: - CloudBots chip (labeled cloud; not a local backend)
+
+    @ViewBuilder
+    private var cloudChip: some View {
+        if cloudBotsEnabled {
+            HStack(spacing: 5) {
+                Image(systemName: "cloud")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(CloudBotCopy.cloudLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Theme.Palette.info)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Theme.Palette.info.opacity(0.14), in: Capsule())
+            .help(CloudBotCopy.chipHelp)
+            .accessibilityLabel(CloudBotCopy.chipAccessibility)
+            .accessibilityIdentifier("cloud-bot-label")
+            .layoutPriority(1)
+        }
     }
 
     // MARK: - Worktree chip (visible; do not bury isolation in the title menu)

@@ -153,4 +153,51 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
             "plain Tab without slash menu must not steal focus advance"
         )
     }
+
+    func testCloudBotCopyIsLabeledCloudNotLocalFirst() {
+        let intro = CloudBotCopy.intro.lowercased()
+        XCTAssertTrue(intro.contains("cloud"))
+        XCTAssertTrue(intro.contains("leave this mac"))
+        XCTAssertTrue(intro.contains("not a local-inference"))
+        XCTAssertTrue(intro.contains("not a byo http"))
+        XCTAssertFalse(intro.contains("nothing leaves"))
+
+        let honesty = CloudBotCopy.honesty.lowercased()
+        XCTAssertTrue(honesty.contains("not local-first"))
+        XCTAssertTrue(honesty.contains("not a storefront"))
+        XCTAssertFalse(honesty.contains("nothing leaves"))
+
+        let privacy = CloudBotCopy.privacyBlurb.lowercased()
+        XCTAssertTrue(privacy.contains("cloudbot"))
+        XCTAssertTrue(privacy.contains("leave this mac"))
+        XCTAssertFalse(privacy.contains("nothing leaves"))
+        XCTAssertFalse(privacy.hasPrefix("local-first"))
+
+        XCTAssertEqual(CloudBotCopy.cloudLabel, "Cloud")
+        XCTAssertFalse(AppSettings().cloudBotsEnabled)
+        XCTAssertTrue(CloudBotCopy.status(enabled: false).lowercased().contains("default"))
+        XCTAssertTrue(CloudBotCopy.status(enabled: true).lowercased().contains("cloud"))
+        XCTAssertTrue(CloudBotCopy.status(enabled: true).lowercased().contains("leave"))
+    }
+
+    func testPrivacySearchHitsCloudBots() {
+        func hits(_ q: String) -> Bool {
+            SettingsDiscoverabilityCopy.tabMatchesSearch(
+                label: "Privacy",
+                subtitle: "Data & backup",
+                rawValue: "privacy",
+                query: q
+            )
+        }
+        XCTAssertTrue(hits("cloudbot"))
+        XCTAssertTrue(hits("cloud"))
+        XCTAssertFalse(
+            SettingsDiscoverabilityCopy.tabMatchesSearch(
+                label: "Connection",
+                subtitle: "Local servers & APIs",
+                rawValue: "connection",
+                query: "cloudbot"
+            )
+        )
+    }
 }

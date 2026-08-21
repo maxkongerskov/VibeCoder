@@ -53,6 +53,8 @@ enum SettingsDiscoverabilityCopy {
             return ["oauth", "sse", "stdio"]
         case "model":
             return ["two-model", "orchestrator", "worker", "sampling"]
+        case "privacy":
+            return ["cloudbot", "cloud bots", "cloud"]
         default:
             return []
         }

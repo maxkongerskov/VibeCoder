@@ -256,6 +256,7 @@ struct ChatView: View {
                 // is persisted on the conversation. Toggling routes to
                 // WorktreeService via AppViewModel.
                 worktreeActive: viewModel.conversation.worktreeBranch != nil,
+                cloudBotsEnabled: app.settings.cloudBotsEnabled,
                 contextTokens: contextTokens > 0 ? contextTokens : nil,
                 contextLimit: contextLimit,
                 onRename: { newTitle in

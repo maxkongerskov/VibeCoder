@@ -414,7 +414,7 @@ struct PrivacySettingsView: View {
                     Text("Privacy")
                         .font(.system(size: 13, weight: .semibold))
                 }
-                Text("Local-first: loopback model servers keep chat on this Mac. Custom remote /v1 endpoints, cloud API keys, MCP tools, and agent shell/network commands can send data off-box — only when you configure or allow them. See LEGAL.md.")
+                Text(CloudBotCopy.privacyBlurb)
                     .font(.system(size: 12))
                     .foregroundColor(Theme.Palette.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -430,6 +430,42 @@ struct PrivacySettingsView: View {
                 .font(.system(size: 11))
                 .buttonStyle(.plain)
                 .foregroundColor(Theme.Palette.accent)
+            }
+
+            settingsCard {
+                HStack(spacing: 6) {
+                    Image(systemName: "cloud")
+                        .foregroundColor(Theme.Palette.info)
+                    Text(CloudBotCopy.settingsTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(CloudBotCopy.cloudLabel)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.info)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Theme.Palette.info.opacity(0.14), in: Capsule())
+                }
+                Text(CloudBotCopy.intro)
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(CloudBotCopy.honesty)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(isOn: $settings.cloudBotsEnabled) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(CloudBotCopy.toggleTitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.Palette.primary)
+                        Text(CloudBotCopy.status(enabled: settings.cloudBotsEnabled))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Theme.Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("cloud-bots-settings")
             }
 
             settingsCard {

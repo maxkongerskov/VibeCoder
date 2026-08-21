@@ -122,6 +122,10 @@ public struct AppSettings: Codable, Sendable, Equatable {
     /// Default **true**. Does not bypass OS permission prompts.
     public var notificationsEnabled: Bool
 
+    /// Opt-in CloudBots host. Off by default. CloudBots are cloud teammates
+    /// (prompts leave this Mac), not a local BYO HTTP backend.
+    public var cloudBotsEnabled: Bool
+
     // MARK: - Default sampling
 
     /// Default sampling params used when no per-model or per-conversation
@@ -320,6 +324,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
         hasCompletedOnboarding: Bool = false,
         crashReportingEnabled: Bool = false,
         notificationsEnabled: Bool = true,
+        cloudBotsEnabled: Bool = false,
         colorScheme: String = "system",
         chatFontScale: Double = 1.0,
         playfulWaitingLabels: Bool = false,
@@ -377,6 +382,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
         self.hasCompletedOnboarding = hasCompletedOnboarding
         self.crashReportingEnabled = crashReportingEnabled
         self.notificationsEnabled = notificationsEnabled
+        self.cloudBotsEnabled = cloudBotsEnabled
         self.colorScheme = colorScheme
         self.chatFontScale = chatFontScale
         self.playfulWaitingLabels = playfulWaitingLabels
@@ -414,6 +420,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
              shellSeatbeltPreference,
              xcodeMCPEnabled,
              hasCompletedOnboarding, crashReportingEnabled, notificationsEnabled,
+             cloudBotsEnabled,
              colorScheme, chatFontScale, playfulWaitingLabels, cleanModelChrome,
              orchestratorEnabled, orchestratorBackend, orchestratorModelID,
              workerBackend, workerModelID,
@@ -470,6 +477,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
         self.hasCompletedOnboarding = try c.decodeIfPresent(Bool.self, forKey: .hasCompletedOnboarding) ?? false
         self.crashReportingEnabled = try c.decodeIfPresent(Bool.self, forKey: .crashReportingEnabled) ?? false
         self.notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
+        self.cloudBotsEnabled = try c.decodeIfPresent(Bool.self, forKey: .cloudBotsEnabled) ?? false
         self.colorScheme = try c.decodeIfPresent(String.self, forKey: .colorScheme) ?? "system"
         self.chatFontScale = try c.decodeIfPresent(Double.self, forKey: .chatFontScale) ?? 1.0
         self.playfulWaitingLabels = try c.decodeIfPresent(Bool.self, forKey: .playfulWaitingLabels) ?? false
