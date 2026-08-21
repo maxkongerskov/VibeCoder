@@ -12,9 +12,6 @@
 import Foundation
 import AgentCore
 
-/// App tests and ChatViewModel keep using this name; the type lives in AgentCore.
-typealias SlashCommandResult = AgentCore.SlashCommandResult
-
 /// A slash command definition (name + description for /help and autocomplete).
 struct SlashCommand: Identifiable, Equatable {
     let name: String

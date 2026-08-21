@@ -139,13 +139,13 @@ final class ChatViewModel: ObservableObject {
 
     /// Wave C2: user or orchestrator paused the session goal — do not arm
     /// GoalOrchestrator on the next send until `/goal resume`.
-    private var sessionGoalPaused: Bool = false
+    var sessionGoalPaused: Bool = false
 
     /// Wave C multi-turn goal seeds — accumulate across `AgentLoop.run` so
     /// stall/maxAttempts are not reset every user message.
-    private var goalSeedAttemptCount: Int = 0
-    private var goalSeedLastFingerprint: String? = nil
-    private var goalSeedConsecutiveStallCount: Int = 0
+    var goalSeedAttemptCount: Int = 0
+    var goalSeedLastFingerprint: String? = nil
+    var goalSeedConsecutiveStallCount: Int = 0
 
     /// Notes pinned via `/remember` for this session — injected into the
     /// next user messages until cleared with the conversation.
@@ -153,7 +153,7 @@ final class ChatViewModel: ObservableObject {
 
     /// Skill envelopes queued by `/skill` for the **next** user turn only
     /// (same `<skill>` format as `load_skill`). Cleared after one send.
-    private var pendingSkillEnvelopes: [String] = []
+    var pendingSkillEnvelopes: [String] = []
 
     /// Live + recent background shell / subagent jobs for this conversation.
     /// Polled from `BackgroundJobManager` while a turn runs or jobs remain.
@@ -235,8 +235,8 @@ final class ChatViewModel: ObservableObject {
 
     static let artifactRailWidth: CGFloat = 380
 
-    private weak var app: AppViewModel?
-    private var runTask: Task<Void, Never>?
+    weak var app: AppViewModel?
+    var runTask: Task<Void, Never>?
     /// User-message id that opened the in-flight turn. `finishRun` only
     /// stamps `workDurationSeconds` on assistants after this id.
     private var currentTurnUserMessageID: UUID?
@@ -2152,7 +2152,7 @@ final class ChatViewModel: ObservableObject {
         notifyTerminal(.looped(signature: signature))
     }
 
-    private func handleContextCompacted(
+    func handleContextCompacted(
         preview: String,
         dropped: Int,
         source: CompactEventCopy.Source = .autoWire
