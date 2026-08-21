@@ -200,4 +200,65 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
             )
         )
     }
+
+    /// Chat-header chip + help. Sable's copy test covers Settings intro/honesty/privacy.
+    func testCloudBotChipCopyIsCloudNotOnDevice() {
+        XCTAssertEqual(CloudBotCopy.cloudLabel, "Cloud")
+        XCTAssertNotEqual(CloudBotCopy.cloudLabel, "Local")
+
+        let help = CloudBotCopy.chipHelp.lowercased()
+        XCTAssertTrue(help.contains("cloud"))
+        XCTAssertTrue(help.contains("leave"))
+        XCTAssertTrue(help.contains("this mac"))
+        XCTAssertTrue(help.contains("not local"))
+        XCTAssertFalse(help.contains("on-device"))
+        XCTAssertFalse(help.contains("on device"))
+        XCTAssertFalse(help.contains("nothing leaves"))
+        XCTAssertFalse(help.contains("local-first"))
+
+        let a11y = CloudBotCopy.chipAccessibility.lowercased()
+        XCTAssertTrue(a11y.contains("cloud"))
+        XCTAssertTrue(a11y.contains("leave"))
+        XCTAssertTrue(a11y.contains("this mac"))
+        XCTAssertFalse(a11y.contains("on-device"))
+        XCTAssertFalse(a11y.contains("on device"))
+        XCTAssertFalse(a11y.contains("nothing leaves"))
+        XCTAssertFalse(a11y.contains("local-first"))
+        XCTAssertFalse(a11y.contains("byo http"))
+    }
+
+    func testCloudBotToggleTitleIsOptIn() {
+        let title = CloudBotCopy.toggleTitle.lowercased()
+        XCTAssertTrue(title.contains("opt-in"))
+        XCTAssertTrue(title.contains("cloudbot"))
+        XCTAssertEqual(CloudBotCopy.settingsTitle, "CloudBots")
+    }
+
+    /// Sweep every Settings/chrome string so CloudBots cannot read as on-device.
+    func testCloudBotVisibleCopyNeverClaimsOnDeviceOrNothingLeavesTheMac() {
+        let strings: [(String, String)] = [
+            ("settingsTitle", CloudBotCopy.settingsTitle),
+            ("cloudLabel", CloudBotCopy.cloudLabel),
+            ("toggleTitle", CloudBotCopy.toggleTitle),
+            ("intro", CloudBotCopy.intro),
+            ("honesty", CloudBotCopy.honesty),
+            ("privacyBlurb", CloudBotCopy.privacyBlurb),
+            ("chipHelp", CloudBotCopy.chipHelp),
+            ("chipAccessibility", CloudBotCopy.chipAccessibility),
+            ("statusOff", CloudBotCopy.status(enabled: false)),
+            ("statusOn", CloudBotCopy.status(enabled: true)),
+        ]
+        for (name, raw) in strings {
+            let lower = raw.lowercased()
+            XCTAssertFalse(lower.contains("on-device"), "\(name) claims on-device: \(raw)")
+            XCTAssertFalse(lower.contains("on device"), "\(name) claims on device: \(raw)")
+            XCTAssertFalse(lower.contains("nothing leaves"), "\(name) claims nothing leaves: \(raw)")
+            if lower.contains("local-first") {
+                XCTAssertTrue(
+                    lower.contains("not local-first"),
+                    "\(name) uses local-first without negation: \(raw)")
+            }
+        }
+        XCTAssertEqual(CloudBotCopy.cloudLabel, "Cloud")
+    }
 }
