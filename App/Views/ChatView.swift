@@ -20,7 +20,6 @@ struct ChatView: View {
     @State private var showWorktreeReview: Bool = false
     @State private var worktreeReviewFiles: [WorktreeFileChange] = []
     @State private var worktreeReviewBranch: String = ""
-    @State private var showRemoteControl: Bool = false
 
     /// When true, streaming/new messages keep the transcript pinned to the
     /// live edge. A trackpad nudge upward detaches; scrolling back to the
@@ -192,7 +191,7 @@ struct ChatView: View {
         // "Publishing changes from within view updates is not allowed."
         // Deferring lands the write on the next runloop tick.
         .alert(
-            "Worktree error",
+            worktreeAlertTitle,
             isPresented: Binding(
                 get: { app.worktreeError != nil },
                 set: { newValue in
@@ -227,10 +226,6 @@ struct ChatView: View {
         .background(
             ShellApprovalSheetMount(coordinator: app.shellApprovalCoordinatorService)
         )
-        .sheet(isPresented: $showRemoteControl) {
-            RemoteControlSheet(onDismiss: { showRemoteControl = false })
-                .environmentObject(app)
-        }
 
         // Live timer — ticks every second while a turn is in flight,
         // driving the WorkingHeader "Working for Ns" display.
@@ -271,8 +266,10 @@ struct ChatView: View {
                 },
                 onExportMarkdown: { exportMarkdownToFile() },
                 onCopyMarkdown: { copyMarkdownToClipboard() },
-                onToggleWorktree: { handleToggleWorktree() },
-                onRemoteControl: { showRemoteControl = true },
+                worktreeBranch: viewModel.conversation.worktreeBranch,
+                onEnableWorktree: { handleEnableWorktree() },
+                onReviewWorktree: { handleReviewWorktree() },
+                onDisableWorktree: { handleDisableWorktree() },
                 onDelete: {
                     app.deleteConversation(viewModel.conversation.id)
                 },
@@ -343,6 +340,36 @@ struct ChatView: View {
                 .background(Theme.Palette.error.opacity(0.08))
             }
 
+            // Honest send/error status (e.g. no model selected). Hidden while
+            // running — Working header covers that. Transient "Starting…" is
+            // not shown.
+            if !viewModel.isRunning,
+               !ChatViewModel.isTransientStatus(viewModel.statusLine) {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "exclamationmark.circle")
+                        .foregroundStyle(Theme.Palette.secondary)
+                    Text(ChatViewModel.humanStatus(viewModel.statusLine))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.Palette.primary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Button {
+                        viewModel.statusLine = ""
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Theme.Palette.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Dismiss")
+                    .accessibilityLabel("Dismiss status")
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Theme.Palette.subtle)
+                .accessibilityLabel(ChatViewModel.humanStatus(viewModel.statusLine))
+            }
+
             // Goal stall / premature-stop / pause — slides in from the top.
             if let status = viewModel.goalStatusText {
                 GoalStatusBanner(
@@ -395,6 +422,7 @@ struct ChatView: View {
                 onSend: handleSend,
                 isRunning: viewModel.isRunning,
                 onCancel: { viewModel.cancel() },
+                hasSelectedModel: composerHasModel,
                 promptHistory: viewModel.promptHistory,
                 maxCardWidth: columnWidth,
                 sideGutter: 0, // gutters baked into contentWidth; card self-centers
@@ -453,23 +481,33 @@ struct ChatView: View {
         }
     }
 
-    // MARK: - Worktree toggle
+    // MARK: - Worktree
 
-    /// Routes the header's worktree toggle to the right AppViewModel call.
-    ///   * inactive → enable a fresh worktree
-    ///   * active   → load real git diff and present WorktreeReviewSheet
-    private func handleToggleWorktree() {
-        if viewModel.conversation.worktreeBranch == nil {
-            app.enableWorktree(for: viewModel.conversation.id)
+    /// Non-git bind is a skip, not a failure — don't title that alert "error".
+    private var worktreeAlertTitle: String {
+        WorktreeBindCopy.alertTitle(forMessage: app.worktreeError)
+    }
+
+    private func handleEnableWorktree() {
+        guard viewModel.conversation.worktreeBranch == nil else { return }
+        app.enableWorktree(for: viewModel.conversation.id)
+    }
+
+    /// Persist opt-out so later sends do not recreate a worktree. Leaves the
+    /// sibling git worktree on disk — Discard on the review sheet is the delete path.
+    private func handleDisableWorktree() {
+        app.disableWorktree(for: viewModel.conversation.id)
+    }
+
+    /// Review / merge / discard / continue — does not opt out of isolation.
+    private func handleReviewWorktree() {
+        worktreeReviewBranch = viewModel.conversation.worktreeBranch ?? "worktree"
+        if let root = viewModel.conversation.worktreeRootURL?.path {
+            worktreeReviewFiles = WorktreeFileChange.from(worktreePath: root)
         } else {
-            worktreeReviewBranch = viewModel.conversation.worktreeBranch ?? "worktree"
-            if let root = viewModel.conversation.worktreeRootURL?.path {
-                worktreeReviewFiles = WorktreeFileChange.from(worktreePath: root)
-            } else {
-                worktreeReviewFiles = []
-            }
-            showWorktreeReview = true
+            worktreeReviewFiles = []
         }
+        showWorktreeReview = true
     }
 
     // MARK: - Engine-busy heuristic
@@ -536,24 +574,25 @@ struct ChatView: View {
     }
 
     /// Empty-chat copy: guide first-run when no backend/model is ready.
+    private var composerHasModel: Bool {
+        if let id = viewModel.conversation.modelID, !id.isEmpty { return true }
+        if let id = app.selectedModelID, !id.isEmpty { return true }
+        if app.orchestrationActive { return app.executingRole() != nil }
+        return false
+    }
+
     private var emptyHeroTitle: String {
-        if app.availableModels.isEmpty {
-            return "Connect a model server"
-        }
-        if app.selectedModelID == nil || (app.selectedModelID?.isEmpty ?? true) {
-            return "Pick a model to start"
-        }
-        return "What are we working on?"
+        EmptyChatCopy.title(
+            availableModelsEmpty: app.availableModels.isEmpty,
+            hasSelectedModel: composerHasModel
+        )
     }
 
     private var emptyHeroSubtitle: String {
-        if app.availableModels.isEmpty {
-            return "Start LM Studio, Ollama, or oMLX on this Mac, then open Settings → Connection and Test."
-        }
-        if app.selectedModelID == nil || (app.selectedModelID?.isEmpty ?? true) {
-            return "Use the model chip in the composer (bottom-right) to select a tool-capable coding model."
-        }
-        return "Bind a project folder, describe a task, and the agent will plan, edit, and verify on your machine."
+        EmptyChatCopy.subtitle(
+            availableModelsEmpty: app.availableModels.isEmpty,
+            hasSelectedModel: composerHasModel
+        )
     }
 
     // MARK: - Transcript

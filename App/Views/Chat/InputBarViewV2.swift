@@ -28,6 +28,9 @@ struct InputBarViewV2: View {
     /// user can stop the in-flight turn without leaving the input area.
     var isRunning: Bool = false
     var onCancel: () -> Void = {}
+    /// False until a model is selected. Send stays disabled; Return still
+    /// calls `onSend` so ChatViewModel can set an honest status line.
+    var hasSelectedModel: Bool = false
 
     // ── Context meter (BuildCode-style pill) ───────────────────
     /// Estimated tokens currently in context. nil = not measuring.
@@ -363,8 +366,16 @@ struct InputBarViewV2: View {
         .accessibilityLabel("Compress")
     }
 
-    private var canSend: Bool {
+    private var hasDraft: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var canSend: Bool {
+        ComposerSendGate.sendEnabled(
+            hasDraft: hasDraft,
+            hasModel: hasSelectedModel,
+            isRunning: isRunning
+        )
     }
 
     /// ZCode parity: navigate prompt history with ↑/↓ arrows.
@@ -445,14 +456,22 @@ struct InputBarViewV2: View {
                 if showSlashMenu, acceptSlashHighlight() {
                     return .handled
                 }
-                if canSend { onSend() }
+                // Return always tries when there is a draft so "no model"
+                // can surface an honest status even though Send is disabled.
+                if hasDraft { onSend() }
                 return .handled
             }
-            .onKeyPress(.tab) {
-                if showSlashMenu, acceptSlashHighlight() {
+            .onKeyPress(keys: [.tab], phases: .down) { press in
+                let shift = press.modifiers.contains(.shift)
+                switch ComposerTabKey.action(shift: shift, slashMenuVisible: showSlashMenu) {
+                case .acceptSlash:
+                    return acceptSlashHighlight() ? .handled : .ignored
+                case .cycleMode:
+                    app.cycleExecutionMode()
                     return .handled
+                case .ignore:
+                    return .ignored
                 }
-                return .ignored
             }
             .onKeyPress(.upArrow) {
                 if showSlashMenu {
@@ -548,7 +567,10 @@ struct InputBarViewV2: View {
                     isRunning: isRunning,
                     canSend: canSend,
                     onSend: onSend,
-                    onStop: onCancel
+                    onStop: onCancel,
+                    disabledReason: hasDraft && !hasSelectedModel && !isRunning
+                        ? "Select a model first"
+                        : nil
                 )
             }
         }
@@ -818,6 +840,7 @@ private struct SendStopButton: View {
     let canSend: Bool
     let onSend: () -> Void
     let onStop: () -> Void
+    var disabledReason: String? = nil
 
     var body: some View {
         if isRunning {
@@ -866,8 +889,12 @@ private struct SendStopButton: View {
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
-            .help("Send message")
-            .accessibilityLabel("Send")
+            .help(canSend ? "Send message" : (disabledReason ?? "Send message"))
+            .accessibilityLabel(
+                canSend
+                    ? "Send"
+                    : (disabledReason.map { "Send disabled. \($0)" } ?? "Send")
+            )
         }
     }
 }

@@ -5,8 +5,13 @@
 //  Phone (QR) or laptop (link) open a tokenized web session that can
 //  view the active chat, send messages, and stop the current turn.
 //
-//  Binds to 0.0.0.0 so devices on the same Wi‑Fi can connect.
-//  Auth is a long random token in the URL path (no cookies).
+//  SHUT DOWN (2026-08-20): `isEnabled` is false. `start()` refuses —
+//  no bind on 0.0.0.0 / :18765, no session URL. Flip `isEnabled` to
+//  restore the previous all-interfaces listener. Pixel hid the sheet
+//  in parallel; this gate holds even if UI still calls `start()`.
+//
+//  Historical: bound all interfaces so LAN phones/laptops could connect.
+//  Auth is a long random token in the URL path (optional password cookie).
 //
 
 import Foundation
@@ -76,6 +81,11 @@ public actor RemoteControlServer {
 
     public static let shared = RemoteControlServer()
 
+    /// LAN remote control is off. Set `true` to restore `start()` binding
+    /// on all interfaces (default port 18765). Leave false: `start()`
+    /// throws `.disabled` and never publishes a session URL.
+    public static let isEnabled = false
+
     private var listener: NWListener?
     private var port: Int = 18765
     private var token: String?
@@ -87,13 +97,15 @@ public actor RemoteControlServer {
 
     public init() {}
 
-    public enum ServerError: Error, LocalizedError {
+    public enum ServerError: Error, LocalizedError, Equatable {
         case invalidPort(Int)
         case alreadyRunning
+        case disabled
         public var errorDescription: String? {
             switch self {
             case .invalidPort(let p): return "Invalid port: \(p)"
             case .alreadyRunning: return "Remote control is already running"
+            case .disabled: return "Remote control is turned off."
             }
         }
     }
@@ -122,8 +134,21 @@ public actor RemoteControlServer {
     /// - Parameters:
     ///   - port: TCP port (default 18765)
     ///   - lifetime: token validity
+    /// - Throws: `.disabled` while `isEnabled` is false (no bind, no token).
     @discardableResult
     public func start(port: Int = 18765, lifetime: TimeInterval = 3600) throws -> String {
+        // Fail-closed: do not bind any interface or publish a session URL.
+        // Tear down a leftover listener if one exists (should not in a
+        // fresh process). UI may still call this after Pixel hides the sheet.
+        guard Self.isEnabled else {
+            if listener != nil {
+                stop()
+            } else {
+                token = nil
+                expiresAt = nil
+            }
+            throw ServerError.disabled
+        }
         // Validate before tearing down a live listener — `start(port: 0)`
         // must not kill a running session or replace its token.
         guard port > 0, port <= 65_535, let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {

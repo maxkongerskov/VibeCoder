@@ -12,6 +12,20 @@
 
 import SwiftUI
 
+enum WorktreeChromeCopy {
+    static let isolate = "Isolate work in git worktree"
+    static let review = "Review worktree…"
+    static let editMain = "Edit main tree…"
+
+    enum IsolatedAction: Equatable {
+        case review
+        /// Persist `worktreeOptOut` — do not open review / do not discard disk tree.
+        case editMain
+    }
+
+    static func isolatedActions() -> [IsolatedAction] { [.review, .editMain] }
+}
+
 // MARK: - Public dropdown view
 
 struct ChatTitleDropdown: View {
@@ -19,9 +33,11 @@ struct ChatTitleDropdown: View {
     var onDuplicate: () -> Void
     var onExportMarkdown: () -> Void
     var onCopyMarkdown: () -> Void
-    var onToggleWorktree: () -> Void
+    var onEnableWorktree: () -> Void
+    var onReviewWorktree: () -> Void
+    /// Persist opt-out (edit main checkout). Must not discard the disk worktree.
+    var onDisableWorktree: () -> Void
     var worktreeOn: Bool
-    var onRemoteControl: (() -> Void)? = nil
     var onDelete: () -> Void
 
     var body: some View {
@@ -39,22 +55,27 @@ struct ChatTitleDropdown: View {
                              label: "Copy as Markdown",
                              action: onCopyMarkdown)
 
-            if let onRemoteControl {
-                TitleDropdownDivider()
-                TitleDropdownRow(icon: "iphone.and.arrow.forward",
-                                 label: "Remote control…",
-                                 action: onRemoteControl)
-            }
-
             TitleDropdownDivider()
 
-            // ── Worktree toggle ──────────────────────────────────────
-            TitleDropdownToggleRow(
-                icon: "arrow.triangle.branch",
-                label: "Isolate work in git worktree",
-                isOn: worktreeOn,
-                action: onToggleWorktree
-            )
+            // ── Worktree: isolate vs edit-main, review/merge never hidden ──
+            if worktreeOn {
+                TitleDropdownRow(
+                    icon: "doc.text.magnifyingglass",
+                    label: WorktreeChromeCopy.review,
+                    action: onReviewWorktree
+                )
+                TitleDropdownRow(
+                    icon: "arrow.uturn.backward",
+                    label: WorktreeChromeCopy.editMain,
+                    action: onDisableWorktree
+                )
+            } else {
+                TitleDropdownRow(
+                    icon: "arrow.triangle.branch",
+                    label: WorktreeChromeCopy.isolate,
+                    action: onEnableWorktree
+                )
+            }
 
             TitleDropdownDivider()
 
@@ -103,45 +124,6 @@ private struct TitleDropdownRow: View {
     }
 }
 
-// MARK: - TitleDropdownToggleRow
-
-private struct TitleDropdownToggleRow: View {
-    let icon: String
-    let label: String
-    let isOn: Bool
-    let action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .regular))
-                    .frame(width: 16, alignment: .center)
-                Text(label)
-                    .font(.system(size: 13, weight: .regular))
-                Spacer()
-                // Checkmark indicates the toggle is on
-                if isOn {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Theme.Palette.accent)
-                }
-            }
-            .foregroundColor(Theme.Palette.primary)
-            .padding(.horizontal, Theme.Spacing.m)
-            .padding(.vertical, 6)
-            .background(
-                isHovered ? Theme.Palette.hover : Color.clear
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-    }
-}
-
 // MARK: - TitleDropdownDivider
 
 private struct TitleDropdownDivider: View {
@@ -160,7 +142,9 @@ private struct TitleDropdownDivider: View {
         onDuplicate:      { print("duplicate") },
         onExportMarkdown: { print("export") },
         onCopyMarkdown:   { print("copy") },
-        onToggleWorktree: { print("worktree") },
+        onEnableWorktree: { print("enable worktree") },
+        onReviewWorktree: { print("review worktree") },
+        onDisableWorktree: { print("disable worktree") },
         worktreeOn:       true,
         onDelete:         { print("delete") }
     )

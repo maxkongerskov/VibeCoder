@@ -12,5 +12,6 @@ related harness concepts) are behavioral ports inspired by Grok Build
   http://www.apache.org/licenses/LICENSE-2.0
 
 This product does not require Grok hosted models or xAI API keys; inference
-remains on user-configured backends (LM Studio, Ollama, llama.cpp, EXO, MLX,
-OpenAI-compatible endpoints).
+remains on user-configured OpenAI-compatible HTTP backends (LM Studio, oMLX,
+Ollama, Unsloth Studio, EXO, custom `/v1`). In-process MLX is a stub (generation
+throws). Bundled llama.cpp is not shipped.

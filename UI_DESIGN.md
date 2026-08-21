@@ -329,7 +329,7 @@ Onboarding Screen 1 (Welcome + Hardware) and Screen 2 (Pick a starter model) are
 
 1. Brief clear splash while `SettingsStore` loads.
 2. Main window (min 960 × 620). No default size is set — first-open size is AppKit/SwiftUI default (the old “opens at 1280 × 800” is not implemented).
-3. Empty chat hero (§4.6) + composer. If no backend is up: **Connect a model server** + **Open Connection settings** / loopback **Use**.
+3. After the conversation store loads, the first visible task is created automatically (same as ⌘N) so the first screen is the empty-chat hero (§4.6) + composer — not a plus-button landing. If no backend is up: **Connect a model server** + **Open Connection settings** / loopback **Use**.
 
 License / trial lock screens do not exist (MIT; no key field).
 
@@ -366,9 +366,9 @@ Single `NavigationSplitView` (sidebar + detail). No inspector column. No width-b
 4. **Pinned** disclosure (if any), then time buckets: Today · Yesterday · Past 7 days · Past 30 days · Older.
 5. **Footer:** **Delete all** (alert **Delete all tasks?** / **Delete All**) + **Settings**.
 
-New Task / ⌘N / toolbar immediately create + select a conversation. `NewTaskLandingViewV2` only appears when the list is already empty.
+New Task / ⌘N / toolbar immediately create + select a conversation. After store load, a first task is seeded if Recents is empty so first-run is the connect-hero, not `NewTaskLandingViewV2`.
 
-**Chat surface:** slim title + chevron → Rename, Duplicate, Export/Copy as Markdown, Remote control…, Isolate work in git worktree, Delete. No header model/project/Safe pills. Transcript + composer share `contentWidth` (320–1040, gutters 24–96). Live turn: **Working for Ns** / **Worked for Ns** (seconds, then whole minutes) → orch caption → `ReasoningBlockView` (**Thinking · Ns** / **Thought for Ns** / **Thought**) → activity / edit cards → answer. Plan is a **floating** 200–320 card (`StickyPlannerView`): STEPS/COMPLETE + todos; idle Plan + todos show **Review checklist, then Approve to implement (Ask mode) or Stay in Plan.** · **Stay in Plan** / **Approve & Run**. `ask_user` sits above the composer; patch / approval / worktree are sheets.
+**Chat surface:** slim title + chevron → Rename, Duplicate, Export/Copy as Markdown, Isolate work in git worktree / Review worktree… / Edit main tree…, Delete. **Edit main tree…** persists worktree opt-out (later sends stay on the main checkout); it does not discard the disk worktree — Merge/Discard stay on the review sheet. A **Worktree** chip (when isolated) or **Isolate in worktree** (when a folder is bound) sits on the title row so merge/review is not header-menu-only. LAN / phone QR remote control is off — not in the title menu. No header model/project/Safe pills. Transcript + composer share `contentWidth` (320–1040, gutters 24–96). Live turn: **Working for Ns** / **Worked for Ns** (seconds, then whole minutes) → orch caption → `ReasoningBlockView` (**Thinking · Ns** / **Thought for Ns** / **Thought**) → activity / edit cards → answer. Plan is a **floating** 200–320 card (`StickyPlannerView`): STEPS/COMPLETE + todos; idle Plan + todos show **Review checklist, then Approve to implement (Ask mode) or Stay in Plan.** · **Stay in Plan** / **Approve & Run**. `ask_user` sits above the composer; patch / approval / worktree are sheets.
 
 ### 4.3 Settings sheet
 
@@ -434,7 +434,7 @@ Header worktree toggle **on** → enable; **off tap** → this sheet (`git statu
 |---|---|
 | Sidebar tasks | **No tasks yet** (12 pt tertiary). No ⌘N hint, no bubble icon |
 | Zero conversations (detail) | Outline mark 88 · **Start a new task** 24 semibold · **Click the button below to begin. Your new task will appear in Recents.** · 84 pt + circle · **Or press ↩ Return** |
-| Chat, no backend | Outline 112 · **Connect a model server** · **Start LM Studio, Ollama, or oMLX on this Mac, then open Settings → Connection and Test.** · **Detected on this Mac** rows (**Use**) · **Open Connection settings** |
+| Chat, no backend | Outline 112 · **Connect a model server** · **Start LM Studio, Ollama, oMLX, Unsloth Studio, or EXO on this Mac, then open Settings → Connection and Test.** · **Detected on this Mac** rows (**Use**) · **Open Connection settings** |
 | Chat, backend, no selection | **Pick a model to start** · **Use the model chip in the composer (bottom-right) to select a tool-capable coding model.** |
 | Chat, model ready | **What are we working on?** · **Bind a project folder, describe a task, and the agent will plan, edit, and verify on your machine.** |
 | Projects | **Looking to start a project?** + `folder.fill.badge.plus` + **New Project** capsule |

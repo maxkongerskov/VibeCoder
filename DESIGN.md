@@ -1,9 +1,10 @@
 # VibeCoder · Design & Critique
 
 > Successor to the original AgentOS DEV PLAN. Native macOS Apple Silicon. **Open source (MIT).**
-> SwiftUI app + interactive `vibecoder` REPL sharing one Swift core library.
+> SwiftUI app + interactive `vibecoder` REPL (C1) sharing one Swift core library.
 >
-> **Shipped backends (2026-07-23):** OpenAI-compatible **HTTP only** — LM Studio, oMLX, Ollama, EXO, custom endpoint.  
+> **Claim freeze (2026-08-20):** VibeCoder is a native macOS **BYO OpenAI-compatible HTTP** coding agent. Live backends: **LM Studio, oMLX, Ollama, Unsloth Studio, EXO, custom `/v1`**. MIT; **no** license gate, Sparkle, Sentry, bundled llama.cpp, or in-process MLX (stub throws). **Local API** default = loopback proxy `tools: []`; opt-in = bounded `AgentLoop` on the **bound project** (not schemas-only; not in-app worktree/review/MCP parity). Binding a **git** project **enables worktree isolation by default** (escape hatch: edit main tree; merge is user-driven) — contract in `docs/RELEASE_BAR.md` / ARCHITECTURE §11.2. `git_commit` and `create_pull_request` **are** registered. **LAN/phone remote control is OFF** (not password-gated, not a shipping feature). `$430` / AgentOS NEW DAY / onboarding wizard / historical `agentos` CLI are **not** current product. Interactive **`vibecoder` REPL is C1** (same AgentCore, BYO HTTP). Not `agentos`. Not eval-runner. **C2:** EventPrinter colors TTY roles (`NO_COLOR` or non-TTY = C1 plain text, no escapes). **C3:** SIGINT during a turn cancels `AgentLoop` via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C still exits. TTY y/n/always (empty/`n`/unknown deny); patch `always` → directory grant. BYO-server is the v1 inference path — not mlx-swift and not a restored bundled runner.
+> **Shipped backends (2026-07-23, Unsloth added 2026-08-20):** OpenAI-compatible **HTTP only** — LM Studio, oMLX, Ollama, Unsloth Studio, EXO, custom endpoint.  
 > **Not shipped:** in-process MLX (stub; `mlx-swift` not wired), bundled llama.cpp/GGUF runner (product **removed**; legacy settings migrate to Ollama). There is no `LiteLocalBackend`.  
 > **Honest offline:** agent + tools run on-device **when a local model server is already running**. Zero-deps “fresh Mac, no third-party server” inference is **not** a product path today.  
 > **Wave 2 (2026-08-18, code-backed):** mid-turn **reminder cadence** (system-reminder inject; `PlanStore` suppresses the todo nudge after compact); **in-session** `SkillToolGate` (`allowed-tools`, last `load_skill` wins, **not** persisted); **`sessionReadPaths` persist** via a JSON string-array codec (`Set<String>` Codable SIGSEGV) + `AgentLoop` seed on resume; terminal **CSI subset frozen** + tests (not a full xterm); **subagent usage + `transcript.jsonl`** on disk (`SubagentSessionStore`).  
@@ -22,7 +23,7 @@ Carry these forward without rebuilding from scratch:
 - **Unified `InferenceBackend` protocol.** One stream surface for every model host — keep it; all shipped adapters are HTTP OpenAI-compat (in-process MLX remains a future Route B).
 - **`ChatLoop` pure helpers split from `ChatViewModel`.** Stall detection, history compaction, nudge prefixing — all testable without UI. Keep this split; in NEW DAY it lives one layer lower (in the shared core library, not in the app target).
 - **Worktree isolation.** `git worktree`-based safe edits is genuinely differentiating vs. Cursor; cloud agents can't do this cleanly.
-- **`LocalAPIServer` exposing AgentOS as OpenAI-compatible.** Still a moat *when* agent tools are enabled. **Today:** loopback proxy for completions (`tools: []`); full agent-loop routing is deferred. Harden before claiming the agent gateway.
+- **`LocalAPIServer` exposing VibeCoder as OpenAI-compatible.** Still a moat *when* agent tools are enabled. **Today:** loopback proxy for completions (`tools: []`) by default; **opt-in** bounded AgentLoop on the bound project (cap 8). Not schemas-only. Not in-app parity. Harden before claiming an Xcode agent gateway.
 - **Skill markdown + auto-attach.** 182 procedure files in the bundle is a real asset. Keep the format; replace the loader with a smaller, lazier indexer.
 - **MEMORY.md / DECISIONS.md auto-injection.** Cross-session learning that's a flat file (greppable, diffable) is correct. Keep.
 - **Hardware-aware presets.** `HardwareInfo` + `ModelPreset.recommended(forParamsB:)` is the right defaults strategy. Keep.
@@ -52,8 +53,8 @@ Carry these forward without rebuilding from scratch:
 ┌─────────────────────────────────────────────────────────────────┐
 │                       Surfaces                                   │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │  AgentOS.app     │  │  vibecoder REPL  │  │  HTTP server │  │
-│  │  (SwiftUI)       │  │  (C1–C3)         │  │  (Xcode etc) │  │
+│  │  AgentOS.app     │  │  agentos CLI     │  │  HTTP server │  │
+│  │  (SwiftUI)       │  │  (executable)    │  │  (Xcode etc) │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └──────┬───────┘  │
 └───────────┼──────────────────────┼─────────────────────┼─────────┘
             │                      │                     │
@@ -81,7 +82,7 @@ Carry these forward without rebuilding from scratch:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Surfaces today:** SwiftUI app links `AgentCore` (+ optional `MLXBackend` stub). Interactive **`vibecoder` REPL** (`Sources/VibeCoderCLI` + `VibeCoderCLILib`; same AgentCore, BYO HTTP, shared `ConversationStore`, TTY y/n/always, worktree bind). Not `agentos`. Not eval-runner. **C2:** EventPrinter colors TTY roles (`NO_COLOR` or non-TTY = plain text). **C3:** SIGINT mid-turn cancels via `TurnCancelHandle`; idle Ctrl+C exits; patch `always` → directory grant. Historical `agentos` CLI remains gone. `LocalAPIServer` is in `AgentCore` and can be started from the app — **v1 is a backend proxy** (`tools: []`), not a full agent-loop gateway for Xcode.
+**Surfaces today:** SwiftUI app links `AgentCore` (+ optional `MLXBackend` stub). Interactive **`vibecoder` REPL is C1** (`Sources/VibeCoderCLI` + `VibeCoderCLILib`; same AgentCore, BYO HTTP, shared `ConversationStore`, TTY y/n/always, worktree bind). Not `agentos`. Not eval-runner. **C2:** EventPrinter colors TTY roles (`NO_COLOR` or non-TTY = C1 plain text). **C3:** SIGINT mid-turn cancels via `TurnCancelHandle`; idle Ctrl+C exits; patch `always` → directory grant. Historical `agentos` CLI remains gone. `LocalAPIServer` is in `AgentCore` and can be started from the app — **default is a backend proxy** (`tools: []`); **opt-in** Settings toggle runs a **bounded multi-step AgentLoop** (cap 8) against the bound project (no worktree/review UI). Not a full Xcode agent gateway. LAN/phone `RemoteControlServer` is **off** (not a shipping feature).
 
 ## 4. Module boundaries
 
@@ -205,28 +206,29 @@ Overhead budget for our wrapper:
 
 ## 9. Differentiation vs. competitors
 
-**Honest matrix (shipped product as of 2026-07-23).** “Offline” here means: model weights and agent loop stay on the Mac **after** you bring your own local OpenAI-compatible server (LM Studio / oMLX / Ollama / EXO / custom). We do **not** ship a zero-deps embedded engine.
+**Honest matrix (shipped product as of 2026-08-20).** “Offline” here means: model weights and agent loop stay on the Mac **after** you bring your own local OpenAI-compatible server (LM Studio / oMLX / Ollama / Unsloth Studio / EXO / custom). We do **not** ship a zero-deps embedded engine.
 
-| Capability | Cursor | Claude Code | LM Studio | AgentOS NEW DAY (today) |
+| Capability | Cursor | Claude Code | LM Studio | VibeCoder (today) |
 |---|---|---|---|---|
 | Agent + tools offline (BYO local server) | ❌ cloud default | ❌ cloud default | ❌ chat only | ✅ if server already running |
 | Zero-deps offline inference (no third-party server) | ❌ | ❌ | ✅ (own app) | ❌ not shipped |
 | Native macOS app | partial | CLI-first | ✅ | ✅ |
 | Apple-Silicon-native MLX **in our process** | ❌ | ❌ | ✅ (their engine) | ❌ stub only |
 | GGUF via **bundled** llama.cpp | ❌ | ❌ | ✅ (their app) | ❌ product removed |
-| Talk to LM Studio / Ollama / oMLX / EXO / custom HTTP | partial | custom | n/a | ✅ first-class |
+| Talk to LM Studio / Ollama / oMLX / Unsloth / EXO / custom HTTP | partial | custom | n/a | ✅ first-class |
 | Distributed (EXO) | ❌ | ❌ | ❌ | ✅ HTTP + `/state` |
 | Agent loop + tools | ✅ | ✅ | ❌ | ✅ |
-| Git worktree isolation | ❌ | ❌ | n/a | ✅ |
+| Git worktree isolation | ❌ | ❌ | n/a | ✅ **default on bind-git** (escape hatch: edit main tree) |
 | Diff-based edits | ✅ | ✅ | n/a | ✅ |
 | Auto build verification | partial | ✅ | n/a | ✅ (when enabled) |
 | Project memory (MEMORY.md) | partial | ✅ | n/a | partial / present |
 | Skills marketplace | ❌ | ✅ | ❌ | not v1 product surface |
-| OpenAI-compat server for Xcode | ❌ | ❌ | ✅ (no agent) | ✅ **proxy only** (`tools: []`; agent-loop opt-in deferred) |
+| OpenAI-compat server for Xcode | ❌ | ❌ | ✅ (no agent) | ✅ default **proxy** `tools: []`; opt-in bounded AgentLoop on bound project |
 | Interactive CLI | ❌ | ✅ | ❌ | ✅ C1–C3 `vibecoder` REPL (not agentos) |
-| No product license gate | varies | subscription | free | ✅ |
+| LAN / phone remote control | partial | ❌ | n/a | ❌ **off** (not shipping) |
+| No product license gate | varies | subscription | free | ✅ MIT |
 
-**Anchors that still differentiate when used honestly:** (1) **local agent loop + worktree isolation** on top of a BYO local model server; (2) **loopback OpenAI-compat proxy for Xcode** (completions today; full agent tools not default).
+**Anchors that still differentiate when used honestly:** (1) **local agent loop + worktree isolation** on top of a BYO local model server; (2) **loopback OpenAI-compat proxy for Xcode** (completions default; bounded agent-loop opt-in, not full in-app parity).
 
 ## 10. Build & ship
 
@@ -235,7 +237,7 @@ Overhead budget for our wrapper:
 - **Notarization:** `notarytool` + `stapler`.
 - **Distribution:** signed DMG via GitHub Releases (or any host). Sparkle was removed — no in-app auto-update.
 - **License keys:** Removed — the app does not require a product license key or trial.
-- **Telemetry:** Sentry opt-in, off by default. Strictly stack traces — no conversation content, no model data.
+- **Telemetry:** **None.** Sentry was removed. `crashReportingEnabled` in settings is a schema leftover and does not send reports.
 
 ## 11. Phased delivery
 
@@ -243,13 +245,13 @@ Historical plan of record (many items landed under different names; **do not rea
 
 | Phase | Original scope | Reality note (2026-07-23) |
 |---|---|---|
-| **P0** | Package, protocols, LM Studio, tools, CLI, app skeleton | Core + app exist; interactive `vibecoder` REPL is C1–C3 (not agentos) |
+| **P0** | Package, protocols, LM Studio, tools, CLI, app skeleton | Core + app exist; interactive `vibecoder` REPL is **C1** (not agentos) |
 | **P1** | EXO + llama.cpp subprocess + edit tools | **EXO HTTP shipped**; llama.cpp product **removed** (use Ollama/custom); edit tools present |
 | **P2** | MLX in-process + catalog + BuildGuard | Catalog/downloader scaffolding exists; **inference still stub**; oMLX/Ollama HTTP added instead |
-| **P3** | App shell, worktrees, LocalAPIServer | App + worktrees shipped; LocalAPI = **proxy**, not full agent tools |
+| **P3** | App shell, worktrees, LocalAPIServer | App + worktrees shipped; LocalAPI **default = proxy**; **opt-in** = bounded AgentLoop on bound project (2026-08-20 freeze) |
 | **P4** | Compaction, skills, memory, sub-agents | Partial — see `docs/GROK_PORT.md` and registry honesty in ARCHITECTURE |
 | **P5** | Diagnostics, onboarding wizard, distribution | Onboarding currently a no-op; no first-run model download |
 
-**Open product decision (not resolved in this doc):** ship one zero-deps/auto-spawn path (wire mlx-swift **or** restore a managed runner **or** deep auto-detect + launch of LM Studio/oMLX) **or** keep BYO-server forever and keep marketing aligned.
+**Product decision (resolved 2026-08-20):** keep **BYO OpenAI-compatible HTTP forever** for v1. Do **not** wire mlx-swift, restore bundled llama.cpp, or claim a zero-deps embedded engine. Marketing must stay aligned.
 
 This file (DESIGN.md) is the design contract for everything in `Sources/`. If code drifts from **shipped** claims in the status box at the top, fix the code or update this doc with a dated honesty amendment.

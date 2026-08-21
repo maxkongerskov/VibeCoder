@@ -37,6 +37,8 @@ struct MentionAwareComposer: View {
     var onSend: () -> Void = {}
     var isRunning: Bool = false
     var onCancel: () -> Void = {}
+    /// Conversation or app has a selected model. Send is disabled until true.
+    var hasSelectedModel: Bool = false
 
     var promptHistory: [String] = []
     var maxCardWidth: CGFloat = Theme.ChatLayout.maxContentWidth
@@ -86,6 +88,7 @@ struct MentionAwareComposer: View {
                     onSend: onSend,
                     isRunning: isRunning,
                     onCancel: onCancel,
+                    hasSelectedModel: hasSelectedModel,
                     contextTokens: contextTokens,
                     contextLimit: contextLimit,
                     contextBreakdown: contextBreakdown,

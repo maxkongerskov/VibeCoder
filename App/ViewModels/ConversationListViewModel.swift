@@ -108,10 +108,7 @@ final class ConversationListViewModel: ObservableObject {
         if let t = title, !t.isEmpty { conv.title = t }
         conversations.insert(conv, at: 0)
         selectedConversationID = conv.id
-        let snapshot = conv
-        Task { [store] in
-            try? await store.save(snapshot)
-        }
+        persistSnapshotInBackground(conv, context: "newConversation")
         return conv
     }
 
@@ -149,10 +146,7 @@ final class ConversationListViewModel: ObservableObject {
         )
         conversations.insert(copy, at: 0)
         selectedConversationID = copy.id
-        let snapshot = copy
-        Task { [store] in
-            try? await store.save(snapshot)
-        }
+        persistSnapshotInBackground(copy, context: "duplicate")
         return copy
     }
 
@@ -164,10 +158,7 @@ final class ConversationListViewModel: ObservableObject {
         conversations[idx].title = trimmed
         conversations[idx].updatedAt = Date()
         conversations.sort { $0.updatedAt > $1.updatedAt }
-        let snapshot = conversations[idx]
-        Task { [store] in
-            try? await store.save(snapshot)
-        }
+        persistSnapshotInBackground(conversations[idx], context: "rename")
     }
 
     /// Delete one conversation. If it was the selected one we re-select
@@ -212,10 +203,7 @@ final class ConversationListViewModel: ObservableObject {
             guard let root = conversations[i].projectRoot else { continue }
             guard SafeModeConfig.normalizePath(root.path) == target else { continue }
             conversations[i].projectRoot = nil
-            let snapshot = conversations[i]
-            Task { [store] in
-                try? await store.save(snapshot)
-            }
+            persistSnapshotInBackground(conversations[i], context: "clearProjectBinding")
         }
     }
 
@@ -229,10 +217,7 @@ final class ConversationListViewModel: ObservableObject {
             guard let root = conversations[i].projectRoot else { continue }
             guard SafeModeConfig.normalizePath(root.path) == old else { continue }
             conversations[i].projectRoot = newPath
-            let snapshot = conversations[i]
-            Task { [store] in
-                try? await store.save(snapshot)
-            }
+            persistSnapshotInBackground(conversations[i], context: "updateProjectBinding")
         }
     }
 
@@ -248,6 +233,16 @@ final class ConversationListViewModel: ObservableObject {
     /// list.
     var untetheredConversations: [Conversation] {
         conversations.filter { $0.projectRoot == nil }
+    }
+
+    private func persistSnapshotInBackground(_ snapshot: Conversation, context: String) {
+        Task { [store] in
+            do {
+                try await store.save(snapshot)
+            } catch {
+                Diagnostics.error("ConversationListViewModel.\(context)(\(snapshot.id)): \(error.localizedDescription)")
+            }
+        }
     }
 
     // MARK: - Skipped (not on AgentCore.Conversation yet)

@@ -32,8 +32,10 @@ struct ChatHeaderView: View {
     var onDuplicate: () -> Void = {}
     var onExportMarkdown: () -> Void = {}
     var onCopyMarkdown: () -> Void = {}
-    var onToggleWorktree: () -> Void = {}
-    var onRemoteControl: () -> Void = {}
+    var worktreeBranch: String? = nil
+    var onEnableWorktree: () -> Void = {}
+    var onReviewWorktree: () -> Void = {}
+    var onDisableWorktree: () -> Void = {}
     var onDelete: () -> Void = {}
     /// Real ChatView passes a closure that writes to `app.safeModeOn`,
     /// which gates whether `apply_patch` surfaces the PatchReviewSheet.
@@ -76,7 +78,8 @@ struct ChatHeaderView: View {
         // Settings or the composer — not the chat chrome.
         HStack(spacing: 8) {
             titleMenu
-            Spacer(minLength: 0)
+            Spacer(minLength: 8)
+            worktreeChip
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
@@ -123,15 +126,19 @@ struct ChatHeaderView: View {
                         showTitleMenu = false
                         onCopyMarkdown()
                     },
-                    onToggleWorktree: {
+                    onEnableWorktree: {
                         showTitleMenu = false
-                        onToggleWorktree()
+                        onEnableWorktree()
+                    },
+                    onReviewWorktree: {
+                        showTitleMenu = false
+                        onReviewWorktree()
+                    },
+                    onDisableWorktree: {
+                        showTitleMenu = false
+                        onDisableWorktree()
                     },
                     worktreeOn: worktreeActive,
-                    onRemoteControl: {
-                        showTitleMenu = false
-                        onRemoteControl()
-                    },
                     onDelete: {
                         showTitleMenu = false
                         showDeleteAlert = true
@@ -175,6 +182,59 @@ struct ChatHeaderView: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
+    }
+
+    // MARK: - Worktree chip (visible; do not bury isolation in the title menu)
+
+    @ViewBuilder
+    private var worktreeChip: some View {
+        if worktreeActive {
+            Button(action: onReviewWorktree) {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text(worktreeChipLabel)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Theme.Palette.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Theme.Palette.accentSubtle, in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Review worktree — merge, discard, or keep isolating. Opens merge/review.")
+            .accessibilityLabel("Worktree \(worktreeChipLabel). Review or edit main tree.")
+            .layoutPriority(1)
+        } else if projectName != nil {
+            Button(action: onEnableWorktree) {
+                HStack(spacing: 5) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(.system(size: 11, weight: .medium))
+                    Text("Isolate in worktree")
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                }
+                .foregroundStyle(Theme.Palette.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Isolate edits in a git worktree (not the main tree).")
+            .accessibilityLabel("Isolate work in git worktree")
+            .layoutPriority(1)
+        }
+    }
+
+    private var worktreeChipLabel: String {
+        let raw = worktreeBranch?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if raw.isEmpty { return "Worktree" }
+        if let short = raw.split(separator: "/").last, !short.isEmpty {
+            return String(short)
+        }
+        return raw
     }
 
     // MARK: - Pulse

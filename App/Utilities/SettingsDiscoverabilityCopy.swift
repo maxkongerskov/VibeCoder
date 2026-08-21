@@ -39,6 +39,99 @@ enum SettingsDiscoverabilityCopy {
 
     static let grantsEmpty =
         "No Always/Never grants yet. When the agent asks for shell or path approval, choose Always or Never to pin a grant here."
+
+    /// Keywords beyond tab title/subtitle so Settings search finds Connection panes.
+    static func searchKeywords(tabRaw: String) -> [String] {
+        switch tabRaw {
+        case "connection":
+            return [
+                "local api", "localapi", "ollama", "lm studio", "lmstudio",
+                "omlx", "unsloth", "xcode", "exo", "endpoint", "port",
+                "server", "custom",
+            ]
+        case "mcp":
+            return ["oauth", "sse", "stdio"]
+        case "model":
+            return ["two-model", "orchestrator", "worker", "sampling"]
+        default:
+            return []
+        }
+    }
+
+    static func tabMatchesSearch(
+        label: String,
+        subtitle: String,
+        rawValue: String,
+        query: String
+    ) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return true }
+        if label.lowercased().contains(q) { return true }
+        if subtitle.lowercased().contains(q) { return true }
+        if rawValue.lowercased().contains(q) { return true }
+        return searchKeywords(tabRaw: rawValue).contains { keyword in
+            keyword.contains(q) || q.contains(keyword)
+        }
+    }
+}
+
+/// Empty-chat hero copy. Live HTTP backends only — no llama.cpp / MLX download.
+enum EmptyChatCopy {
+    static func title(availableModelsEmpty: Bool, hasSelectedModel: Bool) -> String {
+        if availableModelsEmpty { return "Connect a model server" }
+        if !hasSelectedModel { return "Pick a model to start" }
+        return "What are we working on?"
+    }
+
+    static func subtitle(availableModelsEmpty: Bool, hasSelectedModel: Bool) -> String {
+        if availableModelsEmpty {
+            return "Start LM Studio, Ollama, oMLX, Unsloth Studio, or EXO on this Mac, then open Settings → Connection and Test."
+        }
+        if !hasSelectedModel {
+            return "Use the model chip in the composer (bottom-right) to select a tool-capable coding model."
+        }
+        return "Bind a project folder, describe a task, and the agent will plan, edit, and verify on your machine."
+    }
+}
+
+/// Bind outcomes that need a modest visible reason (not a wizard).
+enum WorktreeBindCopy {
+    static func notice(for result: WorktreeBindResult) -> String? {
+        result.userVisibleReason
+    }
+
+    /// Alert chrome: skippedNotGit is informational, merge/discard failures are errors.
+    static func alertTitle(forMessage message: String?) -> String {
+        let msg = message ?? ""
+        if msg.localizedCaseInsensitiveContains("not a git repository") {
+            return "Worktree"
+        }
+        return "Worktree error"
+    }
+}
+
+/// Composer send affordance: draft required; model required unless a turn is live (queue).
+enum ComposerSendGate {
+    static func sendEnabled(hasDraft: Bool, hasModel: Bool, isRunning: Bool) -> Bool {
+        guard hasDraft else { return false }
+        if isRunning { return true }
+        return hasModel
+    }
+}
+
+/// Composer Tab / ⇧Tab. Slash-accept keeps plain Tab; ⇧Tab cycles execution mode.
+enum ComposerTabKey {
+    enum Action: Equatable {
+        case acceptSlash
+        case cycleMode
+        case ignore
+    }
+
+    static func action(shift: Bool, slashMenuVisible: Bool) -> Action {
+        if shift { return .cycleMode }
+        if slashMenuVisible { return .acceptSlash }
+        return .ignore
+    }
 }
 
 struct LoopbackDetectTarget: Equatable, Identifiable, Sendable {

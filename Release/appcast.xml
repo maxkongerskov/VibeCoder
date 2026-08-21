@@ -1,22 +1,19 @@
-<!-- LEGACY Sparkle feed — not used by current VibeCoder builds. Kept for historical installs only. -->
-<?xml version="1.0" standalone="yes"?>
 <!--
-  AgentOS Sparkle appcast.
-  Releases are listed newest-first. Each <item> represents a signed,
-  notarised build hosted on Cloudflare R2 behind the updates.agentos.tools
-  custom domain.
+  TOMBSTONE — not a live Sparkle feed.
 
-  release.sh PREPENDS a new <item> to this file when cutting a build,
-  then uploads the updated file to R2 alongside the DMG. The file is
-  empty of items today — Sparkle will report "no updates available"
-  until the first release ships.
+  VibeCoder does not ship Sparkle. This file is historical (AgentOS NEW DAY
+  draft). The app does not read it. release.sh does not publish it.
+  Do not treat updates.agentos.tools as a current updater.
+
+  Items below are archived AgentOS 1.0.x enclosures only.
 -->
+<?xml version="1.0" standalone="yes"?>
 <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"
      version="2.0">
   <channel>
-    <title>AgentOS Updates</title>
-    <link>https://updates.agentos.tools/appcast.xml</link>
-    <description>Auto-updates for AgentOS — local-first coding agent for macOS.</description>
+    <title>TOMBSTONE — not used by VibeCoder (historical AgentOS Sparkle feed)</title>
+    <link>https://github.com/maxkongerskov/vibecoder</link>
+    <description>Sparkle was removed. This channel is not a live auto-update feed. Install new VibeCoder DMGs manually.</description>
     <language>en</language>
 
     <item>

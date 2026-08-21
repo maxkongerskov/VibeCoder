@@ -62,10 +62,10 @@ TODO.local.md
 .idea/
 
 # ── Intentionally COMMITTED (notes for future you) ─────────────────
-# App/Vendor/llama.cpp/  — bundled engine (~42 MB), required for build
-# App/AgentOS.xcodeproj/ — Xcode project file (was wrongly ignored before)
+# Bundled llama.cpp / App/Vendor/llama.cpp is **not** a product path.
+# Do not vendor an engine here. App/VibeCoder.xcodeproj/ is committed.
 
-# ── Cloudflare wrangler local state (license worker deploys) ──────
+# ── Cloudflare wrangler local state (historical license worker) ──
 .wrangler/
 
 # ── Python cache ───────────────────────────────────────────────────

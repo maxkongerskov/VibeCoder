@@ -12,7 +12,7 @@ Cut a **signed, notarised DMG** for GitHub Releases (or any host you choose).
 |------|---------|
 | `release.sh` | Archive → export Developer ID → notarise → staple → DMG |
 | `ExportOptions.plist` | Developer ID export (not App Store) |
-| `appcast.xml` | **Legacy** Sparkle feed kept only for history — not used by the app |
+| `appcast.xml` | **Tombstone.** Not a live Sparkle feed. Not consumed by VibeCoder. Historical AgentOS items only. |
 
 ## One-time prerequisites
 

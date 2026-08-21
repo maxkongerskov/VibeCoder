@@ -44,6 +44,33 @@ extension Notification.Name {
     static let nextTaskRequested = Notification.Name("agentos.nextTask")
 }
 
+/// First-run vs empty-Recents chat routing. Pure so tests do not mount RootView.
+enum WorkspaceChatRouting {
+    enum Decision: Equatable {
+        /// `refreshConversations` has not finished — do not seed or show landing.
+        case waitingForStore
+        case showChat(UUID)
+        /// Store is loaded and there is no visible task — create one (connect-hero).
+        case createFirstTask
+    }
+
+    static func decide(
+        conversationsLoaded: Bool,
+        conversations: [Conversation],
+        selectedID: UUID?
+    ) -> Decision {
+        guard conversationsLoaded else { return .waitingForStore }
+        let visible = conversations.filter { !$0.archived }
+        if let selectedID, visible.contains(where: { $0.id == selectedID }) {
+            return .showChat(selectedID)
+        }
+        if let first = visible.first {
+            return .showChat(first.id)
+        }
+        return .createFirstTask
+    }
+}
+
 /// Pure File/View chrome helpers. Tests call these without mounting RootView.
 enum MenuChrome {
     /// Walk `visibleIDs` by `delta` from `currentID`. Nil at the ends,
@@ -654,7 +681,7 @@ struct RootView: View {
                 app.selectedModelID = newID
                 if let vm = activeChatViewModel {
                     vm.conversation.modelID = newID
-                    Task { try? await ConversationStore.shared.save(vm.conversation) }
+                    vm.persistConversation()
                 }
                 // Load the engine in oMLX (or warm the active backend) as soon
                 // as the user picks a model — don't wait until the first send.
@@ -713,20 +740,30 @@ private struct DetailPane: View {
     private enum WorkspaceMode { case chat }
 
     /// Routing logic: Chat is the only workspace surface.
-    ///   1. Selected ID matches a real conversation → that conversation.
-    ///   2. Otherwise → the first available conversation.
-    ///   3. If none exist yet → New Task landing.
+    ///   1. Wait for the conversation store (never seed before disk load).
+    ///   2. Selected / first visible conversation → that ChatView (connect-hero if empty).
+    ///   3. Store loaded and no visible tasks → create one (same as ⌘N).
     @ViewBuilder
     private func workspaceDetail(mode: WorkspaceMode) -> some View {
-        if let id = selectedConversationID,
-           app.conversations.contains(where: { $0.id == id && !$0.archived }) {
+        switch WorkspaceChatRouting.decide(
+            conversationsLoaded: app.conversationsDidLoad,
+            conversations: app.conversations,
+            selectedID: selectedConversationID
+        ) {
+        case .waitingForStore:
+            Theme.Palette.canvas
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .showChat(let id):
             workspaceView(mode: mode, conversationID: id)
-        } else if let first = app.conversations.first(where: { !$0.archived }) {
-            workspaceView(mode: mode, conversationID: first.id)
-                .onAppear { selectedConversationID = first.id }
-        } else {
-            NewTaskLandingViewV2()
-                .environmentObject(app)
+                .onAppear {
+                    if selectedConversationID != id {
+                        selectedConversationID = id
+                    }
+                }
+        case .createFirstTask:
+            Theme.Palette.canvas
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .onAppear { app.ensureFirstConversationIfNeeded() }
         }
     }
 

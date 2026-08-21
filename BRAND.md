@@ -1,6 +1,8 @@
-# BRAND — NEW DAY
+# BRAND — VibeCoder
 
-> Single source of truth for visual identity and voice. The app, website, emails, documentation, support replies, and social posts all draw from here. When any surface drifts from this doc, this doc wins.
+> **2026-08-20:** Shipping product is **VibeCoder** (MIT). AgentOS NEW DAY / `$430` / trial / license / “paid once” copy below is **historical draft voice**, not current product. Live UI identity is `UI_DESIGN.md` (orange + SF). Voice principles (precision, no hype) still apply.
+>
+> When marketing copy drifts from the claim freeze in `DESIGN.md` / `ARCHITECTURE.md` / `docs/RELEASE_BAR.md`, those rails win.
 
 ---
 
@@ -16,7 +18,7 @@ Privacy, autonomy, craft. We believe code is private, that your tools should run
 
 ### 1.3 What we're not
 
-We're not the cheapest. We're not the loudest. We're not for everyone. We're for the developer who's already running LM Studio or Ollama on their Mac and wants the agent loop on top — built native, polished, paid for once.
+We're not the cheapest. We're not the loudest. We're not for everyone. We're for the developer who's already running LM Studio or Ollama on their Mac and wants the agent loop on top — built native, polished, MIT.
 
 ### 1.4 Competitive voice
 
@@ -25,7 +27,7 @@ We're not the cheapest. We're not the loudest. We're not for everyone. We're for
 | **Cursor** | Fast, enthusiastic, AI-forward | Calm, deliberate, craftspeople |
 | **Claude Code** | Anthropic-clean, sophisticated | Local-first, no cloud asterisk |
 | **LM Studio** | Technical, dense, power-user | Refined version of the same audience |
-| **Ollama** | Open-source friendly, command-line | Polished, GUI-first, paid |
+| **Ollama** | Open-source friendly, command-line | Polished, GUI-first, local agent loop |
 | **Continue.dev** | Plugin-y, integrative | Standalone, native, with its own surface |
 
 ---
@@ -36,19 +38,18 @@ We're not the cheapest. We're not the loudest. We're not for everyone. We're for
 
 1. **Precision over enthusiasm.** "Streams at 47 tok/s" beats "Lightning-fast streaming!" Numbers, specifics, concrete claims.
 2. **Respectful, not deferential.** Talk to developers like developers. Don't dumb down. Don't grovel. Don't apologize for things that aren't problems.
-3. **Calm, even when explaining hard things.** Errors, edge cases, license expiry — all delivered without alarm. The tone is "a senior engineer telling you what's up," not "an assistant trying to please you."
+3. **Calm, even when explaining hard things.** Errors, edge cases, unreachable backends — all delivered without alarm. The tone is "a senior engineer telling you what's up," not "an assistant trying to please you."
 
 ### 2.2 Do / Don't
 
 | Do | Don't |
 |---|---|
 | "Streams 47 tok/s on Qwen2.5-Coder 32B." | "Blazing-fast streaming you'll love!" |
-| "Your trial expires Friday." | "Hi! Just a friendly reminder that your trial is ending soon ❤️" |
 | "Couldn't reach the model server on :1234. Is LM Studio running?" | "Oops! Something went wrong." |
 | "Patch applied. Build passed." | "🎉 Awesome! Your changes have been applied!" |
 | "Agent stalled — same tool 3× in a row." | "I'm sorry, I seem to be having trouble." |
-| "$430 one-time." | "Affordable lifetime access for the price of a few coffees per month!" |
-| "Runs offline." | "Privacy-first AI you can trust." |
+| "MIT. No license key." | "Affordable lifetime access for the price of a few coffees per month!" |
+| "Runs offline when your local server is up." | "Privacy-first AI you can trust." |
 | "Pick a model." | "Let's get you set up with the perfect AI assistant!" |
 
 ### 2.3 Sentence patterns
@@ -81,20 +82,20 @@ We're not the cheapest. We're not the loudest. We're not for everyone. We're for
 |---|---|---|
 | The user's machine | "your Mac" | "your device" |
 | AI model | "model" or "Qwen 32B" | "AI" / "the AI" / "the assistant" |
-| The product | "AgentOS" or "NEW DAY" | "the app" (in marketing) / "our solution" |
-| Privacy | "runs offline" / "nothing leaves your Mac" | "secure" / "private" (vague) |
+| The product | "VibeCoder" | "the app" (in marketing) / "our solution" / "NEW DAY" as current |
+| Privacy | "runs offline when your local server is up" | "secure" / "private" (vague) / "nothing leaves your Mac" without the BYO caveat |
 | Performance | "47 tok/s on Qwen 32B" | "fast" / "blazing" / "lightning" |
 | The agent loop | "agent" or "loop" | "AI assistant" / "smart helper" |
 | Errors | "X failed: <specific reason>" | "Oops" / "Something went wrong" |
-| Payment | "license" / "one-time" | "subscription" / "purchase" / "buy" (in checkout flow) |
+| Payment | "MIT" / "no license key" | "subscription" / "$430" / "trial" as current |
 | Updates | "update" | "upgrade" |
 | Models in catalog | "tested model configs" / "starter model" | "recommended for you" / "suggested" / "best pick for your Mac" |
 | Hardware fit | "fits in 24 GB" / "needs 48 GB" | "perfect for your Mac" / "optimized for your hardware" |
 
 ### 2.6 Capitalization
 
-- Product name: **AgentOS** (one word, A and OS caps). The full form is **AgentOS — NEW DAY** with em dash. Short form just **AgentOS**.
-- "NEW DAY" is all caps.
+- Product name: **VibeCoder**. Historical draft: **AgentOS** / **AgentOS — NEW DAY** (not current).
+- "NEW DAY" is historical draft styling, not shipping.
 - Backend names: **MLX**, **GGUF**, **LM Studio** (space), **EXO** (all caps), **llama.cpp** (lowercase, no caps).
 - Features: **Worktree mode**, **Safe Mode**, **BuildGuard**, **LocalAPIServer** (camel for code-derived names; Title Case for user-facing features).
 

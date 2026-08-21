@@ -125,12 +125,15 @@ struct SettingsViewV2: View {
     private let navWidth: CGFloat = 228
 
     private var filteredTabs: [SettingsTab] {
-        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return SettingsTab.allCases }
         return SettingsTab.allCases.filter {
-            $0.label.lowercased().contains(q)
-                || $0.subtitle.lowercased().contains(q)
-                || $0.rawValue.lowercased().contains(q)
+            SettingsDiscoverabilityCopy.tabMatchesSearch(
+                label: $0.label,
+                subtitle: $0.subtitle,
+                rawValue: $0.rawValue,
+                query: q
+            )
         }
     }
 
