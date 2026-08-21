@@ -5,6 +5,7 @@
 //
 
 import SwiftUI
+import AgentCore
 
 struct ComposerQueueBar: View {
     @EnvironmentObject private var app: AppViewModel

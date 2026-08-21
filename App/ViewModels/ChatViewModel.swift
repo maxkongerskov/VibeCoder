@@ -695,10 +695,7 @@ final class ChatViewModel: ObservableObject {
         var store = queueStoreSnapshot()
         guard store.enqueue(trimmed) != nil else { return false }
         applyQueueStore(store)
-        let n = composerQueue.count
-        statusLine = n <= 1
-            ? "Queued — will send after this turn"
-            : "\(n) messages queued"
+        statusLine = ComposerQueueStore.enqueuedStatusLine(count: composerQueue.count)
         return true
     }
 
@@ -737,27 +734,21 @@ final class ChatViewModel: ObservableObject {
     /// `/compact`/`/compress` run immediately. Other items move to the front
     /// and `send` if the turn is idle.
     func runQueuedItemNow(id: UUID) {
-        guard let item = composerQueue.first(where: { $0.id == id }) else { return }
-        if ComposerQueueStore.isCompactSlash(item.text) {
-            var store = queueStoreSnapshot()
-            _ = store.remove(id: id)
-            applyQueueStore(store)
-            let result = handleSlashCommand(
-                ComposerQueueStore.normalizedCompactCommand(item.text)
-            )
+        var store = queueStoreSnapshot()
+        guard let outcome = store.runNow(id: id, isRunning: isRunning) else { return }
+        applyQueueStore(store)
+        switch outcome {
+        case .compactSlash(let command):
+            let result = handleSlashCommand(command)
             if case .handled(let message) = result, let message, !message.isEmpty {
                 statusLine = message
             }
-            return
-        }
-        var store = queueStoreSnapshot()
-        _ = store.moveToFront(id: id)
-        applyQueueStore(store)
-        guard !isRunning else { return }
-        guard let first = store.dequeueFirst() else { return }
-        applyQueueStore(store)
-        Task { @MainActor [weak self] in
-            self?.dispatchQueuedFollowUp(first.text)
+        case .send(let text):
+            Task { @MainActor [weak self] in
+                self?.dispatchQueuedFollowUp(text)
+            }
+        case .reorderedOnly:
+            break
         }
     }
 
@@ -1355,12 +1346,9 @@ final class ChatViewModel: ObservableObject {
         let convoId = conversation.id
         pendingInterjectionCount = 0
         var store = queueStoreSnapshot()
-        if store.pauseIfNonEmpty() {
-            applyQueueStore(store)
-            statusLine = "Cancelling… queue paused"
-        } else {
-            statusLine = "Cancelling…"
-        }
+        let paused = store.pauseIfNonEmpty()
+        if paused { applyQueueStore(store) }
+        statusLine = ComposerQueueStore.cancellingStatusLine(queuePaused: paused)
         Task { @MainActor in
             await InterjectionBuffer.shared.clear(conversationId: convoId)
             self.turnInterjectionEpoch = await InterjectionBuffer.shared.currentEpoch(
@@ -1419,10 +1407,11 @@ final class ChatViewModel: ObservableObject {
         isRunning = false
         runTask = nil
         flushStreamBuffersNow()
-        if wasCancelled && queuePaused && !composerQueue.isEmpty {
-            statusLine = "Task ended by user — queue paused"
+        if wasCancelled {
+            statusLine = ComposerQueueStore.cancelledStatusLine(
+                queuePaused: queuePaused && !composerQueue.isEmpty)
         } else {
-            statusLine = wasCancelled ? "Task ended by user" : status
+            statusLine = status
         }
         streamingContent = ""
         streamingReasoning = ""
