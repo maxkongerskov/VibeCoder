@@ -117,7 +117,7 @@ struct ZCodeSidebar: View {
     }
 
     private var primaryNav: [SidebarTab] {
-        SidebarTab.sidebarTabs
+        SidebarTab.sidebarTabs(for: app.settings.backend)
     }
 
     var body: some View {

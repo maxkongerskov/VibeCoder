@@ -25,9 +25,23 @@ enum SidebarTab: String, CaseIterable, Identifiable {
     static let workspaceTabs: [SidebarTab] = [.chat]
 
     /// Tabs offered in the main sidebar nav (excludes legacy `.code`).
+    /// Cluster is EXO-only — see `sidebarTabs(for:)`.
     static let sidebarTabs: [SidebarTab] = [
         .chat, .projects, .models, .notes, .scheduled
     ]
+
+    /// Live sidebar destinations. Cluster mounts only when EXO is the
+    /// active backend (read-only `/state` topology + pin Model ID).
+    static func sidebarTabs(for backend: BackendIdentifier) -> [SidebarTab] {
+        var tabs = sidebarTabs
+        guard backend == .exo else { return tabs }
+        if let idx = tabs.firstIndex(of: .models) {
+            tabs.insert(.cluster, at: tabs.index(after: idx))
+        } else {
+            tabs.append(.cluster)
+        }
+        return tabs
+    }
 
     var icon: String {
         switch self {

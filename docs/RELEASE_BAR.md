@@ -150,7 +150,7 @@ BLOCKERS: …
 NEXT_ASSIGNMENT: …
 ```
 
-**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts. Those cells are filled (2026-08-20; L2 named live POST 2026-08-21). Accepted residuals (not 99% gates): no in-app window / live LM Studio; no ⌘Q or SIGKILL; W5 no UI click-through; `RemoteControlSheet.swift` still on disk unmounted; no mid-stream persist checkpoint. `ConversationListViewModel.duplicate` is a dead leftover (zero callers) — not a gate.
+**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts. Those cells are filled (2026-08-20; L2 named live POST 2026-08-21). Accepted residuals (not 99% gates): no in-app window / live LM Studio; no ⌘Q or SIGKILL; W5 no UI click-through; no mid-stream persist checkpoint. `ConversationListViewModel.duplicate` is a dead leftover (zero callers) — not a gate.
 
 ### Five-way (2026-08-21)
 

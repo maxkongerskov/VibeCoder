@@ -141,3 +141,24 @@ final class MenuChromeUITests: XCTestCase {
         )
     }
 }
+
+    // MARK: - Cluster nav (EXO-only)
+
+    func testDefaultSidebarTabsOmitCluster() {
+        XCTAssertEqual(
+            SidebarTab.sidebarTabs,
+            [.chat, .projects, .models, .notes, .scheduled]
+        )
+        XCTAssertFalse(SidebarTab.sidebarTabs.contains(.cluster))
+    }
+
+    func testClusterTabOnlyWhenEXOBackend() {
+        XCTAssertFalse(SidebarTab.sidebarTabs(for: .lmStudio).contains(.cluster))
+        XCTAssertFalse(SidebarTab.sidebarTabs(for: .ollama).contains(.cluster))
+        XCTAssertFalse(SidebarTab.sidebarTabs(for: .unslothStudio).contains(.cluster))
+        XCTAssertEqual(
+            SidebarTab.sidebarTabs(for: .exo),
+            [.chat, .projects, .models, .cluster, .notes, .scheduled]
+        )
+    }
+

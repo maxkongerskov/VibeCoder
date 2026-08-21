@@ -482,7 +482,7 @@ struct RootView: View {
         case "dark":  themeLabel = "Dark"
         default:      themeLabel = "System"
         }
-        return [
+        var items: [CommandPaletteItem] = [
             CommandPaletteItem(
                 id: "new-chat", title: "New Conversation", subtitle: "Start a fresh chat",
                 category: "Chat", keywords: ["new", "chat", "conversation"]),
@@ -582,6 +582,13 @@ struct RootView: View {
                 subtitle: "Open a folder as a workspace (⌘O)",
                 category: "App", keywords: ["open", "folder", "workspace", "project"]),
         ]
+        if app.settings.backend == .exo {
+            items.append(CommandPaletteItem(
+                id: "open-cluster", title: "Cluster",
+                subtitle: "EXO topology (/state) and pin Model ID",
+                category: "App", keywords: ["cluster", "exo", "topology", "nodes"]))
+        }
+        return items
     }
 
     private func runCommandPaletteItem(_ item: CommandPaletteItem) {
@@ -622,6 +629,8 @@ struct RootView: View {
             selectedTab = .projects
         case "open-scheduled":
             selectedTab = .scheduled
+        case "open-cluster":
+            selectedTab = .cluster
         case "choose-model":
             selectedTab = .chat
             showingModelPicker = true

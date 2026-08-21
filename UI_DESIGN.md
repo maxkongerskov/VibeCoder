@@ -356,12 +356,12 @@ Single `NavigationSplitView` (sidebar + detail). No inspector column. No width-b
 └──────────────────┴────────────────────────────────────────────────────┘
 ```
 
-**Chrome:** `WindowGroup`, empty title, unified toolbar, transparent titlebar, `fullSizeContentView`. Min 960 × 620. Sidebar 240 / 280 / 360, `bg.subtle`. Toolbar = system sidebar toggle + `square.and.pencil` only (**no** model/search/settings chips). Detail: Chat (legacy `.code` too), Projects, Models, Notes, Scheduled. `openedProject` overlay wins. Cluster is not in the nav.
+**Chrome:** `WindowGroup`, empty title, unified toolbar, transparent titlebar, `fullSizeContentView`. Min 960 × 620. Sidebar 240 / 280 / 360, `bg.subtle`. Toolbar = system sidebar toggle + `square.and.pencil` only (**no** model/search/settings chips). Detail: Chat (legacy `.code` too), Projects, Models, Notes, Scheduled, Cluster (EXO backend only: read-only `/state` + pin Model ID). `openedProject` overlay wins.
 
 **ZCodeSidebar**
 
 1. **Workspace header** — folder tile + name (`openedProject` / last path component / **Default Workspace**) + mono 10 path + decorative chevron. Tap → Projects.
-2. **Primary nav** (text rows, 12–12.5 pt): Chat / Projects / Models (count capsule when `availableModels > 0`) / Notes / Scheduled. Selected = `bg.hover` 8 pt rect, **no** accent underline.
+2. **Primary nav** (text rows, 12–12.5 pt): Chat / Projects / Models (count capsule when `availableModels > 0`) / Cluster (EXO only) / Notes / Scheduled. Selected = `bg.hover` 8 pt rect, **no** accent underline.
 3. **TASKS** disclosure (10 pt bold small-caps, tracking 0.8) + accent **+ New Task**. Collapse persists in `@AppStorage("sidebarRecentsCollapsed")`.
 4. **Pinned** disclosure (if any), then time buckets: Today · Yesterday · Past 7 days · Past 30 days · Older.
 5. **Footer:** **Delete all** (alert **Delete all tasks?** / **Delete All**) + **Settings**.
@@ -452,7 +452,7 @@ Retired empty copy: “No conversations yet. ⌘N to start one.” / “No proje
 
 - Header **Models** + **Refresh**. Blurb: models come from the active HTTP backend.
 - Active-backend card + selected id. Rows: display name, wire id, **Use** / **Active**.
-- Catalog.json, GGUF download lifecycle, split-file SHA, hardware-fit badges: **not implemented**. Cluster/EXO catalog lives in `ClusterView` (unmounted nav).
+- Catalog.json, GGUF download lifecycle, split-file SHA, hardware-fit badges: **not implemented**. Cluster/EXO catalog lives in `ClusterView`, mounted in the sidebar when EXO is the active backend.
 
 ### 4.8 Command palette
 

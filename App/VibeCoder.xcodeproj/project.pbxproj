@@ -150,7 +150,6 @@
 		BD0D432017D61A6143AEE848 /* XcodeMCPCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = A19604942F0BA0FB329590FA /* XcodeMCPCoordinator.swift */; };
 		BE0A9338AD04DD25135DC820 /* StickyPlannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4877B5F6E85C8CBCE186C6 /* StickyPlannerView.swift */; };
 		BE181ABF5AFC98DF035AC0DC /* PDFToolsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1DEEE4AD684B8F87183D5CB /* PDFToolsService.swift */; };
-		C230B3020BE284D4D339E6A6 /* RemoteControlSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF475AF42865161785000C73 /* RemoteControlSheet.swift */; };
 		C450140EAA5A9E80F788CA31 /* StatusCapsuleUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 818A930CB74714C1C6F332EB /* StatusCapsuleUITests.swift */; };
 		C4AD75D77DECBD29480F4BCE /* SidebarGroupsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC8C353E0653A7318F65C4CA /* SidebarGroupsUITests.swift */; };
 		C4F1D63883264DB4ACDD1409 /* ConversationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5035C4B041E0051B3318ECCB /* ConversationCoordinator.swift */; };
@@ -351,7 +350,6 @@
 		BD3047D7BC7C9B35FA4487F9 /* ConnectionSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectionSettingsView.swift; sourceTree = "<group>"; };
 		BD8CD1E55356968DFF91F3E1 /* CommandPaletteView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPaletteView.swift; sourceTree = "<group>"; };
 		BE427D6185C4DDD69CD8CBFD /* PlanApprovalFlowTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanApprovalFlowTests.swift; sourceTree = "<group>"; };
-		BF475AF42865161785000C73 /* RemoteControlSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteControlSheet.swift; sourceTree = "<group>"; };
 		C03A8C699F5BF70046053D0C /* ModelSelectorViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelSelectorViewModel.swift; sourceTree = "<group>"; };
 		C074698EB77D7B36FA45A5CF /* ProjectsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsView.swift; sourceTree = "<group>"; };
 		C13A24AFB1E9B0E4C1C8C850 /* StickToBottomTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StickToBottomTracker.swift; sourceTree = "<group>"; };
@@ -507,7 +505,6 @@
 				4BF4774F579FA82398CB208B /* ProcessingStatusBar.swift */,
 				F9D1A643424AE2E78A085375 /* QuestionCardView.swift */,
 				E4E58FC5AE3D64749C6435AA /* ReasoningBlockView.swift */,
-				BF475AF42865161785000C73 /* RemoteControlSheet.swift */,
 				CD8647FD95617CD4F8EBD4BB /* RenameConversationSheet.swift */,
 				806A38F69484DB2FF5E9C0E6 /* ShellApprovalSheet.swift */,
 				BA45A1DF2A9E86ABF999DC3E /* StatusCapsuleView.swift */,
@@ -1003,7 +1000,6 @@
 				2B194CFDC45C414A9BCD5121 /* ProjectsViewModel.swift in Sources */,
 				BAB8BDC4CBF5893EF7FAFA03 /* QuestionCardView.swift in Sources */,
 				467EE087DA01E2D7D81D910F /* ReasoningBlockView.swift in Sources */,
-				C230B3020BE284D4D339E6A6 /* RemoteControlSheet.swift in Sources */,
 				5829E27459C88D9A8E40A191 /* RenameConversationSheet.swift in Sources */,
 				0E41C349F4866FE2F777C99F /* RootView.swift in Sources */,
 				8DC33295A54E6CA031BF06C9 /* ScheduledLandingView.swift in Sources */,

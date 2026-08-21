@@ -48,18 +48,10 @@ final class AppViewModel: ObservableObject {
     let xcodeMCP = XcodeMCPCoordinator()
 
     private var cancellables = Set<AnyCancellable>()
-    private var remoteHostAttached = false
 
     init() {
         wireCoordinators()
         bridgeCoordinatorChanges()
-    }
-
-    /// Register this app as the remote-control host (idempotent).
-    func ensureRemoteControlHostAttached() async {
-        guard !remoteHostAttached else { return }
-        await RemoteControlServer.shared.attachHost(self)
-        remoteHostAttached = true
     }
 
     private func wireCoordinators() {

@@ -120,7 +120,7 @@ swift run vibecoder --project /path/to/repo --backend ollama --model qwen
 | **oMLX** | ✅ working | `localhost:8080/v1` | OpenAI-compat + load/unload preflight |
 | **Ollama** | ✅ working | `localhost:11434/v1` | OpenAI-compat; recommended replacement for removed llama.cpp product |
 | **Unsloth Studio** | ✅ working | `localhost:8888/v1` | Models folder inventory + load/unload from the chat model picker |
-| **EXO** | ✅ stream; topology UI partial | `localhost:52415/v1` | Pin Model ID in Settings; `/state` topology |
+| **EXO** | ✅ stream + Cluster pane | `localhost:52415/v1` | Sidebar Cluster when EXO is selected: read-only `/state` + pin Model ID |
 | **Custom** | ✅ working | user URL `/v1` | Any OpenAI-compatible server |
 | **Swift MLX (in-process)** | ❌ stub | n/a | `MLXBackend` links; stream throws until mlx-swift is wired. Not a daily driver. Boot migrates persisted `.mlx` → Ollama. |
 | **Bundled llama.cpp / GGUF** | ❌ removed | — | No vendored binary; no auto-spawn. Historical eval alias may still hit a user-run server on `:8765`. |
