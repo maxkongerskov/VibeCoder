@@ -422,6 +422,8 @@ final class BugHuntViewModelsTests: XCTestCase {
 
     /// RELEASE_BAR contract 4: duplicate of a git-bound conversation gets a
     /// fresh worktree, not `worktreeBranch: nil` and not the source branch.
+    /// Helper output: branch `agentcore/<copyShortId>`, path
+    /// `<project>-agentcore-<copyShortId>` (`WorktreeService.createOrReuseWorktree`).
     func testDuplicateGitBoundConversationGetsDefaultWorktree() throws {
         let project = try makeGitRepo(prefix: "dup-default-wt")
         defer { try? FileManager.default.removeItem(at: project) }
@@ -435,24 +437,28 @@ final class BugHuntViewModelsTests: XCTestCase {
         app.duplicateConversation(source.id)
 
         let copy = app.conversations.first { $0.id != source.id }
-        XCTAssertNotNil(copy)
-        XCTAssertEqual(copy?.projectRoot?.path, project.path)
-        XCTAssertNotNil(copy?.worktreeBranch, "git duplicate must isolate by default")
-        XCTAssertNotEqual(
-            copy?.worktreeBranch, source.worktreeBranch,
-            "copy must not share the source worktree branch")
-        XCTAssertFalse(copy?.worktreeOptOut ?? true)
-        XCTAssertTrue(
-            copy?.worktreeBranch?.hasPrefix("agentcore/") == true,
-            "got \(copy?.worktreeBranch ?? "nil")")
-        if let copy, let branch = copy.worktreeBranch {
-            let short = WorktreeService.conversationShortId(from: copy.id)
-            let path = project.path + "-agentcore-" + short
-            try? WorktreeService.discard(
-                worktreePath: path,
-                branch: branch,
-                projectFolder: project.path)
+        guard let copy else {
+            return XCTFail("duplicate must insert a copy")
         }
+        XCTAssertEqual(copy.projectRoot?.path, project.path)
+        let short = WorktreeService.conversationShortId(from: copy.id)
+        let expectedBranch = "agentcore/\(short)"
+        let expectedPath = project.path + "-agentcore-" + short
+        XCTAssertEqual(
+            copy.worktreeBranch, expectedBranch,
+            "applyDefaultWorktree must use agentcore/<copyId>")
+        XCTAssertNotEqual(
+            copy.worktreeBranch, source.worktreeBranch,
+            "copy must not share the source worktree branch")
+        XCTAssertFalse(copy.worktreeOptOut)
+        XCTAssertEqual(copy.worktreeRootURL?.path, expectedPath)
+        XCTAssertTrue(
+            WorktreeService.worktreeExists(at: expectedPath),
+            "git duplicate must create \(expectedPath)")
+        try? WorktreeService.discard(
+            worktreePath: expectedPath,
+            branch: copy.worktreeBranch ?? expectedBranch,
+            projectFolder: project.path)
     }
 
     // MARK: 6 — /clear leaves plan approval chrome
