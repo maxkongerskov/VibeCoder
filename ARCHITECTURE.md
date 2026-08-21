@@ -20,7 +20,7 @@ Not a paid SKU. Not a Cursor replacement pitch. MIT; fork it.
 
 Open-source project, not a product pitch. MIT. BYO HTTP backends. GitHub Releases / DMG if you want a binary; no Sparkle, no license key, no trial.
 
-This file is the plan. There is no PLAN.md. CloudBots are early/v1 **cloud** (labeled); they are not the local BYO path in §1.
+This file is the claim freeze. What we implement next: `PLAN.md`. CloudBots are early/v1 **cloud** (labeled); they are not the local BYO path in §1.
 
 ## 4. Product surface (every screen, every modal)
 
@@ -654,6 +654,7 @@ When this doc is amended, log the change here with date + reason. The doc itself
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
+| 2026-08-21 | README, §3 | **PLAN.md exists.** README points at it. CloudBots still gated on App-test compile. | Lead Chief eedbd56 |
 | 2026-08-21 | README, §2–§3, §15–§16, DESIGN.md, BRAND.md | **Open source, not a product pitch.** README is what it is / how to build / BYO HTTP. Stripped $430 / SKU / trial / “why not Cursor” sales. CloudBots early/v1 cloud, labeled. No PLAN.md — this file is the plan. | Max: scratch selling; repo already MIT |
 | 2026-08-21 | §10.3, §16, DESIGN.md | **Rail honesty:** tagline is not "nothing leaves your Mac"; skill marketplace is not v1; DESIGN LocalAPI is NWListener / VibeCoder logs — not Swift NIO, AgentOS-NewDay, or `/v1/embeddings`. | Match §1/§17; Lead Chief leftover rail 2026-08-21 |
 | 2026-08-21 | §4.2, §4.3, §4.5, §6.1, README | **Chrome honesty:** Settings is the shipped grouped tabs (not 2026-06 five-tab). ⌘K is command palette. Persist path `~/Library/Application Support/VibeCoder/conversations/`. Sidebar Chat/Projects/Models/Notes/Scheduled (+ Cluster on EXO). Do not restyle Settings back to 5 tabs. | Match `UI_DESIGN.md` §4.3 / §4.8; Lead Chief 2026-08-21 |

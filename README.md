@@ -8,7 +8,7 @@ Not shipped: in-process Swift MLX (`mlx-swift` unwired; stub throws), bundled ll
 
 **CloudBots** are early/v1, **cloud**, and labeled as cloud — not a local-inference path.
 
-Architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (§1 / §17 win). No separate PLAN.md.
+Architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (§1 / §17). Implementation order: [`PLAN.md`](./PLAN.md).
 
 ## Build & run
 
