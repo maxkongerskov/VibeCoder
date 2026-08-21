@@ -479,21 +479,18 @@ final class ChatViewModel: ObservableObject {
         Task { await persistConversationSnapshot(snapshot) }
     }
 
-    /// Persist `snapshot`. Logs on disk failure (Ada P2 — no silent `try?`).
-    /// Sets `statusLine` when the turn is idle so the existing status chip shows it.
+    /// Persist `snapshot` via ConversationPersistence (Ada P2). Sets idle statusLine on save failure.
     func persistConversationSnapshot(
         _ snapshot: Conversation,
         store: (any ConversationStoring)? = nil
     ) async {
-        guard !persistSuppressed else { return }
-        do {
-            try await (store ?? ConversationStore.shared).save(snapshot)
-        } catch {
-            Diagnostics.error("ChatViewModel.save(\(snapshot.id)): \(error.localizedDescription)")
-            if !isRunning {
-                statusLine = "Couldn't save conversation."
-            }
-        }
+        let outcome = await ConversationPersistence.persistSnapshot(
+            snapshot,
+            store: store ?? ConversationStore.shared,
+            suppressed: persistSuppressed,
+            isRunning: isRunning,
+            logLabel: "ChatViewModel.save")
+        if let line = outcome.statusLine { statusLine = line }
     }
 
     /// Flip archive without changing the Conversation JSON schema.
