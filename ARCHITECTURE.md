@@ -654,6 +654,7 @@ When this doc is amended, log the change here with date + reason. The doc itself
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
+| 2026-08-21 | — | **v2 lives next door.** `ARCHITECTURE-v2.md` is the target (CloudBots labeled cloud teammates). This freeze is unchanged: CloudBots do **not** ship. | Max architecture v2; do not rewrite §1 |
 | 2026-08-21 | README, §3 | **PLAN.md exists.** README points at it. CloudBots still gated on App-test compile. | Lead Chief eedbd56 |
 | 2026-08-21 | README, §2–§3, §15–§16, DESIGN.md, BRAND.md | **Open source, not a product pitch.** README is what it is / how to build / BYO HTTP. Stripped $430 / SKU / trial / “why not Cursor” sales. CloudBots early/v1 cloud, labeled. No PLAN.md — this file is the plan. | Max: scratch selling; repo already MIT |
 | 2026-08-21 | §10.3, §16, DESIGN.md | **Rail honesty:** tagline is not "nothing leaves your Mac"; skill marketplace is not v1; DESIGN LocalAPI is NWListener / VibeCoder logs — not Swift NIO, AgentOS-NewDay, or `/v1/embeddings`. | Match §1/§17; Lead Chief leftover rail 2026-08-21 |

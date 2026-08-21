@@ -21,7 +21,7 @@ Named teammate agents inside VibeCoder, like Grok Bots: specialists, a shared ro
 - **Cloud.** They may leave the Mac. Label them as cloud in Settings, README, and the UI. Not a local-inference path.
 - **Host, not a storefront.** A bot is a tool-using teammate, not a skills marketplace (that stays not-v1).
 - **Opt-in runtime.** Default project agent stays the in-app loop against BYO HTTP. CloudBots are an added surface, not a replacement.
-- **Spec first.** Reed writes the architecture row (§17) before Atlas/Sable build. Mira owns honesty tests (cloud labeled; no “nothing leaves your Mac”). Nash owns any CI that must not phone home on `pr.yml`.
+- **Spec first.** Target: `ARCHITECTURE-v2.md`. Freeze §17 only records that v2 lives next door — not that CloudBots ship. Reed writes that before Atlas/Sable build. Mira owns honesty tests (cloud labeled; no “nothing leaves your Mac”). Nash owns any CI that must not phone home on `pr.yml`.
 
 Out of this cut: Electron, mlx-swift, bundled llama.cpp, Sparkle, Sentry, license keys, LAN/phone remote control, `agentos` CLI.
 
@@ -34,4 +34,4 @@ Out of this cut: Electron, mlx-swift, bundled llama.cpp, Sparkle, Sentry, licens
 
 ## Docs
 
-`README.md` is how to build and run. This file is what we implement next. `ARCHITECTURE.md` remains the claim freeze.
+`README.md` is how to build and run. This file is what we implement next. `ARCHITECTURE.md` remains the claim freeze. Target rail: [`ARCHITECTURE-v2.md`](./ARCHITECTURE-v2.md) (CloudBots). Not a shipping claim.
