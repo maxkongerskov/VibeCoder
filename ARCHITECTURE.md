@@ -552,11 +552,9 @@ Anthropic's MCP is the plugin protocol for AI coding agents. NEW DAY ships an **
 
 Exporting NEW DAY's own tools as an **MCP server** for other hosts remains a future option, not a v1 claim.
 
-### 10.3 Skill marketplace — v1.2
+### 10.3 Skill marketplace — **not v1**
 
-User skills (markdown files with front matter) get an export bundle format (`.agentos-skill` = zip). A community page at `agentos.tools/skills` hosts shared skills with browse, install, rate.
-
-Skills can declare dependencies on tools (or MCP servers); installer verifies tool availability before activating.
+There is **no** v1 skill marketplace, **no** `agentos.tools/skills`, **no** `.agentos-skill` storefront or ratings. Shipped: `SkillDiscovery` + `load_skill` + Settings → Skills. Export-bundle / community listing is post-v1 (non-goal §13.8). Do not market 182 packages.
 
 ### 10.4 Remote control — **OFF (not shipping)**
 
@@ -667,9 +665,9 @@ Distribution: signed DMG (GitHub Releases or any host). Apple App Store **not** 
 ## 16. Brand & voice
 
 - Name: **VibeCoder** (shipping). **AgentOS NEW DAY** is a historical/internal draft name — **not** current product.
-- Tagline: "Local-first coding agent. Nothing leaves your Mac."
+- Tagline: **BYO local OpenAI-compatible server.** Weights leave the Mac only if **you** point at a remote endpoint. Do not say "nothing leaves your Mac."
 - Voice: precise, technical, dry. No hype. Talk to developers like developers.
-- Visual: Geist Mono + Geist Sans. Minimal chrome. Dark mode parity with light. SF Symbols. No animation for animation's sake.
+- Visual: SF + orange accent (`UI_DESIGN.md`). Geist / Azure are retired. No animation for animation's sake.
 - The product personality is "the senior engineer who sits next to you" — not "AI assistant."
 
 ## 17. Amendments log
@@ -678,6 +676,7 @@ When this doc is amended, log the change here with date + reason. The doc itself
 
 | Date | Section | Change | Reason |
 |---|---|---|---|
+| 2026-08-21 | §10.3, §16, DESIGN.md | **Rail honesty:** tagline is not "nothing leaves your Mac"; skill marketplace is not v1; DESIGN LocalAPI is NWListener / VibeCoder logs — not Swift NIO, AgentOS-NewDay, or `/v1/embeddings`. | Match §1/§17; Lead Chief leftover rail 2026-08-21 |
 | 2026-08-21 | §4.2, §4.3, §4.5, §6.1, README | **Chrome honesty:** Settings is the shipped grouped tabs (not 2026-06 five-tab). ⌘K is command palette. Persist path `~/Library/Application Support/VibeCoder/conversations/`. Sidebar Chat/Projects/Models/Notes/Scheduled (+ Cluster on EXO). Do not restyle Settings back to 5 tabs. | Match `UI_DESIGN.md` §4.3 / §4.8; Lead Chief 2026-08-21 |
 | 2026-08-21 | §5.8 | **C3 CLI honesty:** SIGINT mid-turn cancels via `TurnCancelHandle` (no `AgentLoop.swift` growth); idle Ctrl+C exits. TTY y/n/always (empty/`n`/unknown deny); patch `always` → directory grant. | Turnip verified `VibeCoderCLILib` 24/24 |
 | 2026-08-21 | §5.8 | **C2 CLI honesty:** EventPrinter colors TTY roles; `NO_COLOR` or non-TTY = C1 plain text (no escapes). C3 cancel-in-turn + always grants still not shipped. | Turnip verified `EventPrinterTests` 5/5 |

@@ -27,7 +27,7 @@ Carry these forward without rebuilding from scratch:
 - **Skill markdown + auto-attach.** 182 procedure files in the bundle is a real asset. Keep the format; replace the loader with a smaller, lazier indexer.
 - **MEMORY.md / DECISIONS.md auto-injection.** Cross-session learning that's a flat file (greppable, diffable) is correct. Keep.
 - **Hardware-aware presets.** `HardwareInfo` + `ModelPreset.recommended(forParamsB:)` is the right defaults strategy. Keep.
-- **Per-model JSON persistence at `~/Library/Application Support/AgentOS/model-settings/<modelId>.json`.** Correct shape. Keep verbatim (compatible migration from original).
+- **Per-model JSON persistence under `~/Library/Application Support/VibeCoder/`.** Legacy `AgentOS` / `AgentOS-NewDay` trees migrate. Do not document AgentOS-NewDay as the live path.
 
 ## 2. What was wrong, and what NEW DAY does instead
 
@@ -44,8 +44,8 @@ Carry these forward without rebuilding from scratch:
 | 9 | **No native diff view.** Tool results render as expandable cards with raw text. Cursor's whole UX is the diff. | **`PatchReviewSheet`** — syntax-highlighted side-by-side diff, accept/reject per hunk, applies via `apply_patch` tool. Mandatory review in Safe Mode; opt-in elsewhere. |
 | 10 | **No LSP / semantic search.** All code search is grep. | **SourceKit-LSP for Swift** (built-in to Xcode toolchain) + generic LSP for other languages via a `language-servers/` registry. Adds `find_definition`, `find_references`, `workspace_symbol`, `hover` tools. Falls back to grep when no LSP available. |
 | 11 | **Sub-agents under-utilized.** `SubAgentRunner` exists but the system prompt doesn't guide toward it. No memory inheritance. | **First-class `dispatch_task` tool.** Sub-agents inherit MEMORY.md + skills + worktree (read-only by default). System prompt explicitly teaches: "for parallel investigations of >2 unrelated questions, dispatch sub-agents instead of serializing." Sub-agent results return as a single tool result message. |
-| 12 | **Inbound `LocalAPIServer` uses raw `NWListener`**, writes logs to `~/Desktop/`. | **`LocalAPIServer` built on Swift NIO** (production-grade), logs to `~/Library/Logs/AgentOS-NewDay/`, supports streaming SSE, handles `/v1/models`, `/v1/chat/completions`, `/v1/embeddings` (NEW — proxied to whichever backend supports embeddings). *(Not shipped as written: the package has zero dependencies — `LocalAPIServer` stays on Network.framework `NWListener`, loopback-only.)* |
-| 13 | **No CLI.** Power users have to live inside the app. | **`agentos` CLI binary**, same agent core. `agentos run "fix the linker error"`, `agentos models list`, `agentos serve` (run the LocalAPIServer headless). Great for CI, SSH sessions, scripts. |
+| 12 | **Inbound `LocalAPIServer` uses raw `NWListener`**, historically logged to `~/Desktop/`. | **Keep Network.framework `NWListener`**, loopback-only. Logs under `~/Library/Logs/VibeCoder/`. Completions: `/v1/models` + `/v1/chat/completions` (default proxy `tools: []`; opt-in bounded AgentLoop). **Not** Swift NIO. **Not** `/v1/embeddings`. **Not** `AgentOS-NewDay` log paths. |
+| 13 | **No CLI.** Power users have to live inside the app. | **Shipped: interactive `vibecoder` REPL (C1–C3)**, same AgentCore / BYO HTTP. Not `agentos`. Not eval-runner. |
 
 ## 3. Architecture
 
