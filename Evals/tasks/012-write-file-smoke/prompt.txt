@@ -1,0 +1,1 @@
+Create a new file hello.txt containing the exact line A1-proof. Use write_file. Do not use other tools.

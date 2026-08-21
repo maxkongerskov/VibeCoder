@@ -1,0 +1,32 @@
+{
+  "turns": [
+    {
+      "type": "tool_calls",
+      "calls": [
+        {
+          "id": "c1",
+          "name": "read_file",
+          "arguments": {
+            "path": "hello.swift"
+          }
+        }
+      ]
+    },
+    {
+      "type": "tool_calls",
+      "calls": [
+        {
+          "id": "c2",
+          "name": "apply_patch",
+          "arguments": {
+            "patch": "--- a/hello.swift\n+++ b/hello.swift\n@@ -1,3 +1,3 @@\n func greet() {\n-    print(\"hello\")\n+    print(\"hello, world\")\n }\n"
+          }
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "content": "Patched hello.swift"
+    }
+  ]
+}

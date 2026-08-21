@@ -1,0 +1,10 @@
+[
+  {
+    "task": "013-apply-patch-smoke",
+    "status": "pass",
+    "duration_s": 0,
+    "tool_calls": 2,
+    "run_exit_code": 0,
+    "workdir": "/var/folders/d0/8rwktxv56vq3dtxj_m53mml40000gn/T/agentos-eval-013-apply-patch-smoke-XXXX.I7VuMCZlbY"
+  }
+]

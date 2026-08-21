@@ -1,0 +1,1 @@
+Read hello.swift, then apply a unified diff so print("hello") becomes print("hello, world"). Use apply_patch. Do not rewrite the whole file.

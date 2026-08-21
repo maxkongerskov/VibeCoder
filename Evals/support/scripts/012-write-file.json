@@ -1,0 +1,21 @@
+{
+  "turns": [
+    {
+      "type": "tool_calls",
+      "calls": [
+        {
+          "id": "c1",
+          "name": "write_file",
+          "arguments": {
+            "path": "hello.txt",
+            "content": "A1-proof\n"
+          }
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "content": "Wrote hello.txt"
+    }
+  ]
+}
