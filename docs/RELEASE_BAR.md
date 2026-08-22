@@ -4,7 +4,7 @@ What **99%** means for a **BYO OpenAI-compatible HTTP** local agent. Not a hobby
 
 Ada owns this file. Lin/Pixel/Rigel raise the numbers with **evidence**, not vibes. Do not claim 99% without the proof column filled.
 
-**Today (2026-08-22): not 99% daily-driver.** F4 is live in-app Unsloth first chat (Reed, this Mac; “Hey”) — filled cells still ≠ 99%. GitHub unpushed. GHA `SKIP_APP_TESTS=1`. A1/A2 and Connection Test still not live.
+**Today (2026-08-22): not 99% daily-driver.** F4 is live in-app Unsloth first chat (Reed, this Mac; “Hey”; gemma 4 26B ~6s) — filled cells still ≠ 99%. GitHub unpushed. GHA `SKIP_APP_TESTS=1`. A1/A2 and Connection Test still not live.
 
 ---
 
@@ -31,7 +31,7 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 | F1 | Cold launch, **no** wizard, lands on main UI | **Unit, not launched:** `VibeCoderApp` force-sets `hasCompletedOnboarding`. `WorkspaceChatRouting` wait→seed→showChat — `MenuChromeUITests.testWorkspaceRouting*` (characterization, not XCUI; GHA `SKIP_APP_TESTS=1`). Historical class 10/10 (2026-08-20) is stale — Cluster nav tests now sit in this class (e72a114). No screenshot. |
 | F2 | Server **down** → empty chat tells the user to start a local server (all live HTTP backends named, including Unsloth) and Send is not a silent no-op | **Unit:** `SettingsDiscoverabilityCopyTests.testEmptyChatCopyListsUnslothOnNoBackend` (LM Studio/Ollama/oMLX/Unsloth) + `testComposerSendDisabledUntilModelUnlessRunning` pass. `BugHuntViewModelsTests.testEnsureFirstConversationWaitsForStoreThenSeedsOnce` pass. App not launched. |
 | F3 | Server **up**, no model → pick a model (composer chip / Connection Test) | **Copy only:** same EmptyChatCopy test → title `"Pick a model to start"`. No live server. |
-| F4 | Server up + model selected → first user turn streams tokens | **Live in-app first chat (2026-08-22), Unsloth Studio.** One user turn “Hey”; tokens in the Mac app window. Witness: Reed (tech lead) during Max’s session. **Not** mock-worker 012/013, **not** eval-runner, **not** CLI. 012/013 stay mock scripted cells (A1/A2 only). B1 Connection Test still not live. F4 alone is not 99%. |
+| F4 | Server up + model selected → first user turn streams tokens | **Live in-app first chat (2026-08-22), Unsloth Studio.** Mac app window. User “Hey”; gemma 4 26B replied in ~6s. Witness: Reed during Max’s session. **Not** mock-worker 012/013, **not** eval-runner, **not** CLI, **not** GitHub-proven. 012/013 stay mock (A1/A2). F4 alone is not 99% (origin unpushed; GHA `SKIP_APP_TESTS=1`). |
 
 ### Local backends
 
