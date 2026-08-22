@@ -1,16 +1,16 @@
 //
 //  ToolSnapshotTruncationCopyTests.swift
 //
-//  Mira QA: characterize truncated tool-card copy as painted (Sable 8f371d8).
+//  Mira QA: characterize truncated tool-card copy as painted (Sable 77fa044).
 //  Notice as-is: "N tool field(s) were truncated. Showing preview X / Y.
 //  Load full tool data". Product is VibeCoder. Looks like ZCode snapshot
 //  chrome. Not ZCode. Not Electron. Does not stamp 99%.
 //  PRODUCT_NAME VibeCoderTests.
 //
-//  Honesty: MCP paints the notice string only. Activity expand paints the
-//  same notice plus a local "Load full tool data" control that uncaps the
-//  already-held preview — it does not fetch extra tool data. Approve /
-//  Continue / Submit stay labels on other cards (not claimed here).
+//  Honesty: Activity expand and MCP cards both paint the notice plus a
+//  local "Load full tool data" control that uncaps the already-held
+//  snapshot in memory — not a network fetch. Approve / Continue / Submit
+//  stay labels on other cards (not claimed here).
 //
 
 import XCTest
@@ -59,20 +59,29 @@ final class ToolSnapshotTruncationCopyTests: XCTestCase {
         assertNotProductIdentityLies(in: src, file: "ZCodeActivityLineView.swift")
     }
 
-    func testMCPCardPaintsNoticeWithoutLoadButton() throws {
+    func testMCPCardPaintsNoticeAndLocalLoadControlUncappingInMemorySnapshot() throws {
         let src = try appSource("Views/Chat/ZCodeActivityLineView.swift")
-        let start = src.range(of: "private func mcpRow(_ card: MCPCard)")
-        XCTAssertNotNil(start)
+        let start = src.range(of: "private struct MCPActivityCard")
+        XCTAssertNotNil(start, "MCP row is MCPActivityCard")
         let rest = src[start!.lowerBound...]
-        let end = rest.range(of: "private func planGuidanceRow")
+        let end = rest.range(of: "struct ZCodeActivityStack")
         XCTAssertNotNil(end)
         let mcp = String(rest[..<end!.lowerBound])
         XCTAssertTrue(mcp.contains("ToolSnapshotCardCopy.notice(snap)"))
         XCTAssertTrue(mcp.contains("Text(notice)"))
-        XCTAssertFalse(
+        XCTAssertTrue(
             mcp.contains("Button(ToolSnapshotCardCopy.loadFullToolData)"),
-            "MCP notice includes Load full tool data as copy; it is not a wired control")
-        XCTAssertFalse(mcp.contains("showFullDetail"))
+            "MCP Load full tool data is a control that uncaps the in-memory snapshot")
+        XCTAssertTrue(mcp.contains("showFull = true"))
+        XCTAssertTrue(mcp.contains("showFull ? card.parameters : snap.args.preview"))
+        XCTAssertTrue(mcp.contains("showFull ? card.result : snap.result.preview"))
+        XCTAssertFalse(
+            mcp.contains("URLSession"),
+            "Load full tool data must not be a network fetch")
+        XCTAssertFalse(mcp.localizedCaseInsensitiveContains("fetch extra"))
+        XCTAssertFalse(mcp.localizedCaseInsensitiveContains("99%"))
+        let row = try appSource("Views/Chat/ZCodeActivityLineView.swift")
+        XCTAssertTrue(row.contains("MCPActivityCard(card: card)"))
     }
 
     func testPaintedCopyDoesNotClaimZCodeOrStamp99() throws {

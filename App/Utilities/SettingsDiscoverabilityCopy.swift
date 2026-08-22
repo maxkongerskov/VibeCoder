@@ -263,8 +263,8 @@ enum AskUserQuestionCardCopy {
 
 /// Truncated tool args/result notice. VibeCoder wording from Atlas helper.
 /// Notice is as-is: "N tool field(s) were truncated. Showing preview X / Y. Load full tool data".
-/// On activity expand, `loadFullToolData` is a local show-full-preview control, not a fetch.
-/// MCP cards paint the notice string only (no Load control).
+/// `loadFullToolData` on activity expand and MCP cards is a local show-full-preview
+/// control that uncaps the in-memory snapshot; not a network fetch.
 enum ToolSnapshotCardCopy {
     static func notice(_ snapshot: ToolSnapshotTruncation.Snapshot) -> String? {
         snapshot.notice
