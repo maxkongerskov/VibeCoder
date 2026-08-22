@@ -280,14 +280,13 @@ final class ChatViewModel: ObservableObject {
     }
 
     /// Effective context window (model, optionally capped by settings).
-    /// Prefer the backend/catalog advertised window over the 32k stored default.
+    /// Uses the largest window the server advertised on the model (Atlas).
+    /// Does not invent 1M. Stored 32k default does not beat a bigger advertisement.
     var liveContextWindow: Int? {
         let maxCap = app?.settings.maxContextWindowTokens ?? 0
         let modelID = conversation.modelID ?? app?.selectedModelID
         let model = modelID.flatMap { id in app?.availableModels.first(where: { $0.id == id }) }
-        let advertised = ModelContextLengthResolver.resolve(
-            modelId: model?.id ?? modelID ?? "",
-            apiValue: model?.contextLength)
+        let advertised = model?.contextLength.flatMap { $0 > 0 ? $0 : nil }
 
         if let settings = lastPreparedModelSettings {
             let modelWindow = ContextBudget.effectiveContextLength(
@@ -297,7 +296,7 @@ final class ChatViewModel: ObservableObject {
                 modelWindow: modelWindow,
                 maxContextWindowTokens: maxCap)
         }
-        if let advertised, advertised > 0 {
+        if let advertised {
             return ContextBudget.cappedWindow(
                 modelWindow: advertised,
                 maxContextWindowTokens: maxCap)

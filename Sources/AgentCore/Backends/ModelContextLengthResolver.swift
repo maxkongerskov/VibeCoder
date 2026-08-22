@@ -48,8 +48,8 @@ public enum ModelContextLengthResolver {
         return nil
     }
 
-    /// Known native window when `/v1/models` omits metadata (or only reports a
-    /// loaded n_ctx like 32k). Never a guess for unknown IDs.
+    /// Known windows for a few catalog IDs that omit `/v1/models` metadata.
+    /// Never invents 1M for Nemotron Lightning — that must come from the server.
     public static func knownContextLength(for modelId: String) -> Int? {
         let id = modelId.lowercased()
         if id.contains("glm-5.2") || id.contains("glm-5.1") || id.contains("glm-5") {
@@ -64,22 +64,14 @@ public enum ModelContextLengthResolver {
         if id.contains("minimax-m2") || id.contains("minimax-m3") {
             return 196_608
         }
-        // NVIDIA Nemotron 3.5 Lightning: native 1M (Unsloth / NVIDIA cards).
-        if id.contains("nemotron") && id.contains("lightning") {
-            return 1_048_576
-        }
         return nil
     }
 
-    /// Prefer the larger of API advertised length and the known native window
-    /// so a loaded 32k n_ctx does not replace Lightning's 1M model window.
+    /// API advertised value first (already native/max if Atlas parsed it).
+    /// Catalog known only when the server sent nothing.
     public static func resolve(modelId: String, apiValue: Int?) -> Int? {
-        let known = knownContextLength(for: modelId)
-        if let apiValue, apiValue > 0 {
-            if let known { return max(apiValue, known) }
-            return apiValue
-        }
-        return known
+        if let apiValue, apiValue > 0 { return apiValue }
+        return knownContextLength(for: modelId)
     }
 
     /// Loaded/effective n_ctx (Unsloth `context_length`) when present.

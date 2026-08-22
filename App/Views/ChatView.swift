@@ -84,14 +84,12 @@ struct ChatView: View {
     private var contextTokens: Int { viewModel.liveContextTokens }
 
     /// Effective model context window (not auto-compact budget) for used/window meter.
+    /// Server advertised length only. No invented 1M.
     private var contextLimit: Int {
         if let w = viewModel.liveContextWindow, w > 0 { return w }
-        let resolved = ModelContextLengthResolver.resolve(
-            modelId: activeModel?.id ?? "",
-            apiValue: activeModel?.contextLength)
-        if let resolved, resolved > 0 {
+        if let advertised = activeModel?.contextLength, advertised > 0 {
             return ContextBudget.cappedWindow(
-                modelWindow: resolved,
+                modelWindow: advertised,
                 maxContextWindowTokens: app.settings.maxContextWindowTokens)
         }
         return 32_768

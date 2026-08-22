@@ -107,7 +107,7 @@ final class ContextMeterCalibrationTests: XCTestCase {
         XCTAssertLessThan(vm.liveContextTokens, 100)
     }
 
-    func testComposerWindowUsesAdvertisedNemotronLightningNot32kDefault() {
+    func testComposerWindowUsesServerAdvertisedNotSettingsDefault() {
         let app = AppViewModel()
         var settings = AppSettings()
         settings.systemPrompt = ""
@@ -121,19 +121,36 @@ final class ContextMeterCalibrationTests: XCTestCase {
                 displayName: "Nemotron Lightning",
                 backend: .unslothStudio,
                 supportsTools: true,
-                contextLength: nil)
+                contextLength: 1_048_576)
         ]
         let vm = ChatViewModel(conversation: Conversation(), app: app)
         XCTAssertEqual(vm.liveContextWindow, 1_048_576,
-                       "composer window is the advertised Lightning 1M, not the 32k settings default")
+                       "composer window is the server-advertised max, not the 32k settings default")
         XCTAssertEqual(vm.contextUsageBreakdown.windowTokens, 1_048_576)
-        XCTAssertEqual(
-            ModelContextLengthResolver.resolve(modelId: lightningID, apiValue: nil),
-            1_048_576)
+    }
+
+    func testComposerWindowDoesNotInventOneMillion() {
+        let app = AppViewModel()
+        var settings = AppSettings()
+        settings.maxContextWindowTokens = 0
+        app.settings = settings
+        let lightningID = "unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B"
+        app.selectedModelID = lightningID
+        app.availableModels = [
+            ModelDescriptor(
+                id: lightningID,
+                displayName: "Nemotron Lightning",
+                backend: .unslothStudio,
+                supportsTools: true,
+                contextLength: nil)
+        ]
+        let vm = ChatViewModel(conversation: Conversation(), app: app)
+        XCTAssertNil(vm.liveContextWindow)
+        XCTAssertNotEqual(vm.contextUsageBreakdown.windowTokens, 1_048_576)
+        XCTAssertNil(ModelContextLengthResolver.resolve(modelId: lightningID, apiValue: nil))
         XCTAssertEqual(
             ModelContextLengthResolver.resolve(modelId: lightningID, apiValue: 32_768),
-            1_048_576,
-            "loaded 32k n_ctx does not replace Lightning native 1M")
+            32_768)
     }
 
     func testComposerWindowHonorsUserCap() {
