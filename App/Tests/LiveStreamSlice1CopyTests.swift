@@ -128,6 +128,27 @@ final class LiveStreamSlice1CopyTests: XCTestCase {
         XCTAssertFalse(live.localizedCaseInsensitiveContains("as fast"))
     }
 
+    func testCodeBlockChromeCopyAndWrapToggle() throws {
+        XCTAssertEqual(CodeBlockCopy.copy, "Copy")
+        XCTAssertEqual(CodeBlockCopy.copied, "Copied")
+        XCTAssertEqual(CodeBlockCopy.wrapLines, "Wrap lines")
+        XCTAssertFalse(CodeBlockCopy.wrapLines.localizedCaseInsensitiveContains("zcode"))
+        XCTAssertFalse(CodeBlockCopy.copy.localizedCaseInsensitiveContains("zcode"))
+
+        let src = try appSource("Views/Chat/CodeBlockView.swift")
+        XCTAssertTrue(src.contains("CodeBlockCopy.wrapLines"))
+        XCTAssertTrue(src.contains("CodeBlockCopy.copy"))
+        XCTAssertTrue(src.contains("CodeBlockCopy.copied"))
+        XCTAssertTrue(src.contains("@State private var wrapLines = false"))
+        XCTAssertTrue(src.contains("ScrollView(.horizontal, showsIndicators: false)"))
+        XCTAssertTrue(src.contains("if wrapLines"))
+        XCTAssertTrue(src.contains("Theme.Motion.quick"))
+        XCTAssertFalse(src.lowercased().contains("vibecoder is zcode"))
+        XCTAssertFalse(
+            src.contains("ChatViewModel"),
+            "code-block chrome must not grow ChatViewModel")
+    }
+
     // MARK: - helpers
 
     private func assertNotProductIdentityLies(in text: String, file: String) {

@@ -1,14 +1,21 @@
 // CodeBlockView.swift
 // AgentOS — Claude Edition
 //
-// Fenced code block with a header bar (language label + copy button)
-// and a horizontally-scrollable monospaced body. Copy button mirrors
-// the CopyChip pattern from MessageBubbleViewV2.swift.
+// Fenced code block with a header bar (language, wrap toggle, copy)
+// and a monospaced body. Default is horizontal scroll; Wrap lines
+// wraps instead. Copy button mirrors CopyChip in MessageBubbleViewV2.
 //
 
 @preconcurrency import SwiftUI
 import AppKit
 import AgentCore
+
+/// Chrome strings for fenced code blocks. Not ChatViewModel.
+enum CodeBlockCopy {
+    static let copy = "Copy"
+    static let copied = "Copied"
+    static let wrapLines = "Wrap lines"
+}
 
 struct CodeBlockView: View {
     let language: String?
@@ -18,6 +25,8 @@ struct CodeBlockView: View {
     var fontSize: CGFloat = 13
 
     @State private var copied = false
+    /// Default off — same as previous horizontal-scroll-only chrome.
+    @State private var wrapLines = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -29,6 +38,18 @@ struct CodeBlockView: View {
                         .foregroundColor(Theme.Palette.tertiary)
                 }
                 Spacer()
+                Button {
+                    wrapLines.toggle()
+                } label: {
+                    Text(CodeBlockCopy.wrapLines)
+                        .font(.system(size: 11))
+                        .foregroundColor(wrapLines ? Theme.Palette.primary : Theme.Palette.tertiary)
+                }
+                .buttonStyle(.plain)
+                .padding(.trailing, Theme.Spacing.ml)
+                .accessibilityAddTraits(wrapLines ? [.isSelected] : [])
+                .animation(Theme.Motion.quick, value: wrapLines)
+
                 // Copy button — matches the CopyChip pattern in
                 // MessageBubbleViewV2.swift: NSPasteboard write + brief
                 // "Copied" state driven by a Task sleep.
@@ -46,7 +67,7 @@ struct CodeBlockView: View {
                     HStack(spacing: 4) {
                         Image(systemName: copied ? "checkmark" : "doc.on.doc")
                             .font(.system(size: 10, weight: .medium))
-                        Text(copied ? "Copied" : "Copy")
+                        Text(copied ? CodeBlockCopy.copied : CodeBlockCopy.copy)
                             .font(.system(size: 11))
                     }
                     .foregroundColor(copied ? Theme.Palette.success : Theme.Palette.tertiary)
@@ -64,12 +85,16 @@ struct CodeBlockView: View {
                 .frame(height: 0.5)
 
             // ── Code body ───────────────────────────────────────────
-            ScrollView(.horizontal, showsIndicators: false) {
-                highlightedCode
-                    .font(Theme.Typography.mono(size: fontSize))
-                    .foregroundStyle(Theme.Palette.primary)
-                    .textSelection(.enabled)
-                    .padding(Theme.Spacing.ml)
+            Group {
+                if wrapLines {
+                    codeBody
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        codeBody
+                    }
+                }
             }
             .background(bodyBackground)
         }
@@ -78,6 +103,14 @@ struct CodeBlockView: View {
             RoundedRectangle(cornerRadius: Theme.Radius.codeBlock)
                 .stroke(Theme.Palette.divider, lineWidth: 0.5)
         )
+    }
+
+    private var codeBody: some View {
+        highlightedCode
+            .font(Theme.Typography.mono(size: fontSize))
+            .foregroundStyle(Theme.Palette.primary)
+            .textSelection(.enabled)
+            .padding(Theme.Spacing.ml)
     }
 
     // MARK: - Highlighting
