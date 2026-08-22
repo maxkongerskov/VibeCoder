@@ -262,6 +262,27 @@ enum AskUserQuestionCardCopy {
     static var customAnswer: String { ToolCallGrouping.askUserCustomAnswerLabel }
 }
 
+/// Finished assistant reply larger than the preview cap. VibeCoder wording.
+enum MessageBodyPreviewCopy {
+    static let limitBytes = 32_000
+    static var viewFullMessage: String { "View full message" }
+
+    static func notice(previewBytes: Int, fullBytes: Int) -> String {
+        "This reply is large. Showing a preview only (\(previewBytes)/\(fullBytes)). View full message"
+    }
+
+    static func preview(_ text: String, limitBytes: Int = limitBytes) -> (shown: String, isTruncated: Bool, previewBytes: Int, fullBytes: Int) {
+        let data = Data(text.utf8)
+        let full = data.count
+        if full <= limitBytes {
+            return (text, false, full, full)
+        }
+        let slice = data.prefix(limitBytes)
+        let shown = String(decoding: slice, as: UTF8.self)
+        return (shown, true, slice.count, full)
+    }
+}
+
 /// Truncated tool args/result notice. VibeCoder wording from Atlas helper.
 /// Notice is as-is: "N tool field(s) were truncated. Showing preview X / Y. Load full tool data".
 /// `loadFullToolData` on activity expand and MCP cards is a local show-full-preview

@@ -367,6 +367,22 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
 
 
 
+
+    func testMessageBodyPreviewCopy() {
+        let small = MessageBodyPreviewCopy.preview("hi")
+        XCTAssertFalse(small.isTruncated)
+        let big = String(repeating: "a", count: MessageBodyPreviewCopy.limitBytes + 50)
+        let preview = MessageBodyPreviewCopy.preview(big)
+        XCTAssertTrue(preview.isTruncated)
+        XCTAssertEqual(preview.previewBytes, MessageBodyPreviewCopy.limitBytes)
+        XCTAssertEqual(preview.fullBytes, MessageBodyPreviewCopy.limitBytes + 50)
+        XCTAssertEqual(
+            MessageBodyPreviewCopy.notice(previewBytes: 32000, fullBytes: 32050),
+            "This reply is large. Showing a preview only (32000/32050). View full message")
+        XCTAssertEqual(MessageBodyPreviewCopy.viewFullMessage, "View full message")
+        XCTAssertFalse(MessageBodyPreviewCopy.viewFullMessage.lowercased().contains("zcode"))
+    }
+
     func testToolSnapshotCardCopyNotice() {
         let short = ToolSnapshotTruncation.snapshot(args: "ok", result: "done")
         XCTAssertNil(ToolSnapshotCardCopy.notice(short))

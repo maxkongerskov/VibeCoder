@@ -25,12 +25,35 @@ struct MarkdownTextView: View {
     var isStreaming: Bool = false
     /// Chat body font size. Matches the size used in MessageBubbleViewV2.
     var fontSize: CGFloat = Theme.ChatLayout.bodyFontSize
+    @State private var showFullMessage = false
+
+    private var bodyPreview: (shown: String, isTruncated: Bool, previewBytes: Int, fullBytes: Int) {
+        if isStreaming || showFullMessage {
+            let n = text.utf8.count
+            return (text, false, n, n)
+        }
+        return MessageBodyPreviewCopy.preview(text)
+    }
 
     var body: some View {
-        let blocks = identifiedBlocks
+        let preview = bodyPreview
+        let blocks = identifiedBlocks(for: preview.shown)
         VStack(alignment: .leading, spacing: Theme.Spacing.m) { // 12pt — air between blocks
             ForEach(blocks) { item in
                 blockView(item.block)
+            }
+            if preview.isTruncated {
+                Text(MessageBodyPreviewCopy.notice(
+                    previewBytes: preview.previewBytes,
+                    fullBytes: preview.fullBytes))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Palette.tertiary)
+                Button(MessageBodyPreviewCopy.viewFullMessage) {
+                    showFullMessage = true
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.Palette.accent)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -39,8 +62,8 @@ struct MarkdownTextView: View {
     }
 
     /// Prefix blocks keep a stable id so streaming tokens only rebuild the tail.
-    private var identifiedBlocks: [IdentifiedMarkdownBlock] {
-        let blocks = parseBlocks(text)
+    private func identifiedBlocks(for source: String) -> [IdentifiedMarkdownBlock] {
+        let blocks = parseBlocks(source)
         return blocks.enumerated().map { i, block in
             let tail = isStreaming && i == blocks.count - 1
             return IdentifiedMarkdownBlock(
