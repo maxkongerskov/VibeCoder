@@ -1,7 +1,8 @@
 //
 //  ToolCallGroupingTests.swift
 //
-//  Explore grouping + stop-when-done (ZCode §3). Does not grow AgentLoop.
+//  Explore grouping + file-change family grouping + stop-when-done (ZCode §3).
+//  Does not grow AgentLoop.
 //
 
 import XCTest
@@ -23,6 +24,10 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "update_todo"), .todo)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "load_skill"), .skill)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "task"), .agent)
+        XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "write_file"), .write)
+        XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "edit_file"), .update)
+        XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "delete_file"), .delete)
+        XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "apply_patch"), .update)
     }
 
     func testConsecutiveReadOnlyCollapseToOneExploreCard() {
@@ -58,16 +63,78 @@ final class ToolCallGroupingTests: XCTestCase {
         }
         XCTAssertEqual(first.searches, 1)
         XCTAssertEqual(first.files, 1)
-        guard case .standalone(let idx, let fam) = groups[1] else {
-            return XCTFail("write is standalone")
+        guard case .fileChange(let counts, let members) = groups[1] else {
+            return XCTFail("write is a file-change family")
         }
-        XCTAssertEqual(idx, 2)
-        XCTAssertEqual(fam, .fileWrite)
+        XCTAssertEqual(members, [2])
+        XCTAssertEqual(counts.writes, 1)
+        XCTAssertEqual(counts.fileCount, 1)
         guard case .explore(let third, _) = groups[2] else {
             return XCTFail("list after write starts a new explore")
         }
         XCTAssertEqual(third.lists, 1)
         XCTAssertEqual(third.files, 0)
+    }
+
+    func testConsecutiveFileWritesCollapseToOneFamily() {
+        let events = [
+            ToolCallEvent(name: "write_file", path: "a.swift", added: 10, deleted: 0),
+            ToolCallEvent(name: "edit_file", path: "b.swift", added: 3, deleted: 2),
+            ToolCallEvent(name: "delete_file", path: "c.swift", added: 0, deleted: 8),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 1)
+        guard case .fileChange(let counts, let members) = groups[0] else {
+            return XCTFail("expected one file-change group")
+        }
+        XCTAssertEqual(members, [0, 1, 2])
+        XCTAssertEqual(counts.writes, 1)
+        XCTAssertEqual(counts.updates, 1)
+        XCTAssertEqual(counts.deletes, 1)
+        XCTAssertEqual(counts.fileCount, 3)
+        XCTAssertEqual(counts.added, 13)
+        XCTAssertEqual(counts.deleted, 10)
+        XCTAssertEqual(
+            ToolCallGrouping.fileChangeGroupLabel(events: events, memberIndices: members),
+            "Updated"
+        )
+    }
+
+    func testSamePathCountsOnceInFileChangeGroup() {
+        let events = [
+            ToolCallEvent(name: "write_file", path: "./src/Foo.swift", added: 4),
+            ToolCallEvent(name: "edit_file", path: "src/Foo.swift", added: 1, deleted: 1),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        guard case .fileChange(let counts, _) = groups[0] else {
+            return XCTFail("expected file-change group")
+        }
+        XCTAssertEqual(counts.fileCount, 1)
+        XCTAssertEqual(counts.added, 5)
+        XCTAssertEqual(counts.deleted, 1)
+    }
+
+    func testFileWriteActivityLabels() {
+        XCTAssertEqual(ToolCallGrouping.fileWriteActivityLabel(name: "write_file", isRunning: true), "Writing")
+        XCTAssertEqual(ToolCallGrouping.fileWriteActivityLabel(name: "write_file", isRunning: false), "Wrote")
+        XCTAssertEqual(ToolCallGrouping.fileWriteActivityLabel(name: "edit_file", isRunning: true), "Updating")
+        XCTAssertEqual(ToolCallGrouping.fileWriteActivityLabel(name: "edit_file", isRunning: false), "Updated")
+        XCTAssertEqual(ToolCallGrouping.fileWriteActivityLabel(name: "apply_patch", isRunning: true), "Updating")
+        XCTAssertEqual(ToolCallGrouping.fileWriteActivityLabel(name: "delete_file", isRunning: false), "Deleted")
+    }
+
+    func testTurnTotalsFromExistingChangeSummary() {
+        let summary = TurnChangeSummary(files: [
+            .init(path: "a.swift", added: 4, removed: 1, status: .created),
+            .init(path: "b.swift", added: 0, removed: 3, status: .deleted),
+        ])
+        let totals = FileChangeTurnTotals.from(summary)
+        XCTAssertEqual(totals.fileCount, 2)
+        XCTAssertEqual(totals.added, 4)
+        XCTAssertEqual(totals.deleted, 4)
+        XCTAssertEqual(summary.fileCount, 2)
+        XCTAssertEqual(summary.totalAdded, 4)
+        XCTAssertEqual(summary.totalRemoved, 4)
     }
 
     func testEmptyExploreShowsZeroFiles() {
@@ -77,6 +144,9 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertEqual(onlyShell.count, 1)
         if case .explore = onlyShell[0] {
             XCTFail("shell is not explore")
+        }
+        if case .fileChange = onlyShell[0] {
+            XCTFail("shell is not file-change")
         }
     }
 
@@ -94,6 +164,23 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertEqual(counts.searches, 1)
         XCTAssertEqual(counts.files, 1)
         XCTAssertEqual(members, [0, 2])
+    }
+
+    func testEmptyRunningShellDoesNotBreakFileChangeGroup() {
+        let events = [
+            ToolCallEvent(name: "write_file", path: "a.swift", added: 2),
+            ToolCallEvent(name: "run_shell", isRunning: true, parsedCommand: ""),
+            ToolCallEvent(name: "edit_file", path: "b.swift", added: 1, deleted: 1),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 1)
+        guard case .fileChange(let counts, let members) = groups[0] else {
+            return XCTFail("empty in-flight bash skipped; writes stay one family")
+        }
+        XCTAssertEqual(members, [0, 2])
+        XCTAssertEqual(counts.writes, 1)
+        XCTAssertEqual(counts.updates, 1)
+        XCTAssertEqual(counts.fileCount, 2)
     }
 
     func testFinishedShellDoesNotJoinExplore() {
@@ -140,6 +227,20 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertFalse(ToolCallGrouping.shouldStopToolBurst(
             lastResultContent: "searching",
             toolEvents: events))
+    }
+
+    func testGroupingHelperDoesNotClaimVibeCoderIsZCode() {
+        let src = try! String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Sources/AgentCore/Tools/ToolCallGrouping.swift"),
+            encoding: .utf8)
+        let lower = src.lowercased()
+        XCTAssertFalse(lower.contains("vibecoder is zcode"))
+        XCTAssertFalse(lower.contains("we are zcode"))
+        XCTAssertTrue(src.contains("Consecutive read-only tools → one Explore card."))
     }
 
     func testDoesNotStopOnStandaloneWrite() {

@@ -3,8 +3,10 @@
 //
 //  ZCode-parity (docs/ui-parity-research/zcode-chat.md §3): classify tools
 //  into renderer families and collapse consecutive read-only calls into one
-//  Explore card (N searches, N lists, N files). Pure functions so App/Sable
-//  can render later — this file does not touch AgentLoop.swift.
+//  Explore card (N searches, N lists, N files) and consecutive file
+//  write/edit/delete into one file-change family (Writing/Wrote,
+//  Updating/Updated). Pure functions so App/Sable can render later — this
+//  file does not touch AgentLoop.swift.
 //
 
 import Foundation
@@ -23,17 +25,40 @@ public enum ToolFamily: String, Sendable, Equatable {
     case other
 }
 
+/// Kind of file-write family member (create vs patch vs delete).
+public enum FileWriteKind: String, Sendable, Equatable {
+    case write
+    case update
+    case delete
+}
+
 /// One tool event as the transcript would present it (name + in-flight bits).
 public struct ToolCallEvent: Sendable, Equatable {
     public var name: String
     public var isRunning: Bool
     /// Parsed shell command when family is shell. Empty + running → skip.
     public var parsedCommand: String?
+    /// Path when the tool mutates a file (optional; grouping still works without it).
+    public var path: String?
+    /// Line adds from patch/tool result when already known.
+    public var added: Int
+    /// Line deletes from patch/tool result when already known.
+    public var deleted: Int
 
-    public init(name: String, isRunning: Bool = false, parsedCommand: String? = nil) {
+    public init(
+        name: String,
+        isRunning: Bool = false,
+        parsedCommand: String? = nil,
+        path: String? = nil,
+        added: Int = 0,
+        deleted: Int = 0
+    ) {
         self.name = name
         self.isRunning = isRunning
         self.parsedCommand = parsedCommand
+        self.path = path
+        self.added = added
+        self.deleted = deleted
     }
 }
 
@@ -52,10 +77,62 @@ public struct ExploreBucketCounts: Sendable, Equatable {
     public var total: Int { searches + lists + files }
 }
 
+/// Consecutive write/edit/delete card. `fileCount` / `added` / `deleted`
+/// are for Sable to bind a ZCode-style "N files changed +a −d" row.
+public struct FileChangeGroupCounts: Sendable, Equatable {
+    public var writes: Int
+    public var updates: Int
+    public var deletes: Int
+    public var fileCount: Int
+    public var added: Int
+    public var deleted: Int
+
+    public init(
+        writes: Int = 0,
+        updates: Int = 0,
+        deletes: Int = 0,
+        fileCount: Int = 0,
+        added: Int = 0,
+        deleted: Int = 0
+    ) {
+        self.writes = writes
+        self.updates = updates
+        self.deletes = deletes
+        self.fileCount = fileCount
+        self.added = added
+        self.deleted = deleted
+    }
+
+    public var total: Int { writes + updates + deletes }
+}
+
+/// Turn-end rollup Sable can bind without parsing AgentLoop.
+public struct FileChangeTurnTotals: Sendable, Equatable {
+    public var fileCount: Int
+    public var added: Int
+    public var deleted: Int
+
+    public init(fileCount: Int, added: Int, deleted: Int) {
+        self.fileCount = fileCount
+        self.added = added
+        self.deleted = deleted
+    }
+
+    public static func from(_ summary: TurnChangeSummary) -> FileChangeTurnTotals {
+        FileChangeTurnTotals(
+            fileCount: summary.fileCount,
+            added: summary.totalAdded,
+            deleted: summary.totalRemoved
+        )
+    }
+}
+
 public enum GroupedToolCalls: Sendable, Equatable {
     /// Consecutive read-only tools → one Explore card.
     case explore(counts: ExploreBucketCounts, memberIndices: [Int])
-    /// Write / shell / todo / skill / agent / other, shown as its own card.
+    /// Consecutive write / edit / delete → one file-change family card.
+    case fileChange(counts: FileChangeGroupCounts, memberIndices: [Int])
+    /// Shell / todo / skill / agent / other, shown as its own card.
     case standalone(index: Int, family: ToolFamily)
 }
 
@@ -66,7 +143,8 @@ public enum ToolCallGrouping: Sendable {
         case "read_file", "read_file_range":
             return .fileRead
         case "write_file", "edit_file", "apply_patch", "delete_file",
-             "move_file", "create_directory", "text_edit", "xcode_project_editor":
+             "move_file", "create_directory", "text_edit", "xcode_project_editor",
+             "XcodeWrite", "XcodeUpdate", "search_replace":
             return .fileWrite
         case "run_shell":
             return .shell
@@ -86,6 +164,18 @@ public enum ToolCallGrouping: Sendable {
         }
     }
 
+    /// Create vs patch vs delete inside the file-write family.
+    public static func fileWriteKind(forToolName name: String) -> FileWriteKind {
+        switch name {
+        case "write_file", "create_directory", "XcodeWrite":
+            return .write
+        case "delete_file":
+            return .delete
+        default:
+            return .update
+        }
+    }
+
     /// Read-only families that collapse into Explore (search / list / file).
     public static func isExploreMember(_ family: ToolFamily) -> Bool {
         switch family {
@@ -96,6 +186,10 @@ public enum ToolCallGrouping: Sendable {
         }
     }
 
+    public static func isFileWriteMember(_ family: ToolFamily) -> Bool {
+        family == .fileWrite
+    }
+
     /// ZCode: skip shells with empty parsed command while streaming/running.
     public static func shouldSkipInGrouping(_ event: ToolCallEvent) -> Bool {
         guard family(forToolName: event.name) == .shell, event.isRunning else {
@@ -104,6 +198,36 @@ public enum ToolCallGrouping: Sendable {
         let cmd = (event.parsedCommand ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return cmd.isEmpty
+    }
+
+    /// Activity verb for a single file-write tool. Sable binds chrome.
+    public static func fileWriteActivityLabel(name: String, isRunning: Bool) -> String {
+        switch fileWriteKind(forToolName: name) {
+        case .write:
+            return isRunning ? "Writing" : "Wrote"
+        case .update:
+            return isRunning ? "Updating" : "Updated"
+        case .delete:
+            return isRunning ? "Deleting" : "Deleted"
+        }
+    }
+
+    /// Activity verb for a consecutive file-change group.
+    public static func fileChangeGroupLabel(
+        events: [ToolCallEvent],
+        memberIndices: [Int]
+    ) -> String {
+        let members = memberIndices.compactMap { events.indices.contains($0) ? events[$0] : nil }
+        let running = members.contains(where: { $0.isRunning })
+        let kinds = Set(members.map { fileWriteKind(forToolName: $0.name) })
+        if kinds.count == 1, let only = kinds.first {
+            switch only {
+            case .write: return running ? "Writing" : "Wrote"
+            case .update: return running ? "Updating" : "Updated"
+            case .delete: return running ? "Deleting" : "Deleted"
+            }
+        }
+        return running ? "Updating" : "Updated"
     }
 
     /// Pure grouping over a list of tool call events.
@@ -139,6 +263,49 @@ public enum ToolCallGrouping: Sendable {
                 }
                 out.append(.explore(
                     counts: ExploreBucketCounts(searches: searches, lists: lists, files: files),
+                    memberIndices: indices))
+            } else if isFileWriteMember(fam) {
+                var indices: [Int] = []
+                var writes = 0
+                var updates = 0
+                var deletes = 0
+                var added = 0
+                var deleted = 0
+                var pathKeys: [String] = []
+                var seen = Set<String>()
+                while i < events.count {
+                    if shouldSkipInGrouping(events[i]) {
+                        i += 1
+                        continue
+                    }
+                    let f = family(forToolName: events[i].name)
+                    guard isFileWriteMember(f) else { break }
+                    let ev = events[i]
+                    indices.append(i)
+                    switch fileWriteKind(forToolName: ev.name) {
+                    case .write: writes += 1
+                    case .update: updates += 1
+                    case .delete: deletes += 1
+                    }
+                    added += ev.added
+                    deleted += ev.deleted
+                    if let path = ev.path, !path.isEmpty {
+                        let key = TurnChangeSummary.pathKey(path)
+                        if seen.insert(key).inserted {
+                            pathKeys.append(key)
+                        }
+                    }
+                    i += 1
+                }
+                let fileCount = pathKeys.isEmpty ? indices.count : pathKeys.count
+                out.append(.fileChange(
+                    counts: FileChangeGroupCounts(
+                        writes: writes,
+                        updates: updates,
+                        deletes: deletes,
+                        fileCount: fileCount,
+                        added: added,
+                        deleted: deleted),
                     memberIndices: indices))
             } else {
                 out.append(.standalone(index: i, family: fam))
