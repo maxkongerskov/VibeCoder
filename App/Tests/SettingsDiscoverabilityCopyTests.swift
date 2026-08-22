@@ -350,6 +350,20 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         XCTAssertTrue(truncated.contains("lines omitted"))
     }
 
+
+    func testSkillAndSubAgentCardCopy() {
+        let skill = SkillCard(index: 0, isRunning: true, skillName: "review", args: "strict")
+        XCTAssertEqual(SkillCardCopy.verb(skill), "Running skill")
+        XCTAssertEqual(SkillCardCopy.status(skill), "review · strict")
+        XCTAssertEqual(SkillCardCopy.verb(SkillCard(index: 0, isRunning: false, skillName: "review")), "Ran skill")
+        let agent = AgentCard(index: 1, isRunning: true, prompt: "scan tests", agentType: "explore")
+        XCTAssertEqual(SubAgentCardCopy.title, "SubAgent")
+        XCTAssertEqual(SubAgentCardCopy.verb(agent), "Launching")
+        XCTAssertEqual(SubAgentCardCopy.status(agent), "scan tests")
+        XCTAssertEqual(SubAgentCardCopy.verb(AgentCard(index: 1, isRunning: false)), "Launched")
+        XCTAssertFalse(SubAgentCardCopy.title.lowercased().contains("zcode"))
+    }
+
     func testExploreCardCopyBuckets() {
         let counts = ExploreBucketCounts(searches: 2, lists: 1, files: 3)
         XCTAssertEqual(ExploreCardCopy.verb, "Explore")

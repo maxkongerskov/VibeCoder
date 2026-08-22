@@ -446,6 +446,10 @@ struct ZCodeActivityStack: View {
                                 running: running)
                         case .shell(let card):
                             shellRow(card)
+                        case .skill(let card):
+                            skillRow(card)
+                        case .agent(let card):
+                            subAgentRow(card)
                         case .line(let state):
                             ZCodeActivityLineView(
                                 state: state,
@@ -490,12 +494,16 @@ struct ZCodeActivityStack: View {
             running: Bool)
         case line(ToolCallUIState)
         case shell(ShellCard)
+        case skill(SkillCard)
+        case agent(AgentCard)
         var id: String {
             switch self {
             case .explore(let id, _, _): return "explore-\(id)"
             case .fileChange(let id, _, _, _, _): return "fileChange-\(id)"
             case .line(let state): return state.id
             case .shell(let card): return "shell-\(card.index)-\(card.command)"
+            case .skill(let card): return "skill-\(card.index)-\(card.skillName)"
+            case .agent(let card): return "agent-\(card.index)-\(card.toolName)"
             }
         }
     }
@@ -506,7 +514,14 @@ struct ZCodeActivityStack: View {
             let running = state.status == .running || state.status == .pending
             let cmd: String? = (state.toolName == "run_shell" || state.toolName == "run_shell_command")
                 ? state.input : nil
-            return ToolCallEvent(name: state.toolName, isRunning: running, parsedCommand: cmd)
+            return ToolCallEvent(
+                name: state.toolName,
+                isRunning: running,
+                parsedCommand: cmd,
+                skillName: jsonString(state.input, keys: ["name", "skill", "skill_name"]),
+                skillArgs: jsonString(state.input, keys: ["args", "arguments"]),
+                agentPrompt: jsonString(state.input, keys: ["prompt", "description", "task"]),
+                agentType: jsonString(state.input, keys: ["subagent_type", "agent_type", "type"]))
         }
         var items: [StackItem] = []
         for group in ToolCallGrouping.group(events) {
@@ -539,14 +554,45 @@ struct ZCodeActivityStack: View {
             case .shell(let card):
                 items.append(.shell(card))
             case .skill(let card):
-                items.append(.line(states[card.index]))
+                items.append(.skill(card))
             case .agent(let card):
-                items.append(.line(states[card.index]))
+                items.append(.agent(card))
             case .standalone(let index, _):
                 items.append(.line(states[index]))
             }
         }
         return items
+    }
+
+
+    /// Pull a JSON string field from tool input without a full decode.
+    private func jsonString(_ input: String, keys: [String]) -> String? {
+        for key in keys {
+            let needle = "\"\(key)\""
+            guard let keyRange = input.range(of: needle) else { continue }
+            let rest = input[keyRange.upperBound...]
+            guard let colon = rest.firstIndex(of: ":") else { continue }
+            var i = rest.index(after: colon)
+            while i < rest.endIndex, rest[i].isWhitespace { i = rest.index(after: i) }
+            guard i < rest.endIndex, rest[i] == "\"" else { continue }
+            i = rest.index(after: i)
+            var out = ""
+            while i < rest.endIndex {
+                let ch = rest[i]
+                if ch == "\\" {
+                    let n = rest.index(after: i)
+                    if n < rest.endIndex {
+                        out.append(rest[n])
+                        i = rest.index(after: n)
+                        continue
+                    }
+                }
+                if ch == "\"" { return out.isEmpty ? nil : out }
+                out.append(ch)
+                i = rest.index(after: i)
+            }
+        }
+        return nil
     }
 
     @ViewBuilder
@@ -632,6 +678,57 @@ struct ZCodeActivityStack: View {
             }
             .accessibilityLabel("\(card.kindLabel) · \(status)")
         }
+    }
+
+
+    @ViewBuilder
+    private func skillRow(_ card: SkillCard) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text(SkillCardCopy.verb(card))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text("·")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(Theme.Palette.activityDivider)
+            Text(SkillCardCopy.status(card))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Theme.Palette.activityStatus)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            if card.isRunning {
+                ProgressView().controlSize(.mini)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityLabel("\(SkillCardCopy.verb(card)) · \(SkillCardCopy.status(card))")
+    }
+
+    @ViewBuilder
+    private func subAgentRow(_ card: AgentCard) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "person.crop.rectangle")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text(SubAgentCardCopy.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text("·")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(Theme.Palette.activityDivider)
+            Text("\(SubAgentCardCopy.verb(card)) · \(SubAgentCardCopy.status(card))")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Theme.Palette.activityStatus)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if card.isRunning {
+                ProgressView().controlSize(.mini)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityLabel("\(SubAgentCardCopy.title) · \(SubAgentCardCopy.verb(card))")
     }
 
     private var toolsHeader: some View {

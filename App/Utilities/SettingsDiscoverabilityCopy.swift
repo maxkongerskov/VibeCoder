@@ -185,6 +185,30 @@ enum ReviewCardCopy {
     }
 }
 
+/// Skill load card. VibeCoder wording (Running skill / Ran skill).
+enum SkillCardCopy {
+    static func verb(_ card: SkillCard) -> String { card.kindLabel }
+    static func status(_ card: SkillCard) -> String {
+        let name = card.skillName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let args = card.args.trimmingCharacters(in: .whitespacesAndNewlines)
+        if name.isEmpty && args.isEmpty { return "Skill" }
+        if args.isEmpty { return name }
+        if name.isEmpty { return args }
+        return "\(name) · \(args)"
+    }
+}
+
+/// SubAgent / task card. Title is always SubAgent.
+enum SubAgentCardCopy {
+    static let title = "SubAgent"
+    static func verb(_ card: AgentCard) -> String { card.kindLabel }
+    static func status(_ card: AgentCard) -> String {
+        let prompt = card.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        if prompt.isEmpty { return card.agentType.isEmpty ? card.title : card.agentType }
+        return prompt
+    }
+}
+
 /// Chat shell card (command title + Running/Ran). VibeCoder wording.
 enum ShellCardCopy {
     static func title(_ card: ShellCard) -> String {
