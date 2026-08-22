@@ -117,7 +117,7 @@ struct ZCodeActivityLineView: View {
                         if !state.input.isEmpty {
                             detailBlock(
                                 label: "Input",
-                                text: previewText(state.input, limit: showFullDetail ? nil : 600)
+                                text: showFullDetail ? previewText(state.input, limit: nil) : toolSnapshot.args.preview
                             )
                         }
                         if !compact, isListDirectory, let listing = DirectoryListing.parse(state.output) {
@@ -125,11 +125,14 @@ struct ZCodeActivityLineView: View {
                         } else if !state.output.isEmpty {
                             detailBlock(
                                 label: "Output",
-                                text: previewText(state.output, limit: showFullDetail ? nil : 800)
+                                text: showFullDetail ? previewText(state.output, limit: nil) : toolSnapshot.result.preview
                             )
                         }
-                        if !showFullDetail, detailIsTruncated {
-                            Button("Show full I/O") {
+                        if !showFullDetail, let notice = ToolSnapshotCardCopy.notice(toolSnapshot) {
+                            Text(notice)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.Palette.tertiary)
+                            Button(ToolSnapshotCardCopy.loadFullToolData) {
                                 withAnimation(.easeOut(duration: 0.12)) { showFullDetail = true }
                             }
                             .buttonStyle(.plain)
@@ -202,10 +205,15 @@ struct ZCodeActivityLineView: View {
         childThread = items
     }
 
+    private var toolSnapshot: ToolSnapshotTruncation.Snapshot {
+        ToolSnapshotTruncation.snapshot(
+            args: state.input,
+            result: isListDirectory ? nil : state.output
+        )
+    }
+
     private var detailIsTruncated: Bool {
-        (!state.input.isEmpty && state.input.count > 600)
-            || (!state.output.isEmpty && state.output.count > 800
-                && !isListDirectory)
+        toolSnapshot.isTruncated
     }
 
     // MARK: - Z Code subagent row
@@ -831,17 +839,23 @@ struct ZCodeActivityStack: View {
                 }
                 Spacer(minLength: 0)
             }
-            if !card.parameters.isEmpty {
-                Text("\(MCPCardCopy.parameters) · \(card.parameters)")
+            let snap = ToolSnapshotTruncation.snapshot(args: card.parameters, result: card.result)
+            if !snap.args.preview.isEmpty {
+                Text("\(MCPCardCopy.parameters) · \(snap.args.preview)")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(Theme.Palette.tertiary)
                     .lineLimit(card.wrapLines ? 6 : 1)
             }
-            if !card.result.isEmpty {
-                Text("\(MCPCardCopy.result) · \(card.result)")
+            if !snap.result.preview.isEmpty {
+                Text("\(MCPCardCopy.result) · \(snap.result.preview)")
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(Theme.Palette.tertiary)
                     .lineLimit(card.wrapLines ? 8 : 1)
+            }
+            if let notice = ToolSnapshotCardCopy.notice(snap) {
+                Text(notice)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.Palette.tertiary)
             }
         }
         .accessibilityLabel("\(MCPCardCopy.title(card)) · \(MCPCardCopy.viewCallDetails)")

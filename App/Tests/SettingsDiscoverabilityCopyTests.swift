@@ -366,6 +366,20 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
 
 
 
+
+    func testToolSnapshotCardCopyNotice() {
+        let short = ToolSnapshotTruncation.snapshot(args: "ok", result: "done")
+        XCTAssertNil(ToolSnapshotCardCopy.notice(short))
+        let long = String(repeating: "a", count: 5000)
+        let snap = ToolSnapshotTruncation.snapshot(args: "{}", result: long)
+        XCTAssertEqual(
+            ToolSnapshotCardCopy.notice(snap),
+            "1 tool field(s) were truncated. Showing preview 2000 / 5000. Load full tool data"
+        )
+        XCTAssertEqual(ToolSnapshotCardCopy.loadFullToolData, "Load full tool data")
+        XCTAssertFalse(ToolSnapshotCardCopy.loadFullToolData.lowercased().contains("zcode"))
+    }
+
     func testPlanAndAskUserCardCopy() {
         XCTAssertEqual(PlanGuidanceCardCopy.verb(PlanGuidanceCard(index: 0, isRunning: true)), "Entering plan mode")
         XCTAssertEqual(PlanGuidanceCardCopy.verb(PlanGuidanceCard(index: 0, isRunning: false)), "Entered plan mode")

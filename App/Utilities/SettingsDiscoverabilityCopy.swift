@@ -259,6 +259,14 @@ enum AskUserQuestionCardCopy {
     static var customAnswer: String { ToolCallGrouping.askUserCustomAnswerLabel }
 }
 
+/// Truncated tool args/result notice. VibeCoder wording from Atlas helper.
+enum ToolSnapshotCardCopy {
+    static func notice(_ snapshot: ToolSnapshotTruncation.Snapshot) -> String? {
+        snapshot.notice
+    }
+    static var loadFullToolData: String { "Load full tool data" }
+}
+
 /// Chat shell card (command title + Running/Ran). VibeCoder wording.
 enum ShellCardCopy {
     static func title(_ card: ShellCard) -> String {
