@@ -174,11 +174,21 @@ struct EvalRunnerMain {
 
         await ToolRegistry.shared.registerBuiltins()
 
+        let disabledTools = ToolOffer.disabledNames(explicit: [:])
+        let offered = await ToolRegistry.shared.schemas().filter { !disabledTools.contains($0.name) }
+        let schemaJSON = offered.map(\.name).sorted().joined(separator: ",")
+        let schemaBlob = (try? JSONEncoder().encode(offered)).flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        let schemaTokenEstimate = TokenEstimator.estimate(schemaBlob)
+        fputs(
+            "[eval-runner] tools_on_wire=\(offered.count) schema_token_est=\(schemaTokenEstimate) names=\(schemaJSON)\n",
+            stderr)
+
         let config = AgentLoop.Configuration(
             maxIterations: maxIterations,
             stallWindow: 3,
             verifyEdits: true,
             safeMode: nil,
+            disabledToolNames: disabledTools,
             headlessMode: true,
             rawMode: false,
             xcodeMCPEnabled: xcodeMCP
@@ -374,6 +384,11 @@ struct EvalRunnerMain {
                 host: "127.0.0.1",
                 port: port ?? 11434,
                 requestTimeout: requestTimeout)
+        case "unsloth", "unsloth-studio", "unsloth_studio":
+            return UnslothStudioBackend(
+                host: "127.0.0.1",
+                port: port ?? 8888,
+                requestTimeout: requestTimeout)
         case "custom", "openai", "openai-compat", "mock":
             let p = port ?? 1234
             let url = URL(string: "http://127.0.0.1:\(p)/v1")!
@@ -381,7 +396,7 @@ struct EvalRunnerMain {
                 baseURL: url, requestTimeout: requestTimeout)
         default:
             throw RunnerError.badArg(
-                "unknown --backend \(name) (use llama|lmstudio|exo|ollama|custom|mock)")
+                "unknown --backend \(name) (use llama|lmstudio|exo|ollama|unsloth|custom|mock)")
         }
     }
 
@@ -417,6 +432,7 @@ struct EvalRunnerMain {
         case "lmstudio", "lm-studio", "lm_studio": return .lmStudio
         case "exo": return .exo
         case "ollama": return .ollama
+        case "unsloth", "unsloth-studio", "unsloth_studio": return .unslothStudio
         default: return .custom
         }
     }
@@ -438,7 +454,7 @@ struct EvalRunnerMain {
           eval-runner run "<prompt>" --project <dir> [options]
 
         options:
-          --backend llama|lmstudio|exo|ollama|custom|mock   (default: llama → :8765)
+          --backend llama|lmstudio|exo|ollama|unsloth|custom|mock   (default: llama → :8765)
           --model <id>
           --max-iterations <n>     (default 40)
           --port <n>               override backend port
