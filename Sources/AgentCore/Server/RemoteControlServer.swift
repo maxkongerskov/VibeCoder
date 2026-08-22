@@ -175,7 +175,9 @@ public actor RemoteControlServer {
             }
         }
         newListener.newConnectionHandler = { [weak self] connection in
-            Task { await self?.handle(connection: connection) }
+            Task { [weak self] in
+                await self?.handle(connection: connection)
+            }
         }
         newListener.start(queue: .global(qos: .userInitiated))
         self.listener = newListener
@@ -202,7 +204,9 @@ public actor RemoteControlServer {
 
     private func handle(connection: NWConnection) {
         connection.start(queue: .global(qos: .userInitiated))
-        Task { await serve(connection: connection) }
+        Task { [weak self] in
+            await self?.serve(connection: connection)
+        }
     }
 
     private func serve(connection: NWConnection) async {

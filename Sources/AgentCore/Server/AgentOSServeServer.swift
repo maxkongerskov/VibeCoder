@@ -128,7 +128,9 @@ public actor AgentOSServeServer {
         params.requiredLocalEndpoint = NWEndpoint.hostPort(host: "127.0.0.1", port: nwPort)
         let newListener = try NWListener(using: params)
         newListener.newConnectionHandler = { [weak self] connection in
-            Task { await self?.handle(connection: connection) }
+            Task { [weak self] in
+                await self?.handle(connection: connection)
+            }
         }
         newListener.start(queue: .global(qos: .userInitiated))
         listener = newListener
@@ -154,7 +156,9 @@ public actor AgentOSServeServer {
 
     private func handle(connection: NWConnection) {
         connection.start(queue: .global(qos: .userInitiated))
-        Task { await serve(connection: connection) }
+        Task { [weak self] in
+            await self?.serve(connection: connection)
+        }
     }
 
     private func serve(connection: NWConnection) async {

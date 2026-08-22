@@ -143,7 +143,9 @@ public actor LocalAPIServer {
                 let newListener = try NWListener(using: params)
                 // Handler must be set *before* start — NWListener errors if not.
                 newListener.newConnectionHandler = { [weak self] connection in
-                    Task { await self?.handle(connection: connection) }
+                    Task { [weak self] in
+                        await self?.handle(connection: connection)
+                    }
                 }
                 let ready = try await Self.waitUntilReady(newListener, port: port)
                 if !ready {
@@ -225,7 +227,9 @@ public actor LocalAPIServer {
 
     private func handle(connection: NWConnection) {
         connection.start(queue: .global(qos: .userInitiated))
-        Task { await serve(connection: connection) }
+        Task { [weak self] in
+            await self?.serve(connection: connection)
+        }
     }
 
     /// Top-level request handler. Parses, routes, writes response, closes.
@@ -457,7 +461,7 @@ public actor LocalAPIServer {
 
         let clientGone = ClientGoneFlag()
         let cancel = LoopCancelHandle()
-        let loopTask = Task {
+        let loopTask = Task { [backend, model, messages, settings, projectRoot] in
             try await Self.runAgentLoopTurn(
                 backend: backend,
                 model: model,
