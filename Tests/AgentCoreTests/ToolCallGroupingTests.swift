@@ -332,6 +332,60 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertEqual(card.kindLabel, "Ran")
     }
 
+    func testLongRunningShellCarriesStartAndChipLabel() {
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        let now = start.addingTimeInterval(12)
+        let events = [ToolCallEvent(
+            name: "run_shell",
+            isRunning: true,
+            parsedCommand: "sleep 30",
+            startedAt: start)]
+        let groups = ToolCallGrouping.group(events)
+        guard case .shell(let card) = groups[0] else {
+            return XCTFail("expected running shell card")
+        }
+        XCTAssertEqual(card.startedAt, start)
+        XCTAssertEqual(card.elapsedSeconds(now: now), 12)
+        XCTAssertEqual(card.longRunningChipLabel(now: now), "Running for 12s")
+        XCTAssertEqual(card.kindLabel, "Running")
+        let listed = ToolCallGrouping.longRunningShells(events)
+        XCTAssertEqual(listed.count, 1)
+        XCTAssertEqual(listed[0].command, "sleep 30")
+    }
+
+    func testLongRunningChipFormatsMinutes() {
+        XCTAssertEqual(ToolCallGrouping.longRunningChipLabel(elapsedSeconds: 0), "Running for 0s")
+        XCTAssertEqual(ToolCallGrouping.longRunningChipLabel(elapsedSeconds: 59), "Running for 59s")
+        XCTAssertEqual(ToolCallGrouping.longRunningChipLabel(elapsedSeconds: 60), "Running for 1m 0s")
+        XCTAssertEqual(ToolCallGrouping.longRunningChipLabel(elapsedSeconds: 125), "Running for 2m 5s")
+        XCTAssertEqual(ToolCallGrouping.longRunningChipLabel(elapsedSeconds: -3), "Running for 0s")
+    }
+
+    func testFinishedShellHasNoLongRunningChip() {
+        let start = Date(timeIntervalSince1970: 50)
+        let events = [ToolCallEvent(
+            name: "run_shell",
+            parsedCommand: "ls",
+            shellStatus: .success,
+            startedAt: start)]
+        guard case .shell(let card) = ToolCallGrouping.group(events)[0] else {
+            return XCTFail("expected shell")
+        }
+        XCTAssertEqual(card.startedAt, start)
+        XCTAssertNil(card.longRunningChipLabel(now: start.addingTimeInterval(8)))
+        XCTAssertTrue(ToolCallGrouping.longRunningShells(events).isEmpty)
+    }
+
+    func testEmptyInFlightShellIsNotALongRunningChip() {
+        let events = [ToolCallEvent(
+            name: "run_shell",
+            isRunning: true,
+            parsedCommand: "",
+            startedAt: Date())]
+        XCTAssertTrue(ToolCallGrouping.group(events).isEmpty)
+        XCTAssertTrue(ToolCallGrouping.longRunningShells(events).isEmpty)
+    }
+
     func testShellDoesNotJoinAdjacentShells() {
         let events = [
             ToolCallEvent(name: "run_shell", parsedCommand: "ls"),

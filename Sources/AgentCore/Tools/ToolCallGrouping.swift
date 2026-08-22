@@ -6,8 +6,10 @@
 //  Explore card (N searches, N lists, N files) and consecutive file
 //  write/edit/delete into one file-change family (Writing/Wrote,
 //  Updating/Updated). Shell cards use Running/Ran plus Failed/Denied/Stopped
-//  and skip empty in-flight commands. Pure functions so App/Sable can render
-//  later — this file does not touch AgentLoop.swift.
+//  and skip empty in-flight commands. Long-running shells carry startedAt so
+//  the composer chip can show "Running for Ns" without App chrome here.
+//  Pure functions so App/Sable can render later — this file does not
+//  touch AgentLoop.swift.
 //
 
 import Foundation
@@ -47,6 +49,8 @@ public struct ToolCallEvent: Sendable, Equatable {
     public var added: Int
     /// Line deletes from patch/tool result when already known.
     public var deleted: Int
+    /// Wall-clock start for long-running shells (composer chip "Running for Ns").
+    public var startedAt: Date?
 
     public init(
         name: String,
@@ -55,7 +59,8 @@ public struct ToolCallEvent: Sendable, Equatable {
         shellStatus: ShellToolStatus = .success,
         path: String? = nil,
         added: Int = 0,
-        deleted: Int = 0
+        deleted: Int = 0,
+        startedAt: Date? = nil
     ) {
         self.name = name
         self.isRunning = isRunning
@@ -64,6 +69,7 @@ public struct ToolCallEvent: Sendable, Equatable {
         self.path = path
         self.added = added
         self.deleted = deleted
+        self.startedAt = startedAt
     }
 }
 
@@ -147,15 +153,35 @@ public struct ShellCard: Sendable, Equatable {
     public var index: Int
     public var status: ShellToolStatus
     public var command: String
+    /// When the shell started; UI computes elapsed vs now.
+    public var startedAt: Date?
 
-    public init(index: Int, status: ShellToolStatus, command: String) {
+    public init(
+        index: Int,
+        status: ShellToolStatus,
+        command: String,
+        startedAt: Date? = nil
+    ) {
         self.index = index
         self.status = status
         self.command = command
+        self.startedAt = startedAt
     }
 
     public var kindLabel: String { ToolCallGrouping.shellKindLabel(status) }
     public var statusLabel: String? { ToolCallGrouping.shellStatusLabel(status) }
+
+    /// Whole seconds since start (0 if start is missing or in the future).
+    public func elapsedSeconds(now: Date = Date()) -> Int {
+        guard let startedAt else { return 0 }
+        return max(0, Int(now.timeIntervalSince(startedAt)))
+    }
+
+    /// Composer chip copy when this shell is still running.
+    public func longRunningChipLabel(now: Date = Date()) -> String? {
+        guard status == .running else { return nil }
+        return ToolCallGrouping.longRunningChipLabel(elapsedSeconds: elapsedSeconds(now: now))
+    }
 }
 
 public enum GroupedToolCalls: Sendable, Equatable {
@@ -252,6 +278,25 @@ public enum ToolCallGrouping: Sendable {
         case .failed: return "Failed"
         case .denied: return "Denied"
         case .stopped: return "Stopped"
+        }
+    }
+
+    /// ZCode composer chip `chat.longRunning.*`: "Running for Ns" / "Running for Nm Ns".
+    public static func longRunningChipLabel(elapsedSeconds: Int) -> String {
+        let total = max(0, elapsedSeconds)
+        if total < 60 {
+            return "Running for \(total)s"
+        }
+        let minutes = total / 60
+        let seconds = total % 60
+        return "Running for \(minutes)m \(seconds)s"
+    }
+
+    /// Running shells that already have a parsed command (hidden empty in-flight skipped).
+    public static func longRunningShells(_ events: [ToolCallEvent]) -> [ShellCard] {
+        group(events).compactMap { group in
+            guard case .shell(let card) = group, card.status == .running else { return nil }
+            return card
         }
     }
 
@@ -368,7 +413,8 @@ public enum ToolCallGrouping: Sendable {
                 out.append(.shell(ShellCard(
                     index: i,
                     status: status,
-                    command: parsedShellCommand(ev))))
+                    command: parsedShellCommand(ev),
+                    startedAt: ev.startedAt)))
                 i += 1
             } else {
                 out.append(.standalone(index: i, family: fam))
