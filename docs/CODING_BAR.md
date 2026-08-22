@@ -13,17 +13,17 @@ Fill cells with command + result, or “skip: reason”. Mock-worker 012/013 and
 
 | | Value |
 |---|---|
-| Date | |
-| Backend / model | |
-| Surface | app / `vibecoder` / `eval-runner` |
-| Tools on the wire (count + list) | |
-| Schema tokens (estimate) | |
-| Time to first tool | |
-| Iterations | |
-| Prompt (one line) | |
-| Result | |
+| Date | 2026-08-23 |
+| Backend / model | Unsloth Studio `:8888` / `unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF` (loaded) |
+| Surface | `eval-runner` (Recommended catalog) |
+| Tools on the wire (count + list) | **17** — `apply_patch`, `create_plan`, `edit_file`, `find_symbol`, `git_commit`, `git_diff`, `git_status`, `glob_files`, `grep_code`, `list_directory`, `read_file`, `read_session_context`, `run_shell`, `tool_search`, `update_todo`, `write_file`, `xcode_build`. (`revise_plan` is deferred / `tool_search` only.) |
+| Schema tokens (estimate) | **2943** (JSON of offered schemas, char/4) |
+| Time to first tool | First `read_file` in the same turn; wall clock **36s** start→error |
+| Iterations | `read_file` → `apply_patch` → `read_file` → duplicate `read_file` blocked |
+| Prompt (one line) | 013 apply_patch smoke: change `print("hello")` to `print("hello, world")` via `apply_patch` |
+| Result | **Artifact pass, loop fail.** Oracle PASS (`hello.swift` patched). Then llama-server HTTP **400**: `Cannot have 2 or more assistant messages at the end of the list.` `eval-runner` exit 1. Log: `Evals/results/2026-08-23-unsloth-nemotron-d0-013/` |
 
-Use this row as the baseline. Day-30 compares **the same model** if possible.
+Use this row as the baseline. Day-30 compares **the same model** if possible. Other providers **skipped this window** (Max: Unsloth only).
 
 ---
 
@@ -31,9 +31,9 @@ Use this row as the baseline. Day-30 compares **the same model** if possible.
 
 | # | Bar | Evidence |
 |---|---|---|
-| C1 | Git project bound → worktree → patch (`apply_patch` or `edit_file`) → project test/build runs → main tree clean until merge | |
-| C2 | Same class of task **in-app** (VibeCoder.app), not only headless | |
-| C3 | Failure injects compiler/test output; loop does not hang | |
+| C1 | Git project bound → worktree → patch (`apply_patch` or `edit_file`) → project test/build runs → main tree clean until merge | **Not yet.** Day-0 is toy 013 in a temp dir (oracle pass). This-repo worktree C1 is Week 2. |
+| C2 | Same class of task **in-app** (VibeCoder.app), not only headless | Not yet |
+| C3 | Failure injects compiler/test output; loop does not hang | **Fail (Unsloth).** After a successful patch, the next model call 400s (`two assistant messages at end of list`). Not a hang; not a compiler inject. |
 | C4 | Cancel (⌘. / SIGINT) leaves a paired transcript | plumbing may already pass; re-verify if the loop changes |
 
 C1 project: this repo **or** another real Swift package. Toy `Evals/tasks/001-hello-world` is not C1.
@@ -46,10 +46,10 @@ Catalog contract: `LEAD_PLAN.md` §4.
 
 | # | Bar | Day-0 | Day-30 |
 |---|---|---|---|
-| S1 | Default tools-on-wire = coding core (no PDF, computer-use, browser-use, cron) | | |
-| S2 | Schema token estimate / turn | | |
-| S3 | Time to first tool (same model) | | |
-| S4 | Iterations to green on the C1 prompt (same model) | | |
+| S1 | Default tools-on-wire = coding core (no PDF, computer-use, browser-use, cron) | **17** coding-core; no PDF/web/computer/browser/cron | |
+| S2 | Schema token estimate / turn | **2943** | |
+| S3 | Time to first tool (same model) | subsumed in 36s wall (first tool was `read_file`) | |
+| S4 | Iterations to green on the C1 prompt (same model) | 013: 3 successful tools then 400. C1 on this repo not run | |
 
 `ToolOffer` “All tools” is opt-in. Master switches stay off.
 
@@ -63,12 +63,12 @@ For each: **down** (honest skip) / **connect** (`listModels` or Connection Test)
 
 | Provider | Down / skip | Connect | Coding turn | Notes |
 |---|---|---|---|---|
-| LM Studio (`:1234`) | | | | |
-| oMLX (`:8080`) | | | | |
-| Ollama (`:11434`) | | | | |
-| Unsloth Studio (`:8888`) | | | | F4 “Hey” ≠ coding turn |
-| EXO (`:52415`) | | | | |
-| Custom `/v1` | | | | Remote URL must not be marketed as local-only |
+| LM Studio (`:1234`) | skip (this window) | — | — | Max: Unsloth only for now |
+| oMLX (`:8080`) | skip (this window) | — | — | Max: Unsloth only for now |
+| Ollama (`:11434`) | skip (this window) | — | — | Max: Unsloth only for now |
+| Unsloth Studio (`:8888`) | up | **pass** (`listModels`, Nemotron Lightning `loaded`) | **partial** — 013 patch landed; loop 400 after | F4 “Hey” ≠ this row |
+| EXO (`:52415`) | skip (this window) | — | — | Max: Unsloth only for now |
+| Custom `/v1` | skip (this window) | — | — | Max: Unsloth only for now |
 
 **Window rule:** at least **two** backends complete a live coding turn. The rest must connect or skip with a named reason. Crashes and fake catalogs fail the bar.
 

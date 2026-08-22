@@ -1,0 +1,96 @@
+{"id":"jKmIXavDadgPRV7Lx4V8vFBfjQVIyJVu","is_error":false,"name":"read_file","phase":"started","type":"tool_call"}
+{"id":"jKmIXavDadgPRV7Lx4V8vFBfjQVIyJVu","is_error":false,"name":"read_file","phase":"completed","type":"tool_call"}
+{"id":"1xRNzplypZnqer5cDc6Z6Nyfui8AhBJX","is_error":false,"name":"apply_patch","phase":"started","type":"tool_call"}
+{"id":"1xRNzplypZnqer5cDc6Z6Nyfui8AhBJX","is_error":false,"name":"apply_patch","phase":"completed","type":"tool_call"}
+{"id":"fvLkOmJtuI5JEpWWRO6211112Edxfxrf","is_error":false,"name":"read_file","phase":"started","type":"tool_call"}
+{"id":"fvLkOmJtuI5JEpWWRO6211112Edxfxrf","is_error":false,"name":"read_file","phase":"completed","type":"tool_call"}
+{"text":"Done","type":"text"}
+{"text":".","type":"text"}
+{"text":" The","type":"text"}
+{"text":" unified","type":"text"}
+{"text":" diff","type":"text"}
+{"text":" was","type":"text"}
+{"text":" applied","type":"text"}
+{"text":" to","type":"text"}
+{"text":" `","type":"text"}
+{"text":"hello","type":"text"}
+{"text":".swift","type":"text"}
+{"text":"`,","type":"text"}
+{"text":" changing","type":"text"}
+{"text":" `","type":"text"}
+{"text":"print","type":"text"}
+{"text":"(\"","type":"text"}
+{"text":"hello","type":"text"}
+{"text":"\")","type":"text"}
+{"text":"`","type":"text"}
+{"text":" to","type":"text"}
+{"text":" `","type":"text"}
+{"text":"print","type":"text"}
+{"text":"(\"","type":"text"}
+{"text":"hello","type":"text"}
+{"text":",","type":"text"}
+{"text":" world","type":"text"}
+{"text":"\")","type":"text"}
+{"text":"`.\n","type":"text"}
+{"id":"S2p94LmzlZ295bG5cwzMeCuXy6z7FtjV","is_error":false,"name":"read_file","phase":"started","type":"tool_call"}
+{"id":"S2p94LmzlZ295bG5cwzMeCuXy6z7FtjV","is_error":true,"name":"read_file","phase":"completed","type":"tool_call"}
+{"text":"The","type":"text"}
+{"text":" edit","type":"text"}
+{"text":" is","type":"text"}
+{"text":" complete","type":"text"}
+{"text":".","type":"text"}
+{"text":" The","type":"text"}
+{"text":" unified","type":"text"}
+{"text":" diff","type":"text"}
+{"text":" successfully","type":"text"}
+{"text":" changed","type":"text"}
+{"text":" `","type":"text"}
+{"text":"print","type":"text"}
+{"text":"(\"","type":"text"}
+{"text":"hello","type":"text"}
+{"text":"\")","type":"text"}
+{"text":"`","type":"text"}
+{"text":" to","type":"text"}
+{"text":" `","type":"text"}
+{"text":"print","type":"text"}
+{"text":"(\"","type":"text"}
+{"text":"hello","type":"text"}
+{"text":",","type":"text"}
+{"text":" world","type":"text"}
+{"text":"\")","type":"text"}
+{"text":"`","type":"text"}
+{"text":" in","type":"text"}
+{"text":" `","type":"text"}
+{"text":"hello","type":"text"}
+{"text":".swift","type":"text"}
+{"text":"`.\n\n","type":"text"}
+{"text":"**","type":"text"}
+{"text":"Result","type":"text"}
+{"text":":**","type":"text"}
+{"text":" `","type":"text"}
+{"text":"hello","type":"text"}
+{"text":".swift","type":"text"}
+{"text":"`","type":"text"}
+{"text":" now","type":"text"}
+{"text":" contains","type":"text"}
+{"text":":\n","type":"text"}
+{"text":"```","type":"text"}
+{"text":"sw","type":"text"}
+{"text":"ift","type":"text"}
+{"text":"\n","type":"text"}
+{"text":"func","type":"text"}
+{"text":" greet","type":"text"}
+{"text":"()","type":"text"}
+{"text":" {\n","type":"text"}
+{"text":"   ","type":"text"}
+{"text":" print","type":"text"}
+{"text":"(\"","type":"text"}
+{"text":"hello","type":"text"}
+{"text":",","type":"text"}
+{"text":" world","type":"text"}
+{"text":"\")\n","type":"text"}
+{"text":"}\n","type":"text"}
+{"text":"```","type":"text"}
+{"text":"The edit is complete. The unified diff successfully changed `print(\"hello\")` to `print(\"hello, world\")` in `hello.swift`.\n\n**Result:** `hello.swift` now contains:\n```swift\nfunc greet() {\n    print(\"hello, world\")\n}\n```","type":"text"}
+{"message":"Transport: HTTP 400: {\"error\":{\"message\":\"llama-server error: {\\\"error\\\":{\\\"code\\\":400,\\\"message\\\":\\\"Cannot have 2 or more assistant messages at the end of the list.\\\",\\\"type\\\":\\\"invalid_request_error\\\"}}\",\"type\":\"invalid","type":"error"}
+{"message":"transport(\"HTTP 400: {\\\"error\\\":{\\\"message\\\":\\\"llama-server error: {\\\\\\\"error\\\\\\\":{\\\\\\\"code\\\\\\\":400,\\\\\\\"message\\\\\\\":\\\\\\\"Cannot have 2 or more assistant messages at the end of the list.\\\\\\\",\\\\\\\"type\\\\\\\":\\\\\\\"invalid_request_error\\\\\\\"}}\\\",\\\"type\\\":\\\"invalid\")","type":"error"}

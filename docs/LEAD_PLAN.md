@@ -210,11 +210,19 @@ Update in place. Newest first. Format:
 - Not doing: one sentence if temptation appeared
 ```
 
-### 2026-08-23
+### 2026-08-23 (evening)
 
-- Milestone: W1 in progress (1.1–1.2)  
+- Milestone: W1.3 done (day-0). W1.1–1.2 committed.  
 - Track: —  
-- Numbers: not measured (day-0 due 1.3)  
-- Next action: tests for coding-core ToolOffer, then day-0 snapshot on a live backend  
-- Not doing: CloudBots, computer-use slice 3, Flutter, AgentLoop rewrite  
-- Done this update: `ToolOffer.recommendedNames` is the §4 coding core (18 tools: patch/edit on; PDF/web/task off)
+- Numbers: Unsloth Nemotron Lightning — **17 tools / ~2943 schema tokens / 36s / 013 oracle PASS + loop HTTP 400**  
+- Next action: fix llama-server “two assistant messages at end of list” so a Unsloth turn can *finish*; then W2.1 C1 on this repo  
+- Not doing: other providers, CloudBots, loop rewrite, GitHub push  
+- Done this update: ToolOffer landed; eval-runner speaks Unsloth; day-0 013 against loaded Nemotron  
+
+### 2026-08-23 (morning)
+
+- Milestone: W1 started (1.1–1.2)  
+- Track: —  
+- Numbers: not measured  
+- Next action: coding-core ToolOffer + day-0 snapshot  
+- Not doing: CloudBots, computer-use slice 3, Flutter, AgentLoop rewrite

@@ -1,0 +1,28 @@
+[eval-runner] tools_on_wire=17 schema_token_est=2943 names=apply_patch,create_plan,edit_file,find_symbol,git_commit,git_diff,git_status,glob_files,grep_code,list_directory,read_file,read_session_context,run_shell,tool_search,update_todo,write_file,xcode_build
+[eval-runner] backend=unsloth model=unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF project=/var/folders/d0/8rwktxv56vq3dtxj_m53mml40000gn/T/vc-d0-013-XXXX.s2hhP8BdGA max_iter=12 json_events=true
+[eval-runner] prompt: Read hello.swift, then apply a unified diff so print("hello") becomes print("hello, world"). Use apply_patch. Do not rewrite the whole file.
+[eval-runner] tool start: read_file (Reading hello.swift…)
+[✓ read_file]
+[eval-runner] ✓ read_file:     1 | func greet() {
+    2 |     print("hello")
+    3 | }
+    4 | 
+[eval-runner] tool start: apply_patch (Editing file…)
+[✓ apply_patch]
+[eval-runner] ✓ apply_patch: Patched hello.swift (1 hunks). hunk_id=86DF7CFB-6A0C-49E8-A5DC-C8D3708B5DDA
+[eval-runner] tool start: read_file (Reading hello.swift…)
+[✓ read_file]
+[eval-runner] ✓ read_file:     1 | func greet() {
+    2 |     print("hello, world")
+    3 | }
+    4 | 
+[eval-runner] tool start: read_file (Reading hello.swift…)
+[✗ read_file]
+[eval-runner] ✗ read_file: Identical consecutive tool call blocked: `read_file` was just run with equivalent arguments. Do not execute it again. Us
+
+[eval-runner] error: Transport: HTTP 400: {"error":{"message":"llama-server error: {\"error\":{\"code\":400,\"message\":\"Cannot have 2 or more assistant messages at the end of the list.\",\"type\":\"invalid_request_error\"}}","type":"invalid
+
+[eval-runner] finished: error: Transport: HTTP 400: {"error":{"message":"llama-server error: {\"error\":{\"code\":400,\"message\":\"Cannot have 2 or more assistant messages at the end of the list.\",\"type\":\"invalid_request_error\"}}","type":"invalid
+
+[eval-runner] agent error: transport("HTTP 400: {\"error\":{\"message\":\"llama-server error: {\\\"error\\\":{\\\"code\\\":400,\\\"message\\\":\\\"Cannot have 2 or more assistant messages at the end of the list.\\\",\\\"type\\\":\\\"invalid_request_error\\\"}}\",\"type\":\"invalid")
+eval-runner error: transport("HTTP 400: {\"error\":{\"message\":\"llama-server error: {\\\"error\\\":{\\\"code\\\":400,\\\"message\\\":\\\"Cannot have 2 or more assistant messages at the end of the list.\\\",\\\"type\\\":\\\"invalid_request_error\\\"}}\",\"type\":\"invalid")
