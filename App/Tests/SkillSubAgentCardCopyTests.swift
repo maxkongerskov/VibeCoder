@@ -187,6 +187,31 @@ final class SkillSubAgentCardCopyTests: XCTestCase {
         XCTAssertEqual(SkillCardCopy.verb(SkillCard(index: 0, isRunning: false, skillName: "x")), "Ran skill")
     }
 
+    func testUngroupedSubAgentRowUsesGroupedLaunchingCopyNotTypeDescChrome() throws {
+        let src = try appSource("Views/Chat/ZCodeActivityLineView.swift")
+        let ungrouped = slice(src, start: "private var subagentRow: some View {", end: "private var subagentStatusText:")
+        XCTAssertFalse(ungrouped.isEmpty, "ungrouped SubAgent row must exist")
+        XCTAssertTrue(src.contains("if isAgentFamily {"))
+        XCTAssertTrue(src.contains("private var isAgentFamily:"))
+        XCTAssertTrue(src.contains("private var asAgentCard: AgentCard"))
+        XCTAssertTrue(ungrouped.contains("Text(SubAgentCardCopy.title)"))
+        XCTAssertTrue(ungrouped.contains("Text(SubAgentCardCopy.verb(asAgentCard))"))
+        XCTAssertTrue(ungrouped.contains("Text(SubAgentCardCopy.status(asAgentCard))"))
+        // Old dual chrome: [box] SubAgent {type} · {desc} — not Launching/Launched.
+        XCTAssertFalse(ungrouped.contains("Text(taskArgs.type)"))
+        XCTAssertFalse(ungrouped.contains("Text(subagentStatusText)"))
+        XCTAssertFalse(ungrouped.contains("Text(\"SubAgent\")"))
+        XCTAssertFalse(ungrouped.contains("Theme.Palette.subagentType"))
+        XCTAssertFalse(ungrouped.contains("general-purpose"))
+        let grouped = slice(src, start: "private func subAgentRow(", end: "private var toolsHeader")
+        XCTAssertTrue(grouped.contains("Text(SubAgentCardCopy.title)"))
+        XCTAssertTrue(grouped.contains("Text(\"\\(SubAgentCardCopy.verb(card)) · \\(SubAgentCardCopy.status(card))\")"))
+        XCTAssertEqual(SubAgentCardCopy.verb(AgentCard(index: 0, isRunning: true, prompt: "x")), "Launching")
+        XCTAssertEqual(SubAgentCardCopy.verb(AgentCard(index: 0, isRunning: false, prompt: "x")), "Launched")
+        XCTAssertFalse(ungrouped.localizedCaseInsensitiveContains("zcode"))
+        XCTAssertFalse(ungrouped.localizedCaseInsensitiveContains("99%"))
+    }
+
     func testPaintedCopyOmitsOpenInSidePaneAndLatestRows() throws {
         let src = try appSource("Views/Chat/ZCodeActivityLineView.swift")
         let skillFn = slice(src, start: "private func skillRow(", end: "private func subAgentRow(")
