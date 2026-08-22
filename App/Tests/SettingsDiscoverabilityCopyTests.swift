@@ -310,4 +310,28 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         XCTAssertFalse(empty.contains("electron"))
         XCTAssertTrue(empty.contains("agent"))
     }
+
+    func testExploreCardCopyBuckets() {
+        let counts = ExploreBucketCounts(searches: 2, lists: 1, files: 3)
+        XCTAssertEqual(ExploreCardCopy.verb, "Explore")
+        XCTAssertEqual(ExploreCardCopy.status(counts: counts), "2 searches, 1 list, 3 files")
+        XCTAssertEqual(
+            ExploreCardCopy.status(counts: ExploreBucketCounts()),
+            "0 files")
+        XCTAssertFalse(ExploreCardCopy.verb.lowercased().contains("zcode"))
+        let grouped = ToolCallGrouping.group([
+            ToolCallEvent(name: "grep_code"),
+            ToolCallEvent(name: "list_directory"),
+            ToolCallEvent(name: "read_file"),
+        ])
+        XCTAssertEqual(grouped.count, 1)
+        if case .explore(let c, let idx) = grouped[0] {
+            XCTAssertEqual(c.searches, 1)
+            XCTAssertEqual(c.lists, 1)
+            XCTAssertEqual(c.files, 1)
+            XCTAssertEqual(idx.count, 3)
+        } else {
+            XCTFail("expected explore group")
+        }
+    }
 }

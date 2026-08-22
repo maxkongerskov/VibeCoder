@@ -110,6 +110,26 @@ enum EmptyChatCopy {
     }
 }
 
+/// Chat Explore card (ZCode grouping, VibeCoder wording).
+enum ExploreCardCopy {
+    static let verb = "Explore"
+
+    static func status(counts: ExploreBucketCounts) -> String {
+        var parts: [String] = []
+        if counts.searches > 0 {
+            parts.append("\(counts.searches) search\(counts.searches == 1 ? "" : "es")")
+        }
+        if counts.lists > 0 {
+            parts.append("\(counts.lists) list\(counts.lists == 1 ? "" : "s")")
+        }
+        if counts.files > 0 {
+            parts.append("\(counts.files) file\(counts.files == 1 ? "" : "s")")
+        }
+        if parts.isEmpty { return "0 files" }
+        return parts.joined(separator: ", ")
+    }
+}
+
 /// Bind outcomes that need a modest visible reason (not a wizard).
 enum WorktreeBindCopy {
     static func notice(for result: WorktreeBindResult) -> String? {

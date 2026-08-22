@@ -434,12 +434,17 @@ struct ZCodeActivityStack: View {
 
             if showRows {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(states) { state in
-                        ZCodeActivityLineView(
-                            state: state,
-                            onKillJob: onKillJob,
-                            runningJobID: jobID(for: state)
-                        )
+                    ForEach(groupedItems) { item in
+                        switch item {
+                        case .explore(_, let counts, let running):
+                            exploreRow(counts: counts, running: running)
+                        case .line(let state):
+                            ZCodeActivityLineView(
+                                state: state,
+                                onKillJob: onKillJob,
+                                runningJobID: jobID(for: state)
+                            )
+                        }
                     }
                 }
                 .padding(.top, 8)
@@ -465,6 +470,69 @@ struct ZCodeActivityStack: View {
                 isExpanded = true
             }
         }
+    }
+
+    private enum StackItem: Identifiable {
+        case explore(id: String, counts: ExploreBucketCounts, running: Bool)
+        case line(ToolCallUIState)
+        var id: String {
+            switch self {
+            case .explore(let id, _, _): return "explore-\(id)"
+            case .line(let state): return state.id
+            }
+        }
+    }
+
+    /// Consecutive searches/lists/reads collapse to one Explore card (2+).
+    private var groupedItems: [StackItem] {
+        let events = states.map { state -> ToolCallEvent in
+            let running = state.status == .running || state.status == .pending
+            let cmd: String? = (state.toolName == "run_shell" || state.toolName == "run_shell_command")
+                ? state.input : nil
+            return ToolCallEvent(name: state.toolName, isRunning: running, parsedCommand: cmd)
+        }
+        var items: [StackItem] = []
+        for group in ToolCallGrouping.group(events) {
+            switch group {
+            case .explore(let counts, let indices):
+                if counts.total >= 2 {
+                    let running = indices.contains { events[$0].isRunning }
+                    let id = indices.map { states[$0].id }.joined(separator: "+")
+                    items.append(.explore(id: id, counts: counts, running: running))
+                } else {
+                    for i in indices {
+                        items.append(.line(states[i]))
+                    }
+                }
+            case .standalone(let index, _):
+                items.append(.line(states[index]))
+            }
+        }
+        return items
+    }
+
+    @ViewBuilder
+    private func exploreRow(counts: ExploreBucketCounts, running: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "folder.badge.magnifyingglass")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text(ExploreCardCopy.verb)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text("·")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(Theme.Palette.activityDivider)
+            Text(ExploreCardCopy.status(counts: counts))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Theme.Palette.activityStatus)
+                .lineLimit(1)
+            if running {
+                ProgressView().controlSize(.mini)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityLabel("\(ExploreCardCopy.verb) · \(ExploreCardCopy.status(counts: counts))")
     }
 
     private var toolsHeader: some View {
