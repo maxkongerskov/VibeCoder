@@ -587,6 +587,12 @@ struct ZCodeActivityStack: View {
                 items.append(.todo(card))
             case .mcp(let card):
                 items.append(.mcp(card))
+            case .planGuidance(let card):
+                items.append(.line(states[card.index]))
+            case .switchMode(let card):
+                items.append(.line(states[card.index]))
+            case .askUserQuestion(let card):
+                items.append(.line(states[card.index]))
             case .standalone(let index, _):
                 items.append(.line(states[index]))
             }
