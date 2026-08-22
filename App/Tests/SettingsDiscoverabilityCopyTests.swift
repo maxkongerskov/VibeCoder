@@ -294,4 +294,20 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
             )
         )
     }
+
+    func testComposerPlaceholderAskTheAgentNotZCode() {
+        XCTAssertEqual(
+            EmptyChatCopy.composerPlaceholder(isEmptyChat: true, isRunning: false),
+            "Ask the agent…")
+        XCTAssertEqual(
+            EmptyChatCopy.composerPlaceholder(isEmptyChat: false, isRunning: false),
+            "Ask for follow-up changes")
+        XCTAssertEqual(
+            EmptyChatCopy.composerPlaceholder(isEmptyChat: true, isRunning: true),
+            "Keep typing to queue…")
+        let empty = EmptyChatCopy.composerEmpty.lowercased()
+        XCTAssertFalse(empty.contains("zcode"))
+        XCTAssertFalse(empty.contains("electron"))
+        XCTAssertTrue(empty.contains("agent"))
+    }
 }

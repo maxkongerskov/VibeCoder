@@ -428,6 +428,9 @@ struct ChatView: View {
                     ?? viewModel.conversation.projectRoot,
                 onSend: handleSend,
                 isRunning: viewModel.isRunning,
+                isEmptyChat: !viewModel.conversation.messages.contains {
+                    $0.role == .user || $0.role == .assistant
+                },
                 onCancel: { viewModel.cancel() },
                 hasSelectedModel: composerHasModel,
                 promptHistory: viewModel.promptHistory,

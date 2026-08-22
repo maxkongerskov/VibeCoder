@@ -301,8 +301,14 @@ private struct UserSpeechPill: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
                 .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Theme.Palette.bubbleUser)
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 16,
+                        bottomLeadingRadius: 16,
+                        bottomTrailingRadius: 16,
+                        topTrailingRadius: 4,
+                        style: .continuous
+                    )
+                    .fill(Theme.Palette.bubbleUser)
                 )
                 .textSelection(.enabled)
         }

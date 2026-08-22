@@ -27,6 +27,8 @@ struct InputBarViewV2: View {
     /// button morphs from Send (arrow up) into Cancel (square) so the
     /// user can stop the in-flight turn without leaving the input area.
     var isRunning: Bool = false
+    /// True when this conversation has no user/assistant turns yet.
+    var isEmptyChat: Bool = false
     var onCancel: () -> Void = {}
     /// False until a model is selected. Send stays disabled; Return still
     /// calls `onSend` so ChatViewModel can set an honest status line.
@@ -433,20 +435,22 @@ struct InputBarViewV2: View {
                 slashCommandMenu
             }
 
-            TextField(
-                isRunning ? "Keep typing to queue…" : "Ask for follow-up changes",
-                text: $text,
-                axis: .vertical
-            )
-            .textFieldStyle(.plain)
-            .hidesSystemFocusRing()
-            .font(Theme.Typography.body(size: fontSize))
-            .foregroundStyle(Theme.Palette.primary)
-            .lineLimit(1 ... Theme.ChatLayout.inputEditorMaxLines)
-            .frame(minHeight: Theme.ChatLayout.inputEditorMinHeight, alignment: .topLeading)
-            .frame(maxHeight: Theme.ChatLayout.inputEditorMaxHeight, alignment: .topLeading)
-            .fixedSize(horizontal: false, vertical: true)
-            .focused($focused)
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text(EmptyChatCopy.composerPlaceholder(
+                        isEmptyChat: isEmptyChat, isRunning: isRunning))
+                        .font(Theme.Typography.body(size: fontSize))
+                        .foregroundStyle(Theme.Palette.tertiary)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $text)
+                    .font(Theme.Typography.body(size: fontSize))
+                    .foregroundStyle(Theme.Palette.primary)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: Theme.ChatLayout.inputEditorMinHeight, alignment: .topLeading)
+                    .frame(maxHeight: Theme.ChatLayout.inputEditorMaxHeight, alignment: .topLeading)
+                    .focused($focused)
+            }
             .onKeyPress(.return) {
                 if NSEvent.modifierFlags.contains(.shift) {
                     text += "\n"

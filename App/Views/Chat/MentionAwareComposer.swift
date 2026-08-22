@@ -36,6 +36,7 @@ struct MentionAwareComposer: View {
     var projectRoot: URL?
     var onSend: () -> Void = {}
     var isRunning: Bool = false
+    var isEmptyChat: Bool = false
     var onCancel: () -> Void = {}
     /// Conversation or app has a selected model. Send is disabled until true.
     var hasSelectedModel: Bool = false
@@ -87,6 +88,7 @@ struct MentionAwareComposer: View {
                     attachments: $attachments,
                     onSend: onSend,
                     isRunning: isRunning,
+                    isEmptyChat: isEmptyChat,
                     onCancel: onCancel,
                     hasSelectedModel: hasSelectedModel,
                     contextTokens: contextTokens,

@@ -97,6 +97,17 @@ enum EmptyChatCopy {
         }
         return "Bind a project folder, describe a task, and the agent will plan, edit, and verify on your machine."
     }
+
+    /// Composer field. VibeCoder wording — never "Ask ZCode".
+    static let composerEmpty = "Ask the agent…"
+    static let composerFollowUp = "Ask for follow-up changes"
+    static let composerQueue = "Keep typing to queue…"
+
+    static func composerPlaceholder(isEmptyChat: Bool, isRunning: Bool) -> String {
+        if isRunning { return composerQueue }
+        if isEmptyChat { return composerEmpty }
+        return composerFollowUp
+    }
 }
 
 /// Bind outcomes that need a modest visible reason (not a wizard).
