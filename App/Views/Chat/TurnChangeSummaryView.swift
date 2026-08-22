@@ -169,7 +169,7 @@ struct TurnChangeSummaryView: View {
                         }
                     }
                 } label: {
-                    Text(reviewing ? "Hide" : "Review")
+                    Text(reviewing ? ReviewCardCopy.hide : ReviewCardCopy.verb)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(Theme.Palette.accent)
                         .padding(.horizontal, 8)
@@ -189,13 +189,13 @@ struct TurnChangeSummaryView: View {
 
             if reviewing {
                 if lines.isEmpty {
-                    Text("No diff preview")
+                    Text(ReviewCardCopy.empty)
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.Palette.tertiary)
                         .padding(.horizontal, 12)
                         .padding(.bottom, 8)
                 } else {
-                    CodeDiffBlock(lines: lines, maxVisible: 40, animateReveal: false)
+                    CodeBlockView(language: ReviewCardCopy.language, code: ReviewCardCopy.unified(path: file.path, lines: lines))
                         .padding(.horizontal, 8)
                         .padding(.bottom, 8)
                 }

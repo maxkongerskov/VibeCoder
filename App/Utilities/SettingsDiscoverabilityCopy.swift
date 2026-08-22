@@ -145,6 +145,46 @@ enum ExploreCardCopy {
     }
 }
 
+/// Review card unified-diff preview (Atlas `UnifiedDiff.reviewPreview`).
+enum ReviewCardCopy {
+    static let verb = "Review"
+    static let hide = "Hide"
+    static let empty = "No diff preview"
+    static let language = "diff"
+
+    static func unified(path: String, lines: [CodeDiffLine]) -> String {
+        let body = lines.map { "\($0.kindPrefix)\($0.text)" }
+        var out = ["--- a/\(path)", "+++ b/\(path)"]
+        if !body.isEmpty {
+            let oldLen = lines.reduce(0) { n, line in
+                switch line {
+                case .removed, .context: return n + 1
+                case .added: return n
+                }
+            }
+            let newLen = lines.reduce(0) { n, line in
+                switch line {
+                case .added, .context: return n + 1
+                case .removed: return n
+                }
+            }
+            out.append("@@ -1,\(max(oldLen, 0)) +1,\(max(newLen, 0)) @@")
+            out.append(contentsOf: body)
+        }
+        return truncate(out)
+    }
+
+    static func truncate(_ lines: [String], maxLines: Int = UnifiedDiff.reviewPreviewMaxLines) -> String {
+        if lines.count <= maxLines {
+            return lines.joined(separator: "\n")
+        }
+        let omitted = lines.count - maxLines
+        var kept = Array(lines.prefix(maxLines))
+        kept.append("Diff preview truncated: \(omitted) lines omitted…")
+        return kept.joined(separator: "\n")
+    }
+}
+
 /// Chat shell card (command title + Running/Ran). VibeCoder wording.
 enum ShellCardCopy {
     static func title(_ card: ShellCard) -> String {

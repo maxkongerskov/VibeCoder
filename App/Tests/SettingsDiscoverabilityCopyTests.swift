@@ -333,6 +333,23 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         XCTAssertEqual(ShellCard(index: 0, status: .success, command: "ls").kindLabel, "Ran")
     }
 
+
+    func testReviewCardUnifiedPreview() {
+        XCTAssertEqual(ReviewCardCopy.verb, "Review")
+        XCTAssertEqual(ReviewCardCopy.hide, "Hide")
+        let text = ReviewCardCopy.unified(
+            path: "App/Foo.swift",
+            lines: [.removed("old"), .added("new")])
+        XCTAssertTrue(text.contains("--- a/App/Foo.swift"))
+        XCTAssertTrue(text.contains("+++ b/App/Foo.swift"))
+        XCTAssertTrue(text.contains("-old"))
+        XCTAssertTrue(text.contains("+new"))
+        XCTAssertFalse(text.lowercased().contains("zcode"))
+        let many = (0..<500).map { CodeDiffLine.added("l\($0)") }
+        let truncated = ReviewCardCopy.unified(path: "x.swift", lines: many)
+        XCTAssertTrue(truncated.contains("lines omitted"))
+    }
+
     func testExploreCardCopyBuckets() {
         let counts = ExploreBucketCounts(searches: 2, lists: 1, files: 3)
         XCTAssertEqual(ExploreCardCopy.verb, "Explore")
