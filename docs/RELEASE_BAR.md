@@ -4,7 +4,7 @@ What **99%** means for a **BYO OpenAI-compatible HTTP** local agent. Not a hobby
 
 Ada owns this file. Lin/Pixel/Rigel raise the numbers with **evidence**, not vibes. Do not claim 99% without the proof column filled.
 
-**Today (2026-08-22): not 99% daily-driver.** F4 is live in-app Unsloth first chat (Reed, this Mac; “Hey”; gemma 4 26B ~6s) — filled cells still ≠ 99%. GitHub unpushed. GHA `SKIP_APP_TESTS=1`. A1/A2 and Connection Test still not live.
+**Today (2026-08-22): not 99% daily-driver.** F4 is live in-app Unsloth first chat (Reed, this Mac; “Hey”; gemma 4 26B ~6s) — filled cells still ≠ 99%. GitHub unpushed. GHA `SKIP_APP_TESTS=1`. A1/A2 and Connection Test still not live. Stream slice 1 (Sable, local, unpushed) is copy/structure characterization (`LiveStreamSlice1CopyTests`) — not 99%, not a timed GitHub merge vs Unsloth.
 
 ---
 
@@ -152,7 +152,7 @@ BLOCKERS: …
 NEXT_ASSIGNMENT: …
 ```
 
-**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts that prove the bar. **Filled cells ≠ 99%.** Current honest status (2026-08-22): **not 99% daily-driver.** F4 live Unsloth first chat witnessed by Reed (Mac app window, one turn “Hey”) — **not** 012/013, **not** eval-runner, **not** CLI. GitHub still unpushed. GHA `SKIP_APP_TESTS=1` (local WARN unless `APP_TESTS_STRICT=1`) — App tests **do not gate merge**. B1 Connection Test and A1/A2 still unit/mock, not live. 012/013 remain mock-worker. Residuals that still block 99%: Unsloth native/max 1M + loaded 32k must not display as a lone 32k (formatter tests; live meter binding not proven). App tests not a merge gate; no live Connection Test; A1/A2 not live HTTP/in-app; no ⌘Q or SIGKILL; no mid-stream persist checkpoint. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
+**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts that prove the bar. **Filled cells ≠ 99%.** Current honest status (2026-08-22): **not 99% daily-driver.** F4 live Unsloth first chat witnessed by Reed (Mac app window, one turn “Hey”) — **not** 012/013, **not** eval-runner, **not** CLI. GitHub still unpushed. GHA `SKIP_APP_TESTS=1` (local WARN unless `APP_TESTS_STRICT=1`) — App tests **do not gate merge**. B1 Connection Test and A1/A2 still unit/mock, not live. 012/013 remain mock-worker. Residuals that still block 99%: Unsloth native/max 1M + loaded 32k must not display as a lone 32k (formatter tests; live meter binding not proven). Stream slice 1 is local/unpushed characterization, not a 99% raise and not speed vs Unsloth Studio. App tests not a merge gate; no live Connection Test; A1/A2 not live HTTP/in-app; no ⌘Q or SIGKILL; no mid-stream persist checkpoint. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
 
 ### Five-way (2026-08-21) — historical, not today’s score
 
