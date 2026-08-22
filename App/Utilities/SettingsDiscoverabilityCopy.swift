@@ -40,6 +40,9 @@ enum SettingsDiscoverabilityCopy {
     static let grantsEmpty =
         "No Always/Never grants yet. When the agent asks for shell or path approval, choose Always or Never to pin a grant here."
 
+    /// Save-panel default. Must not use the old AgentOS product name.
+    static let conversationsExportFilename = "\(AppBranding.displayName)-conversations.json"
+
     /// Keywords beyond tab title/subtitle so Settings search finds Connection panes.
     static func searchKeywords(tabRaw: String) -> [String] {
         switch tabRaw {

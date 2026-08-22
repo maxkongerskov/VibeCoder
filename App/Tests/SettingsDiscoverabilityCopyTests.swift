@@ -261,4 +261,10 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         }
         XCTAssertEqual(CloudBotCopy.cloudLabel, "Cloud")
     }
+
+    func testConversationExportFilenameUsesCurrentProductName() {
+        let name = SettingsDiscoverabilityCopy.conversationsExportFilename
+        XCTAssertEqual(name, "VibeCoder-conversations.json")
+        XCTAssertFalse(name.lowercased().contains("agentos"))
+    }
 }

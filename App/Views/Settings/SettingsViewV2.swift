@@ -513,7 +513,7 @@ struct PrivacySettingsView: View {
 
     private func exportConversations() {
         let panel = NSSavePanel()
-        panel.nameFieldStringValue = "agentos-conversations.json"
+        panel.nameFieldStringValue = SettingsDiscoverabilityCopy.conversationsExportFilename
         panel.allowedContentTypes = [.json]
         panel.canCreateDirectories = true
         guard panel.runModal() == .OK, let url = panel.url else { return }
