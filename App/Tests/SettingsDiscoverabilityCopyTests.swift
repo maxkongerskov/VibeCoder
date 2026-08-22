@@ -322,6 +322,17 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         XCTAssertFalse(EmptyChatCopy.queueLabel.lowercased().contains("zcode"))
     }
 
+
+    func testShellCardCopyRunningChip() {
+        XCTAssertEqual(ToolCallGrouping.longRunningChipLabel(elapsedSeconds: 12), "Running for 12s")
+        XCTAssertEqual(ToolCallGrouping.longRunningChipLabel(elapsedSeconds: 125), "Running for 2m 5s")
+        let card = ShellCard(index: 0, status: .running, command: "sleep 2", startedAt: Date().addingTimeInterval(-12))
+        XCTAssertEqual(ShellCardCopy.title(card), "sleep 2")
+        XCTAssertTrue(ShellCardCopy.status(card).hasPrefix("Running for"))
+        XCTAssertFalse(ShellCardCopy.status(card).lowercased().contains("zcode"))
+        XCTAssertEqual(ShellCard(index: 0, status: .success, command: "ls").kindLabel, "Ran")
+    }
+
     func testExploreCardCopyBuckets() {
         let counts = ExploreBucketCounts(searches: 2, lists: 1, files: 3)
         XCTAssertEqual(ExploreCardCopy.verb, "Explore")

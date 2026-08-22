@@ -145,6 +145,24 @@ enum ExploreCardCopy {
     }
 }
 
+/// Chat shell card (command title + Running/Ran). VibeCoder wording.
+enum ShellCardCopy {
+    static func title(_ card: ShellCard) -> String {
+        let cmd = card.command.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cmd.isEmpty ? "Shell" : cmd
+    }
+
+    static func status(_ card: ShellCard, now: Date = Date()) -> String {
+        if card.status == .running, let chip = card.longRunningChipLabel(now: now) {
+            return chip
+        }
+        if let overlay = card.statusLabel {
+            return "\(card.kindLabel) · \(overlay)"
+        }
+        return card.kindLabel
+    }
+}
+
 /// Chat file-change group card (ZCode grouping, VibeCoder wording).
 enum FileChangeCardCopy {
     static func verb(events: [ToolCallEvent], memberIndices: [Int]) -> String {

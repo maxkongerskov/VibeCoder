@@ -414,6 +414,16 @@ struct ChatView: View {
             // No ProcessingStatusBar above the composer — run/thinking state
             // already lives in the transcript (Working header, ReasoningBlock,
             // PendingAssistantBubble). Docked bar was redundant chrome.
+            // Long-running shells still get Atlas's "Running for Ns" chip here.
+            if let chip = longRunningShellChip {
+                Text(chip)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(Theme.Palette.secondary)
+                    .frame(maxWidth: columnWidth, alignment: .leading)
+                    .accessibilityLabel(chip)
+                    .padding(.bottom, 4)
+                    .transition(.opacity)
+            }
 
             // Live fluid column — same width as transcript (`columnWidth` from
             // Theme.ChatLayout.contentWidth). Composer also re-measures the
@@ -687,6 +697,25 @@ struct ChatView: View {
         }
         flushRun()
         return out
+    }
+
+
+    /// Composer chip when a shell is in flight (Atlas `longRunningChipLabel`).
+    private var longRunningShellChip: String? {
+        guard viewModel.isRunning else { return nil }
+        let live = viewModel.liveTurnToolStates
+        let events: [ToolCallEvent] = live.map { state in
+            let running = state.status == .running || state.status == .pending
+            let cmd: String? = (state.toolName == "run_shell" || state.toolName == "run_shell_command")
+                ? state.input : nil
+            return ToolCallEvent(
+                name: state.toolName,
+                isRunning: running,
+                parsedCommand: cmd,
+                startedAt: running ? viewModel.workStartedAt : nil)
+        }
+        guard !ToolCallGrouping.longRunningShells(events).isEmpty else { return nil }
+        return ToolCallGrouping.longRunningChipLabel(elapsedSeconds: max(0, elapsedSeconds))
     }
 
     @ViewBuilder

@@ -444,6 +444,8 @@ struct ZCodeActivityStack: View {
                                 events: events,
                                 memberIndices: indices,
                                 running: running)
+                        case .shell(let card):
+                            shellRow(card)
                         case .line(let state):
                             ZCodeActivityLineView(
                                 state: state,
@@ -487,11 +489,13 @@ struct ZCodeActivityStack: View {
             memberIndices: [Int],
             running: Bool)
         case line(ToolCallUIState)
+        case shell(ShellCard)
         var id: String {
             switch self {
             case .explore(let id, _, _): return "explore-\(id)"
             case .fileChange(let id, _, _, _, _): return "fileChange-\(id)"
             case .line(let state): return state.id
+            case .shell(let card): return "shell-\(card.index)-\(card.command)"
             }
         }
     }
@@ -533,7 +537,7 @@ struct ZCodeActivityStack: View {
                     }
                 }
             case .shell(let card):
-                items.append(.line(states[card.index]))
+                items.append(.shell(card))
             case .standalone(let index, _):
                 items.append(.line(states[index]))
             }
@@ -594,6 +598,36 @@ struct ZCodeActivityStack: View {
             Spacer(minLength: 0)
         }
         .accessibilityLabel("\(verb) · \(status)")
+    }
+
+
+    @ViewBuilder
+    private func shellRow(_ card: ShellCard) -> some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let status = ShellCardCopy.status(card, now: context.date)
+            let title = ShellCardCopy.title(card)
+            HStack(spacing: 6) {
+                Image(systemName: "terminal")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text(card.kindLabel)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text("·")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(Theme.Palette.activityDivider)
+                Text(status == card.kindLabel ? title : status)
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundColor(Theme.Palette.activityStatus)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                if card.status == .running {
+                    ProgressView().controlSize(.mini)
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityLabel("\(card.kindLabel) · \(status)")
+        }
     }
 
     private var toolsHeader: some View {
