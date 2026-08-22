@@ -106,4 +106,51 @@ final class ContextMeterCalibrationTests: XCTestCase {
                        "a shrunken conversation means the anchor is stale")
         XCTAssertLessThan(vm.liveContextTokens, 100)
     }
+
+    func testComposerWindowUsesAdvertisedNemotronLightningNot32kDefault() {
+        let app = AppViewModel()
+        var settings = AppSettings()
+        settings.systemPrompt = ""
+        settings.maxContextWindowTokens = 0
+        app.settings = settings
+        let lightningID = "unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B"
+        app.selectedModelID = lightningID
+        app.availableModels = [
+            ModelDescriptor(
+                id: lightningID,
+                displayName: "Nemotron Lightning",
+                backend: .unslothStudio,
+                supportsTools: true,
+                contextLength: nil)
+        ]
+        let vm = ChatViewModel(conversation: Conversation(), app: app)
+        XCTAssertEqual(vm.liveContextWindow, 1_048_576,
+                       "composer window is the advertised Lightning 1M, not the 32k settings default")
+        XCTAssertEqual(vm.contextUsageBreakdown.windowTokens, 1_048_576)
+        XCTAssertEqual(
+            ModelContextLengthResolver.resolve(modelId: lightningID, apiValue: nil),
+            1_048_576)
+        XCTAssertEqual(
+            ModelContextLengthResolver.resolve(modelId: lightningID, apiValue: 32_768),
+            1_048_576,
+            "loaded 32k n_ctx does not replace Lightning native 1M")
+    }
+
+    func testComposerWindowHonorsUserCap() {
+        let app = AppViewModel()
+        var settings = AppSettings()
+        settings.maxContextWindowTokens = 32_768
+        app.settings = settings
+        let lightningID = "unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B"
+        app.selectedModelID = lightningID
+        app.availableModels = [
+            ModelDescriptor(
+                id: lightningID,
+                displayName: "Nemotron Lightning",
+                backend: .unslothStudio,
+                contextLength: 1_048_576)
+        ]
+        let vm = ChatViewModel(conversation: Conversation(), app: app)
+        XCTAssertEqual(vm.liveContextWindow, 32_768)
+    }
 }

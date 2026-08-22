@@ -323,7 +323,7 @@ public actor UnslothStudioBackend: InferenceBackend {
                 displayName: name,
                 backend: .unslothStudio,
                 supportsTools: true,
-                contextLength: nil,
+                contextLength: ModelContextLengthResolver.resolve(modelId: rawID, apiValue: nil),
                 parameterCountB: nil,
                 isLoaded: false)
         }

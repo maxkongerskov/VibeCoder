@@ -280,20 +280,24 @@ final class ChatViewModel: ObservableObject {
     }
 
     /// Effective context window (model, optionally capped by settings).
+    /// Prefer the backend/catalog advertised window over the 32k stored default.
     var liveContextWindow: Int? {
         let maxCap = app?.settings.maxContextWindowTokens ?? 0
-        if let settings = lastPreparedModelSettings,
-           let modelID = conversation.modelID ?? app?.selectedModelID,
-           let model = app?.availableModels.first(where: { $0.id == modelID }) {
-            return ContextBudget.resolveWindow(
-                modelSettings: settings.loadSettings,
-                workerModel: model,
+        let modelID = conversation.modelID ?? app?.selectedModelID
+        let model = modelID.flatMap { id in app?.availableModels.first(where: { $0.id == id }) }
+        let advertised = ModelContextLengthResolver.resolve(
+            modelId: model?.id ?? modelID ?? "",
+            apiValue: model?.contextLength)
+
+        if let settings = lastPreparedModelSettings {
+            let modelWindow = ContextBudget.effectiveContextLength(
+                stored: settings.loadSettings.contextLength,
+                advertised: advertised)
+            return ContextBudget.cappedWindow(
+                modelWindow: modelWindow,
                 maxContextWindowTokens: maxCap)
         }
-        // Before first send: use selected model advertised length if any.
-        if let modelID = conversation.modelID ?? app?.selectedModelID,
-           let model = app?.availableModels.first(where: { $0.id == modelID }),
-           let advertised = model.contextLength, advertised > 0 {
+        if let advertised, advertised > 0 {
             return ContextBudget.cappedWindow(
                 modelWindow: advertised,
                 maxContextWindowTokens: maxCap)
