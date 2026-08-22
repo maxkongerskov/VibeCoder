@@ -125,6 +125,19 @@ public struct ExitPlanModeTool: Tool {
             )
         }
 
+        var approved = true
+        if let reviewer = context.planApprovalReviewer {
+            approved = await reviewer.approve(plan)
+        }
+        if !approved {
+            return ToolResult(
+                content: """
+                The plan was not approved. Stay in plan mode and revise the plan before calling exit_plan_mode again.
+                """,
+                extras: [:]
+            )
+        }
+
         await persistApprovedPlan(plan, context: context)
 
         return ToolResult(

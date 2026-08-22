@@ -313,6 +313,9 @@ public struct AgentDefinition: Sendable {
         loopConfig.userQuestionReviewer
     }
 
+    /// Optional host gate for `exit_plan_mode`. AgentLoop.Configuration is frozen; nil until loopConfig can carry it.
+    public var planApprovalReviewer: PlanApprovalReviewer? { nil }
+
     /// Approximate token budget for one request. nil = no compaction.
     public var contextBudgetTokens: Int? {
         loopConfig.contextBudgetTokens

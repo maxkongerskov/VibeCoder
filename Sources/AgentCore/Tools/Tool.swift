@@ -193,6 +193,9 @@ public struct ToolContext: Sendable {
     /// the reviewer's decision in place of an unconditional write.
     public let patchReviewer: PatchReviewer?
     public let userQuestionReviewer: UserQuestionReviewer?
+    /// Optional host gate for `exit_plan_mode`. When nil, the tool
+    /// auto-approves (same as today). When set, the tool awaits Approve.
+    public let planApprovalReviewer: PlanApprovalReviewer?
     /// Interactive Once/Always/Never for shell / MCP / executes `.ask`.
     /// When nil, those asks hard-deny (headless / fail-closed). Wave B S4.
     public let shellApprovalCoordinator: ShellApprovalCoordinator?
@@ -237,6 +240,7 @@ public struct ToolContext: Sendable {
                 safeMode: SafeModeConfig? = nil,
                 patchReviewer: PatchReviewer? = nil,
                 userQuestionReviewer: UserQuestionReviewer? = nil,
+                planApprovalReviewer: PlanApprovalReviewer? = nil,
                 shellApprovalCoordinator: ShellApprovalCoordinator? = nil,
                 shellApprovalReviewer: ShellApprovalReviewer? = nil,
                 conversationID: UUID,
@@ -255,6 +259,7 @@ public struct ToolContext: Sendable {
         self.safeMode = safeMode
         self.patchReviewer = patchReviewer
         self.userQuestionReviewer = userQuestionReviewer
+        self.planApprovalReviewer = planApprovalReviewer
         // Coordinator and reviewer are the same concrete type (typealias).
         self.shellApprovalCoordinator = shellApprovalCoordinator ?? shellApprovalReviewer
         self.conversationID = conversationID
@@ -278,6 +283,30 @@ public struct ToolContext: Sendable {
         self.preToolHookDenials = preToolHookDenials
         self.planModeExited = planModeExited
         self.disabledToolNames = disabledToolNames
+    }
+
+    /// Copy this context after `exit_plan_mode` extras (loop integrator).
+    public func replacing(executionMode: ExecutionMode?, planModeExited: Bool) -> ToolContext {
+        ToolContext(
+            projectRoot: projectRoot,
+            worktreeRoot: worktreeRoot,
+            safeMode: safeMode,
+            patchReviewer: patchReviewer,
+            userQuestionReviewer: userQuestionReviewer,
+            planApprovalReviewer: planApprovalReviewer,
+            shellApprovalCoordinator: shellApprovalCoordinator,
+            conversationID: conversationID,
+            inferenceBackend: inferenceBackend,
+            model: model,
+            subagentDepth: subagentDepth,
+            executionMode: executionMode,
+            authorization: authorization,
+            sessionReadPaths: sessionReadPaths,
+            sessionPlanFileURL: sessionPlanFileURL,
+            preToolHookDenials: preToolHookDenials,
+            planModeExited: planModeExited,
+            disabledToolNames: disabledToolNames
+        )
     }
 }
 
