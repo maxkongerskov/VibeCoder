@@ -130,6 +130,10 @@ public struct AppSettings: Codable, Sendable, Equatable {
     /// Screenshot / click / type / scroll still need user + macOS grants.
     public var computerUseEnabled: Bool
 
+    /// Opt-in isolated WKWebView browser-use on this Mac. Off by default.
+    /// Not computer-use of the desktop. Not cloud. Not phone/LAN remote.
+    public var browserUseEnabled: Bool
+
     // MARK: - Default sampling
 
     /// Default sampling params used when no per-model or per-conversation
@@ -330,6 +334,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
         notificationsEnabled: Bool = true,
         cloudBotsEnabled: Bool = false,
         computerUseEnabled: Bool = false,
+        browserUseEnabled: Bool = false,
         colorScheme: String = "system",
         chatFontScale: Double = 1.0,
         playfulWaitingLabels: Bool = false,
@@ -389,6 +394,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
         self.notificationsEnabled = notificationsEnabled
         self.cloudBotsEnabled = cloudBotsEnabled
         self.computerUseEnabled = computerUseEnabled
+        self.browserUseEnabled = browserUseEnabled
         self.colorScheme = colorScheme
         self.chatFontScale = chatFontScale
         self.playfulWaitingLabels = playfulWaitingLabels
@@ -426,7 +432,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
              shellSeatbeltPreference,
              xcodeMCPEnabled,
              hasCompletedOnboarding, crashReportingEnabled, notificationsEnabled,
-             cloudBotsEnabled, computerUseEnabled,
+             cloudBotsEnabled, computerUseEnabled, browserUseEnabled,
              colorScheme, chatFontScale, playfulWaitingLabels, cleanModelChrome,
              orchestratorEnabled, orchestratorBackend, orchestratorModelID,
              workerBackend, workerModelID,
@@ -485,6 +491,7 @@ public struct AppSettings: Codable, Sendable, Equatable {
         self.notificationsEnabled = try c.decodeIfPresent(Bool.self, forKey: .notificationsEnabled) ?? true
         self.cloudBotsEnabled = try c.decodeIfPresent(Bool.self, forKey: .cloudBotsEnabled) ?? false
         self.computerUseEnabled = try c.decodeIfPresent(Bool.self, forKey: .computerUseEnabled) ?? false
+        self.browserUseEnabled = try c.decodeIfPresent(Bool.self, forKey: .browserUseEnabled) ?? false
         self.colorScheme = try c.decodeIfPresent(String.self, forKey: .colorScheme) ?? "system"
         self.chatFontScale = try c.decodeIfPresent(Double.self, forKey: .chatFontScale) ?? 1.0
         self.playfulWaitingLabels = try c.decodeIfPresent(Bool.self, forKey: .playfulWaitingLabels) ?? false

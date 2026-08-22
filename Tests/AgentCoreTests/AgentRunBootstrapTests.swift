@@ -218,4 +218,52 @@ final class AgentRunBootstrapTests: XCTestCase {
 
         await ToolRegistry.shared.unregisterDynamicTools(names: ["BuildProject"])
     }
+
+    func testCapabilityGatesHideComputerUseAndBrowserWhenOff() {
+        var appSettings = AppSettings()
+        appSettings.xcodeMCPEnabled = false
+        let off = AgentRunBootstrap.buildLoopConfiguration(
+            modelSettings: ModelSettings(
+                modelId: "test",
+                loadSettings: .init(
+                    contextLength: ModelSettings.defaultContextLength,
+                    gpuOffloadLayers: ModelSettings.defaultGPUOffloadLayers,
+                    flashAttention: ModelSettings.defaultFlashAttention,
+                    kvCacheType: ModelSettings.defaultKVCacheType),
+                inferenceSettings: .init(
+                    temperature: 0.7, topP: 0.9, topK: 40, repeatPenalty: 1.0),
+                savedAt: Date()),
+            workerModel: ModelDescriptor(id: "test", displayName: "Test", backend: .lmStudio),
+            settings: appSettings,
+            xcodeMCPLive: false,
+            headless: false,
+            safeMode: nil,
+            patchReviewer: nil,
+            orchestratorBrief: nil).config
+        XCTAssertTrue(ComputerUseToolNames.all.isSubset(of: off.disabledToolNames))
+        XCTAssertTrue(BrowserUseToolNames.all.isSubset(of: off.disabledToolNames))
+
+        appSettings.computerUseEnabled = true
+        appSettings.browserUseEnabled = true
+        let on = AgentRunBootstrap.buildLoopConfiguration(
+            modelSettings: ModelSettings(
+                modelId: "test",
+                loadSettings: .init(
+                    contextLength: ModelSettings.defaultContextLength,
+                    gpuOffloadLayers: ModelSettings.defaultGPUOffloadLayers,
+                    flashAttention: ModelSettings.defaultFlashAttention,
+                    kvCacheType: ModelSettings.defaultKVCacheType),
+                inferenceSettings: .init(
+                    temperature: 0.7, topP: 0.9, topK: 40, repeatPenalty: 1.0),
+                savedAt: Date()),
+            workerModel: ModelDescriptor(id: "test", displayName: "Test", backend: .lmStudio),
+            settings: appSettings,
+            xcodeMCPLive: false,
+            headless: false,
+            safeMode: nil,
+            patchReviewer: nil,
+            orchestratorBrief: nil).config
+        XCTAssertTrue(ComputerUseToolNames.all.isDisjoint(with: on.disabledToolNames))
+        XCTAssertTrue(BrowserUseToolNames.all.isDisjoint(with: on.disabledToolNames))
+    }
 }

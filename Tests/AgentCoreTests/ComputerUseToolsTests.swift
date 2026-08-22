@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import CoreGraphics
 @testable import AgentCore
 
 final class ComputerUseToolsTests: XCTestCase {
@@ -81,6 +82,21 @@ final class ComputerUseToolsTests: XCTestCase {
         XCTAssertEqual(shot?.isError, false)
         XCTAssertTrue(shot?.content.contains("this Mac") == true)
         XCTAssertFalse(shot!.content.lowercased().contains("marketplace"))
+        XCTAssertFalse(
+            shot!.content.contains("png_base64"),
+            "pixels must ride ChatImagePayload, not inline base64 text")
+        XCTAssertEqual(shot?.images.count, 1)
+        XCTAssertEqual(shot?.images.first?.mimeType, "image/png")
+        XCTAssertFalse(shot!.images.first!.base64Data.isEmpty)
+        XCTAssertEqual(shot?.extras["vision"], "true")
+        let wire = ChatMessage.toolResult(shot!, callID: "shot-1")
+        XCTAssertEqual(wire.images.count, 1)
+        let encoded = ChatCompletionRequestBody.WireMessage.from(wire)
+        if case .parts(let parts) = encoded.content {
+            XCTAssertTrue(parts.contains(where: { $0.type == "image_url" }))
+        } else {
+            XCTFail("tool screenshot must encode as vision parts, got \(encoded.content)")
+        }
 
         let click = await ComputerUseRuntime.$permissionOverride.withValue(granted) {
             await ComputerUseRuntime.$driverOverride.withValue(RecordingComputerUseDriver()) {
@@ -126,6 +142,59 @@ final class ComputerUseToolsTests: XCTestCase {
         XCTAssertEqual(ComputerUseKind.thisMac.rawValue, "this-mac")
     }
 
+    func testClickMapsImagePixelsToDisplayPixels() async throws {
+        let driver = MappingComputerUseDriver()
+        let granted = ComputerUsePermissionSnapshot(screenRecording: true, accessibility: true)
+        let cap = ComputerUseCapture(
+            displayWidth: 200,
+            displayHeight: 100,
+            imageWidth: 100,
+            imageHeight: 50,
+            mimeType: "image/png",
+            base64Data: ComputerUseCapture.fixturePNGBase64
+        )
+        let click = await ComputerUseRuntime.$permissionOverride.withValue(granted) {
+            await ComputerUseRuntime.$driverOverride.withValue(driver) {
+                await ComputerUseRuntime.$lastCaptureOverride.withValue(cap) {
+                    try? await ClickTool().execute(
+                        arguments: try! args(#"{"x":10,"y":10}"#),
+                        context: ctx()
+                    )
+                }
+            }
+        }
+        XCTAssertEqual(click?.isError, false)
+        XCTAssertEqual(driver.lastClick?.0, 20)
+        XCTAssertEqual(driver.lastClick?.1, 20)
+        XCTAssertTrue(click!.content.contains("image=(10, 10)"))
+        XCTAssertTrue(click!.content.contains("display=(20, 20)"))
+    }
+
+    func testLiveEncoderProducesPixelsFromCGImage() {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        var pixel: [UInt8] = [255, 0, 0, 255]
+        guard let ctx = CGContext(
+            data: &pixel,
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bytesPerRow: 4,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let image = ctx.makeImage() else {
+            return XCTFail("could not make 1×1 CGImage")
+        }
+        let payload = VisionImageEncoder.payload(
+            fromCGImage: image,
+            displayName: "dot.jpg",
+            maxLongEdge: 1280,
+            preferJPEG: true
+        )
+        XCTAssertNotNil(payload)
+        XCTAssertFalse(payload!.base64Data.isEmpty)
+        XCTAssertTrue(payload!.mimeType == "image/jpeg" || payload!.mimeType == "image/png")
+    }
+
     private func repoRoot() -> URL {
         var dir = URL(fileURLWithPath: #filePath)
         for _ in 0..<10 {
@@ -137,4 +206,26 @@ final class ComputerUseToolsTests: XCTestCase {
         }
         return URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
     }
+}
+
+final class MappingComputerUseDriver: ComputerUseDriver, @unchecked Sendable {
+    var lastClick: (Int, Int)?
+
+    func screenshot() throws -> ComputerUseCapture {
+        ComputerUseCapture(
+            displayWidth: 200,
+            displayHeight: 100,
+            imageWidth: 100,
+            imageHeight: 50,
+            mimeType: "image/png",
+            base64Data: ComputerUseCapture.fixturePNGBase64
+        )
+    }
+
+    func click(x: Int, y: Int, button: String) throws {
+        lastClick = (x, y)
+    }
+
+    func typeText(_ text: String) throws {}
+    func scroll(x: Int, y: Int, deltaX: Int, deltaY: Int) throws {}
 }

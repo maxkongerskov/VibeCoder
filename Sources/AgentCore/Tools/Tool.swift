@@ -506,17 +506,22 @@ public struct ToolResult: Sendable {
     /// Opaque side-channel for the agent loop (e.g. `unlocked_deferred`
     /// from `tool_search`). Not shown to the model unless folded into content.
     public let extras: [String: String]
+    /// Vision parts for this result (computer-use screenshot). Carried on
+    /// the tool `ChatMessage` as `image_url` — not dumped into `content`.
+    public let images: [ChatImagePayload]
 
     public init(
         content: String,
         isError: Bool = false,
         mutatedPaths: [String] = [],
-        extras: [String: String] = [:]
+        extras: [String: String] = [:],
+        images: [ChatImagePayload] = []
     ) {
         self.content = content
         self.isError = isError
         self.mutatedPaths = mutatedPaths
         self.extras = extras
+        self.images = images
     }
 }
 

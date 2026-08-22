@@ -155,11 +155,16 @@ public actor ToolRegistry {
         register(SendMessageTool.self)
         register(EnterPlanModeTool.self)
         register(ExitPlanModeTool.self)
+        // Computer-use (this Mac, fail closed without TCC).
         register(ScreenshotTool.self)
         register(ClickTool.self)
         register(TypeTool.self)
         register(ScrollTool.self)
-        // Computer-use (this Mac, fail closed without TCC).
+        // Browser-use (isolated this-Mac webview, fail closed without host).
+        register(BrowserNavigateTool.self)
+        register(BrowserSnapshotTool.self)
+        register(BrowserClickTool.self)
+        register(BrowserTypeTool.self)
         // Add new tools here. Compiler will flag a forgotten `import` —
         // there is no second touchpoint to forget.
     }

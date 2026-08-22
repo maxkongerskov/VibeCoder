@@ -47,9 +47,18 @@ public enum ToolResultCompressor {
             let msg = working[idx]
             // Already micro-cleared — do not re-summarize the marker.
             if MicroCompactor.isClearedToolResult(msg.content) { continue }
-            guard msg.content.count > threshold else { continue }
+            // Drop old vision parts (computer-use screenshots). Keep only
+            // the recent screenshot on the wire so CUA loops do not explode.
+            if !msg.images.isEmpty {
+                working[idx].images = []
+                if !working[idx].content.contains("older computer-use screenshot omitted") {
+                    working[idx].content +=
+                        "\n[older computer-use screenshot omitted from context]"
+                }
+            }
+            guard working[idx].content.count > threshold else { continue }
             let tName = toolName(for: msg, in: working)
-            working[idx].content = summarize(result: msg.content, toolName: tName)
+            working[idx].content = summarize(result: working[idx].content, toolName: tName)
         }
         return working
     }

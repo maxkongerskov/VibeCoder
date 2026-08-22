@@ -547,6 +547,42 @@ struct PrivacySettingsView: View {
 
             settingsCard {
                 HStack(spacing: 6) {
+                    Image(systemName: "globe")
+                        .foregroundColor(Theme.Palette.success)
+                    Text(BrowserUseCopy.settingsTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(BrowserUseCopy.macLabel)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.success)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Theme.Palette.success.opacity(0.14), in: Capsule())
+                }
+                Text(BrowserUseCopy.intro)
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(BrowserUseCopy.honesty)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(isOn: $settings.browserUseEnabled) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(BrowserUseCopy.toggleTitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.Palette.primary)
+                        Text(BrowserUseCopy.status(enabled: settings.browserUseEnabled))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Theme.Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("browser-use-settings")
+            }
+
+            settingsCard {
+                HStack(spacing: 6) {
                     Image(systemName: "archivebox")
                         .foregroundColor(Theme.Palette.accent)
                     Text("Conversation Backup")

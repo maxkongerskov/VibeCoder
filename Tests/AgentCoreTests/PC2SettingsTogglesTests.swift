@@ -64,6 +64,8 @@ final class PC2SettingsTogglesTests: XCTestCase {
         let decoded = try JSONDecoder().decode(AppSettings.self, from: Data(json.utf8))
         XCTAssertFalse(decoded.localAPIAgentToolsEnabled)
         XCTAssertEqual(decoded.shellSeatbeltPreference, .auto)
+        XCTAssertFalse(decoded.computerUseEnabled)
+        XCTAssertFalse(decoded.browserUseEnabled)
     }
 
     func testLocalAPICompletionToolsProxyHelperEmptyInBothModes() async {

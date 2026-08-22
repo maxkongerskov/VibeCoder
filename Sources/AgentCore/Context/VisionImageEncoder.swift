@@ -92,6 +92,40 @@ public enum VisionImageEncoder {
         )
     }
 
+    /// Encode an in-memory bitmap (computer-use screenshot). Downscales
+    /// so local vision context stays bounded. JPEG by default (smaller
+    /// than PNG for desktop photos); pass `preferJPEG: false` for UI
+    /// screenshots that must stay lossless.
+    public static func payload(
+        fromCGImage image: CGImage,
+        displayName: String,
+        maxLongEdge: CGFloat = maxLongEdge,
+        preferJPEG: Bool = true
+    ) -> ChatImagePayload? {
+        let scaled = downscaled(image, maxLongEdge: maxLongEdge)
+        guard let (data, mime) = encode(cgImage: scaled, asPNG: !preferJPEG) else { return nil }
+        return ChatImagePayload(
+            mimeType: mime,
+            base64Data: data.base64EncodedString(),
+            displayName: displayName
+        )
+    }
+
+    /// Pixel size after the same downscale `payload(fromCGImage:)` applies.
+    public static func scaledSize(width: Int, height: Int, maxLongEdge: CGFloat = maxLongEdge) -> (width: Int, height: Int) {
+        let w = CGFloat(max(1, width))
+        let h = CGFloat(max(1, height))
+        let longEdge = max(w, h)
+        guard longEdge > maxLongEdge, maxLongEdge > 0 else {
+            return (width: max(1, width), height: max(1, height))
+        }
+        let scale = maxLongEdge / longEdge
+        return (
+            width: max(1, Int((w * scale).rounded())),
+            height: max(1, Int((h * scale).rounded()))
+        )
+    }
+
     /// Encode multiple attachment paths; non-images skipped; capped at maxImages.
     public static func payloads(
         fromPaths paths: [(path: String, displayName: String?)],
@@ -108,6 +142,36 @@ public enum VisionImageEncoder {
     }
 
     // MARK: - Encode
+
+    private static func downscaled(_ image: CGImage, maxLongEdge: CGFloat) -> CGImage {
+        let target = scaledSize(width: image.width, height: image.height, maxLongEdge: maxLongEdge)
+        guard target.width != image.width || target.height != image.height else { return image }
+        let colorSpace: CGColorSpace
+        if let space = image.colorSpace, space.model == .rgb {
+            colorSpace = space
+        } else {
+            colorSpace = CGColorSpaceCreateDeviceRGB()
+        }
+        let alpha = image.alphaInfo
+        let bitmapInfo: CGBitmapInfo
+        if alpha == .none || alpha == .noneSkipLast || alpha == .noneSkipFirst {
+            bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue)
+        } else {
+            bitmapInfo = CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue)
+        }
+        guard let ctx = CGContext(
+            data: nil,
+            width: target.width,
+            height: target.height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo.rawValue
+        ) else { return image }
+        ctx.interpolationQuality = .medium
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: target.width, height: target.height))
+        return ctx.makeImage() ?? image
+    }
 
     private static func encode(cgImage: CGImage, asPNG: Bool) -> (Data, String)? {
         let data = NSMutableData()

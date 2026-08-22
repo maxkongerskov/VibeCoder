@@ -245,6 +245,7 @@ final class AppViewModel: ObservableObject {
         // Offline PDF tools (PDFKit / Vision / local MD→PDF) live in the App
         // target; register after builtins so the agent can call them.
         await PDFToolRegistration.register()
+        BrowserUseRegistration.install()
         self.settings = await SettingsStore.shared.current()
         // PC2: seatbelt env for SafeBash (auto leaves keys unset).
         settings.shellSeatbeltPreference.applyToProcessEnvironment()

@@ -16,7 +16,7 @@ enum ComputerUseCopy {
         "Computer use is on this Mac: screenshot, click, type, and scroll. It is not cloud and not a CloudBot. Those actions need your permission. Not phone or LAN remote. Not a storefront."
 
     static let honesty =
-        "macOS also requires Screen Recording (to see the screen) and Accessibility (to click, type, and scroll). Off by default. This does not replace your BYO HTTP coding agent."
+        "macOS also requires Screen Recording (to see the screen) and Accessibility (to click, type, and scroll). Off by default. Screenshots are sent as vision images to the active model endpoint — a loopback /v1 stays on this Mac; a remote /v1 receives the image. A vision-capable model is required to see them. This does not replace your BYO HTTP coding agent."
 
     static func status(enabled: Bool) -> String {
         enabled

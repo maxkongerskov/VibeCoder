@@ -1703,7 +1703,7 @@ public actor AgentLoop {
         lastToolOutput = ToolOutputInfo(
             tool: inv.name,
             bytes: result.content.utf8.count)
-        convo.messages.append(.init(role: .tool, content: result.content, toolCallID: inv.id))
+        convo.messages.append(.toolResult(result, callID: inv.id))
         await events(.toolResult(invocation: inv, result: result))
 
         if !result.isError {

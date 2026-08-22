@@ -7,6 +7,16 @@
 
 import Foundation
 
+/// Builtin names gated by `AppSettings.computerUseEnabled` (default off).
+public enum ComputerUseToolNames: Sendable {
+    public static let all: Set<String> = [
+        ScreenshotTool.name,
+        ClickTool.name,
+        TypeTool.name,
+        ScrollTool.name,
+    ]
+}
+
 public struct ScreenshotTool: Tool {
     public static let name = "screenshot"
     public static let category: ToolCategory = .debug
@@ -18,7 +28,10 @@ public struct ScreenshotTool: Tool {
         description: """
         Capture the current display on this Mac (not cloud, not phone, not LAN remote). \
         Requires Screen Recording permission. If permission is missing, the tool fails \
-        closed with an error — it does not hang or prompt from the agent loop.
+        closed with an error — it does not hang or prompt from the agent loop. \
+        Returns a vision image (downscaled). Click and scroll use IMAGE pixels; \
+        the harness converts them to display pixels. A vision-capable model is required \
+        to see the screenshot.
         """,
         parameters: ToolSchema.Parameters(
             properties: [:],
@@ -35,11 +48,32 @@ public struct ScreenshotTool: Tool {
         }
         do {
             let shot = try ComputerUseRuntime.driver().screenshot()
-            var msg = "screenshot ok on this Mac (not cloud): \(shot.width)x\(shot.height)"
-            if let b64 = shot.pngBase64, !b64.isEmpty {
-                msg += "\npng_base64:\n" + b64
+            guard let image = shot.visionPayload else {
+                return ComputerUseToolSupport.fail(
+                    "screenshot failed closed: captured this Mac but no pixels to send to the model")
             }
-            return ComputerUseToolSupport.ok(msg)
+            ComputerUseRuntime.remember(shot)
+            let msg = """
+            screenshot ok on this Mac (not cloud): image=\(shot.imageWidth)x\(shot.imageHeight) \
+            display=\(shot.displayWidth)x\(shot.displayHeight) \
+            scale_x=\(String(format: "%.4f", shot.scaleX)) \
+            scale_y=\(String(format: "%.4f", shot.scaleY)) \
+            mime=\(shot.mimeType). Click/scroll using IMAGE pixels. Vision image attached \
+            (not inlined as base64 text).
+            """
+            var extras = ComputerUseToolSupport.extras
+            extras["vision"] = "true"
+            extras["mime"] = shot.mimeType
+            extras["image_width"] = String(shot.imageWidth)
+            extras["image_height"] = String(shot.imageHeight)
+            extras["display_width"] = String(shot.displayWidth)
+            extras["display_height"] = String(shot.displayHeight)
+            return ToolResult(
+                content: msg,
+                isError: false,
+                extras: extras,
+                images: [image]
+            )
         } catch {
             return ComputerUseToolSupport.fail("screenshot failed closed: \(error.localizedDescription)")
         }
@@ -55,7 +89,9 @@ public struct ClickTool: Tool {
     public static let schema = ToolSchema(
         name: name,
         description: """
-        Click at a screen point on this Mac (not cloud, not LAN remote). \
+        Click at a point on this Mac (not cloud, not LAN remote). \
+        x/y are IMAGE pixels from the latest screenshot (the harness scales to the display). \
+        If no screenshot has been taken this process, x/y are display pixels. \
         Requires Accessibility permission. Fails closed if trust is not granted.
         """,
         parameters: ToolSchema.Parameters(
@@ -82,10 +118,11 @@ public struct ClickTool: Tool {
             return ComputerUseToolSupport.fail("click: requires integer x and y")
         }
         let button = (arguments.stringOptional("button") ?? "left")
+        let mapped = ComputerUseRuntime.mapPointToDisplay(x: x, y: y)
         do {
-            try ComputerUseRuntime.driver().click(x: x, y: y, button: button)
+            try ComputerUseRuntime.driver().click(x: mapped.0, y: mapped.1, button: button)
             return ComputerUseToolSupport.ok(
-                "click ok on this Mac (not cloud) at (\(x), \(y)) button=\(button)")
+                "click ok on this Mac (not cloud) at image=(\(x), \(y)) display=(\(mapped.0), \(mapped.1)) button=\(button)")
         } catch {
             return ComputerUseToolSupport.fail("click failed closed: \(error.localizedDescription)")
         }
@@ -142,6 +179,7 @@ public struct ScrollTool: Tool {
         name: name,
         description: """
         Scroll the display or a point on this Mac (not cloud, not LAN remote). \
+        x/y are IMAGE pixels from the latest screenshot (same as click). \
         Requires Accessibility permission. Fails closed if trust is not granted.
         """,
         parameters: ToolSchema.Parameters(
@@ -165,10 +203,11 @@ public struct ScrollTool: Tool {
         let y = arguments.intOptional("y") ?? 0
         let dx = arguments.intOptional("delta_x") ?? 0
         let dy = arguments.intOptional("delta_y") ?? 0
+        let mapped = ComputerUseRuntime.mapPointToDisplay(x: x, y: y)
         do {
-            try ComputerUseRuntime.driver().scroll(x: x, y: y, deltaX: dx, deltaY: dy)
+            try ComputerUseRuntime.driver().scroll(x: mapped.0, y: mapped.1, deltaX: dx, deltaY: dy)
             return ComputerUseToolSupport.ok(
-                "scroll ok on this Mac (not cloud) at (\(x), \(y)) delta=(\(dx), \(dy))")
+                "scroll ok on this Mac (not cloud) at image=(\(x), \(y)) display=(\(mapped.0), \(mapped.1)) delta=(\(dx), \(dy))")
         } catch {
             return ComputerUseToolSupport.fail("scroll failed closed: \(error.localizedDescription)")
         }

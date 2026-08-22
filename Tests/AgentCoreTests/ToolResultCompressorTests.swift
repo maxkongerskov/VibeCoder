@@ -37,6 +37,26 @@ final class ToolResultCompressorTests: XCTestCase {
 
     // MARK: - Recent result is protected
 
+    func testOldScreenshotImagesAreDroppedFromWireCopy() {
+        let img = ChatImagePayload(mimeType: "image/png", base64Data: ComputerUseCapture.fixturePNGBase64)
+        var msgs: [ChatMessage] = []
+        for i in 0..<3 {
+            let id = "shot-\(i)"
+            msgs.append(ChatMessage(
+                role: .assistant, content: "",
+                toolCalls: [ToolCallInvocation(id: id, name: "screenshot", arguments: "{}")]))
+            msgs.append(ChatMessage(
+                role: .tool,
+                content: "screenshot ok \(i)",
+                toolCallID: id,
+                images: [img]))
+        }
+        let out = ToolResultCompressor.compress(msgs)
+        XCTAssertTrue(out[1].images.isEmpty, "oldest screenshot must drop vision parts")
+        XCTAssertTrue(out[1].content.contains("older computer-use screenshot omitted"))
+        XCTAssertFalse(out.last!.images.isEmpty, "most recent screenshot stays on the wire")
+    }
+
     func testMostRecentResultIsNotCompressed() {
         let bigContent = String(repeating: "x", count: 5_000)
         // Only one turn — the single result is always "most recent".

@@ -6,13 +6,9 @@ Current shipped claims: `ARCHITECTURE.md` §1 / §17. Daily-driver bar: `docs/RE
 
 ## Now (99% batch)
 
-Slice 0 is unblocked (`ARCHITECTURE-v2.md`). Finish only what that table names:
+Computer-use slice 2 + browser-use slice 0 (`ARCHITECTURE-v2.md`). Origin push stays Max.
 
-1. App test bundle compiles (`f7bece1`). Done.
-2. Duplicate-worktree tests match `applyDefaultWorktree` (`agentcore/<copyId>`).
-3. Origin push stays Max (P4).
-
-Do not mix this with CloudBots work.
+Do not mix this with CloudBots platform work (named specialists / shared room / merge bar). CloudBots stay the slice-0 stub.
 
 ## Next: CloudBots (early / v1)
 
@@ -23,7 +19,7 @@ Named teammate agents inside VibeCoder, like Grok Bots: specialists, a shared ro
 - **Opt-in runtime.** Default project agent stays the in-app loop against BYO HTTP. CloudBots are an added surface, not a replacement.
 - **Spec first.** Target: `ARCHITECTURE-v2.md`. Freeze §17 only records that v2 lives next door — not that CloudBots ship. Reed writes that before Atlas/Sable build. Mira owns honesty tests (cloud labeled; no “nothing leaves your Mac”). Nash owns any CI that must not phone home on `pr.yml`.
 
-Out of this cut: Electron, mlx-swift, bundled llama.cpp, Sparkle, Sentry, license keys, LAN/phone remote control, `agentos` CLI.
+Out of this cut: Electron, mlx-swift, bundled llama.cpp, Sparkle, Sentry, license keys, LAN/phone remote control, local VM (Lima/Tart), Grok-Bot cloud computers, `agentos` CLI.
 
 ## Later (only if Max reopens)
 

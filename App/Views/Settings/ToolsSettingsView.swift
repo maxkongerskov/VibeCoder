@@ -76,6 +76,7 @@ enum ToolsSettingsCategory: String, CaseIterable, Identifiable {
     case git        = "Git"
     case build      = "Build"
     case web        = "Web"
+    case computer   = "Computer"
     case docs       = "Docs"
     case pdf        = "PDF"
     case planning   = "Planning"
@@ -94,6 +95,7 @@ enum ToolsSettingsCategory: String, CaseIterable, Identifiable {
         case .git:        return Color(red: 0.91, green: 0.365, blue: 0.235) // orange (sendAccent)
         case .build:      return Color(red: 0.18, green: 0.72, blue: 0.42)   // green (success)
         case .web:        return Color(red: 0.20, green: 0.70, blue: 0.78)   // teal
+        case .computer:   return Color(red: 0.35, green: 0.55, blue: 0.72)   // steel
         case .docs:       return Color(red: 0.55, green: 0.40, blue: 0.80)   // muted violet
         case .pdf:        return Color(red: 0.85, green: 0.35, blue: 0.45)   // rose
         case .planning:   return Color(red: 0.30, green: 0.60, blue: 0.40)   // sage
@@ -111,6 +113,7 @@ enum ToolsSettingsCategory: String, CaseIterable, Identifiable {
         case .git:        return "arrow.triangle.branch"
         case .build:      return "hammer"
         case .web:        return "globe"
+        case .computer:   return "desktopcomputer"
         case .docs:       return "doc.text"
         case .pdf:        return "doc.richtext"
         case .planning:   return "list.bullet.clipboard"
@@ -154,6 +157,8 @@ enum BuiltinToolCatalog {
         "memory", "memory_search", "memory_get", "read_session_context", "find_symbol",
         "load_skill",
         "restore_checkpoint",
+        "screenshot", "click", "type", "scroll",
+        "browser_navigate", "browser_snapshot", "browser_click", "browser_type",
     ]
 
     /// App-hosted tools registered at boot via `PDFToolRegistration` (not in AgentCore builtins).
@@ -186,6 +191,14 @@ enum BuiltinToolCatalog {
         .init(name: "web_search",       description: "Search the web (DuckDuckGo)",                               category: .web,        defaultEnabled: true),
         .init(name: "fetch_url",        description: "Fetch a URL's contents",                                    category: .web,        defaultEnabled: true),
         .init(name: "fetch_rss",        description: "Read an RSS feed",                                          category: .web,        defaultEnabled: true),
+        .init(name: "browser_navigate", description: "Open a URL in the isolated this-Mac browser",               category: .web,        defaultEnabled: true),
+        .init(name: "browser_snapshot", description: "Read visible text in the isolated this-Mac browser",        category: .web,        defaultEnabled: true),
+        .init(name: "browser_click",    description: "Click a CSS selector in the isolated this-Mac browser",     category: .web,        defaultEnabled: true),
+        .init(name: "browser_type",     description: "Type into a CSS selector in the isolated this-Mac browser", category: .web,        defaultEnabled: true),
+        .init(name: "screenshot",       description: "Screenshot this Mac (opt-in computer use, vision image)",   category: .computer,   defaultEnabled: true),
+        .init(name: "click",            description: "Click this Mac (opt-in computer use, needs Accessibility)", category: .computer,   defaultEnabled: true),
+        .init(name: "type",             description: "Type on this Mac (opt-in computer use, needs Accessibility)", category: .computer, defaultEnabled: true),
+        .init(name: "scroll",           description: "Scroll this Mac (opt-in computer use, needs Accessibility)", category: .computer,  defaultEnabled: true),
         .init(name: "apple_docs",       description: "Search developer.apple.com",                                category: .docs,       defaultEnabled: true),
         // Offline PDF (App-hosted PDFKit / Vision / local MD→PDF)
         .init(name: "extract_pdf_text", description: "Extract text from a local PDF (offline)",                   category: .pdf,        defaultEnabled: true),

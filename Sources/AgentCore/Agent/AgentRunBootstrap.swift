@@ -8,6 +8,21 @@
 
 import Foundation
 
+/// Master switches that hide capability tools until the user opts in.
+/// Individual Settings → Tools toggles still apply via `toolEnabled`.
+public enum AgentCapabilityGates: Sendable {
+    public static func disabledToolNames(from settings: AppSettings) -> Set<String> {
+        var names = settings.disabledToolNames
+        if !settings.computerUseEnabled {
+            names.formUnion(ComputerUseToolNames.all)
+        }
+        if !settings.browserUseEnabled {
+            names.formUnion(BrowserUseToolNames.all)
+        }
+        return names
+    }
+}
+
 public enum AgentRunBootstrap {
 
     /// Build `AgentLoop.Configuration` and sampling params for one chat turn.
@@ -47,7 +62,7 @@ public enum AgentRunBootstrap {
             userQuestionReviewer: userQuestionReviewer,
             planApprovalReviewer: planApprovalReviewer,
             shellApprovalCoordinator: shellApprovalCoordinator,
-            disabledToolNames: settings.disabledToolNames,
+            disabledToolNames: AgentCapabilityGates.disabledToolNames(from: settings),
             contextBudgetTokens: contextBudget,
             hostSystemPrompt: settings.systemPrompt,
             injectProjectMemory: settings.injectProjectMemory,

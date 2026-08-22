@@ -259,6 +259,16 @@ public struct ChatMessage: Codable, Identifiable, Sendable, Equatable {
         images = try c.decodeIfPresent([ChatImagePayload].self, forKey: .images) ?? []
     }
 
+    /// Tool-role message for one invocation, including any vision parts.
+    public static func toolResult(_ result: ToolResult, callID: String) -> ChatMessage {
+        ChatMessage(
+            role: .tool,
+            content: result.content,
+            toolCallID: callID,
+            images: result.images
+        )
+    }
+
     public init(id: UUID = UUID(),
                 role: Role,
                 content: String,
