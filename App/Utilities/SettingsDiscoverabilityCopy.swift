@@ -237,6 +237,7 @@ enum PlanGuidanceCardCopy {
 }
 
 /// Exit plan mode / approval. VibeCoder wording.
+/// `approve` is a painted label only on the activity card (not a wired action).
 enum SwitchModeCardCopy {
     static func verb(_ card: SwitchModeCard) -> String { card.kindLabel }
     static func status(_ card: SwitchModeCard) -> String {
@@ -248,6 +249,7 @@ enum SwitchModeCardCopy {
 }
 
 /// Ask-user question. VibeCoder wording.
+/// Continue / Submit are painted labels only on the activity card (not wired).
 enum AskUserQuestionCardCopy {
     static func verb(_ card: AskUserQuestionCard) -> String { card.kindLabel }
     static func status(_ card: AskUserQuestionCard) -> String {
@@ -260,6 +262,9 @@ enum AskUserQuestionCardCopy {
 }
 
 /// Truncated tool args/result notice. VibeCoder wording from Atlas helper.
+/// Notice is as-is: "N tool field(s) were truncated. Showing preview X / Y. Load full tool data".
+/// On activity expand, `loadFullToolData` is a local show-full-preview control, not a fetch.
+/// MCP cards paint the notice string only (no Load control).
 enum ToolSnapshotCardCopy {
     static func notice(_ snapshot: ToolSnapshotTruncation.Snapshot) -> String? {
         snapshot.notice

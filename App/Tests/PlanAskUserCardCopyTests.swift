@@ -4,6 +4,8 @@
 //  Mira QA: characterize Plan / Ask-user card copy as painted by Sable
 //  (28099e0). Do not restyle. Entering/Entered plan mode, Awaiting
 //  approval with Approve, Asking/Asked with Continue and Submit.
+//  Those three strings are labels only — not wired actions. Tests must
+//  not claim they approve a plan or submit an answer.
 //  Product is VibeCoder. Looks like ZCode grouping. Not ZCode. Not
 //  Electron. Does not stamp 99%. PRODUCT_NAME VibeCoderTests.
 //
@@ -134,6 +136,21 @@ final class PlanAskUserCardCopyTests: XCTestCase {
         XCTAssertFalse(src.contains("Ask ZCode"))
         XCTAssertFalse(src.localizedCaseInsensitiveContains("99%"))
         assertNotProductIdentityLies(in: src, file: "ZCodeActivityLineView.swift")
+        assertApproveContinueSubmitAreLabelsOnly(in: src)
+    }
+
+    func testApproveContinueSubmitAreLabelsNotWiredActions() throws {
+        let src = try appSource("Views/Chat/ZCodeActivityLineView.swift")
+        assertApproveContinueSubmitAreLabelsOnly(in: src)
+        XCTAssertFalse(
+            src.contains("approvePlanAndContinue"),
+            "activity cards must not claim Approve runs the planner")
+        XCTAssertFalse(
+            src.contains("onApprove"),
+            "activity switch-mode row has no onApprove")
+        XCTAssertEqual(SwitchModeCardCopy.approve, "Approve")
+        XCTAssertEqual(AskUserQuestionCardCopy.continueLabel, "Continue")
+        XCTAssertEqual(AskUserQuestionCardCopy.submit, "Submit")
     }
 
     func testPaintedCopyDoesNotClaimZCodeOrStamp99() throws {
@@ -151,6 +168,25 @@ final class PlanAskUserCardCopyTests: XCTestCase {
     }
 
     // MARK: - helpers
+
+    /// Reed: Approve / Continue / Submit on these cards are labels, not buttons.
+    private func assertApproveContinueSubmitAreLabelsOnly(in src: String) {
+        XCTAssertTrue(src.contains("Text(SwitchModeCardCopy.approve)"))
+        XCTAssertTrue(src.contains("Text(AskUserQuestionCardCopy.continueLabel)"))
+        XCTAssertTrue(src.contains("Text(AskUserQuestionCardCopy.submit)"))
+        XCTAssertFalse(
+            src.contains("Button(SwitchModeCardCopy.approve)"),
+            "Approve is a label, not a wired Button")
+        XCTAssertFalse(
+            src.contains("Button(AskUserQuestionCardCopy.continueLabel)"),
+            "Continue is a label, not a wired Button")
+        XCTAssertFalse(
+            src.contains("Button(AskUserQuestionCardCopy.submit)"),
+            "Submit is a label, not a wired Button")
+        XCTAssertFalse(
+            src.contains("Button(action: onApprove)"),
+            "activity card must not wire planner Approve")
+    }
 
     private func assertNotProductIdentityLies(in text: String, file: String) {
         let lower = text.lowercased()
