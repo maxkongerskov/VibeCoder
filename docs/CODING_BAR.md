@@ -31,7 +31,7 @@ Use this row as the baseline. Day-30 compares **the same model** if possible. Ot
 
 | # | Bar | Evidence |
 |---|---|---|
-| C1 | Git project bound → worktree → patch (`apply_patch` or `edit_file`) → project test/build runs → main tree clean until merge | **Not yet.** Day-0 is toy 013 in a temp dir (oracle pass). This-repo worktree C1 is Week 2. |
+| C1 | Git project bound → worktree → patch (`apply_patch` or `edit_file`) → project test/build runs → main tree clean until merge | **Pass (headless, 2026-08-23).** Sibling worktree `VibeCoder-agentcore-c1` (`agentcore/c1-lead`). Unsloth Nemotron `write_file` added `C1WorktreeSmokeTests.swift`; `swift test --filter C1WorktreeSmokeTests` **1/1**. Main checkout has **no** that file (`feat/computer-and-browser-use` porcelain only `?? .grok/`). Merge not done. Log: `Evals/results/2026-08-23-unsloth-c1-worktree/`. |
 | C2 | Same class of task **in-app** (VibeCoder.app), not only headless | Not yet |
 | C3 | Failure injects compiler/test output; loop does not hang | **013 loop no longer 400s (2026-08-23 re-run).** After blocked identical `read_file`, turn `finished: stop`, eval-runner exit 0. Compiler/test inject still not this cell. |
 | C4 | Cancel (⌘. / SIGINT) leaves a paired transcript | plumbing may already pass; re-verify if the loop changes |

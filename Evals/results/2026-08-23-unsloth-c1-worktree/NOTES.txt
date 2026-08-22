@@ -1,0 +1,5 @@
+worktree=/Users/maxkongerskov/VibeCoder-agentcore-c1 branch=agentcore/c1-lead
+main_checkout_has_file=NO
+swift_test_filter=C1WorktreeSmokeTests PASS 1/1
+eval_runner_exit=0 duration_s=59
+merge=not_done (user-driven)

@@ -210,6 +210,14 @@ Update in place. Newest first. Format:
 - Not doing: one sentence if temptation appeared
 ```
 
+### 2026-08-23 (C1 worktree)
+
+- Milestone: W2.1 C1 **pass** (headless); C2 in-app still open  
+- Track: —  
+- Numbers: Unsloth C1 **59s**, eval-runner 0, `swift test --filter C1WorktreeSmokeTests` 1/1; main tree clean  
+- Next action: C2 same task in VibeCoder.app if the app is up; else skip C2 and stay on Unsloth speed/docs  
+- Not doing: merge the C1 worktree, other providers, GitHub push, CloudBots  
+
 ### 2026-08-23 (wire tail)
 
 - Milestone: W1 400-fix done; W2.1 C1 next  
