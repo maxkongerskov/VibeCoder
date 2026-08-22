@@ -235,7 +235,10 @@ public actor UnslothStudioBackend: InferenceBackend {
             let type: String?
 
             var resolvedContext: Int? {
-                context_length ?? max_context_length ?? native_context_length
+                ModelContextLengthResolver.advertisedMax(
+                    nativeContextLength: native_context_length,
+                    maxContextLength: max_context_length,
+                    contextLength: context_length)
             }
         }
 

@@ -65,9 +65,15 @@ public actor OpenAICompatibleClient {
                 let context_length: Int?
                 let max_model_len: Int?
                 let contextLength: Int?
+                let max_context_length: Int?
+                let native_context_length: Int?
 
                 var resolvedContextLength: Int? {
-                    context_length ?? max_model_len ?? contextLength
+                    ModelContextLengthResolver.advertisedMax(
+                        nativeContextLength: native_context_length,
+                        maxContextLength: max_context_length,
+                        contextLength: context_length,
+                        extra: [max_model_len, contextLength])
                 }
             }
             let data: [Item]
