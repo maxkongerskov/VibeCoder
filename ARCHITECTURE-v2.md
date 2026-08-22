@@ -65,9 +65,6 @@ Landed: Atlas four tools (fail closed without Screen Recording + Accessibility);
 
 ---
 
-
----
-
 ## ZCode look + harness — UX target (docs)
 
 Max (2026-08-22): keep going until VibeCoder **looks and works like ZCode** (greatest local agent harness he knows). Native SwiftUI. Still BYO HTTP. **Not Electron. Not a ZCode product.** Freeze §1 does not change: no bundled llama, MLX stub, no Sparkle/Sentry/license.
@@ -79,6 +76,12 @@ Max (2026-08-22): keep going until VibeCoder **looks and works like ZCode** (gre
 - Mira: copy never claims we are ZCode or Electron; no 99% and no “as fast as Unsloth” without a timed turn.
 - Nash: hold CI unless a cut breaks `swift test`.
 - Reed: this freeze. Shipping §1 stays BYO HTTP.
+
+**Landed locally (not 99%, not origin unless Max says):**
+- Launch: tests named VibeCoderTests so Debug app opens (Sable).
+- Harness: prefer gh, refuse identical consecutive calls, stop when merged, Explore grouping, consecutive file changes group for chat cards + turn totals (Atlas). Loop file not grown.
+- Chat: live stream, Ask the agent…, Explore cards. File-change *cards* still Sable. Code-block wrap in flight.
+- Not ZCode. Not Electron.
 
 **Not 99%** until the app actually feels like that. Origin push stays Max.
 
@@ -98,6 +101,7 @@ Electron rewrite, claiming we are ZCode, bundled llama.cpp, in-process MLX as a 
 
 | Date | Change | Reason |
 |---|---|---|
+| 2026-08-22 | ZCode-parity local: launch unblocked; Explore + file-change grouping in harness; chat cards still Sable. Not ZCode. Not 99%. |
 | 2026-08-22 | ZCode look + harness UX target: native SwiftUI VibeCoder, still BYO HTTP, not Electron, not a ZCode product. Not 99% until it feels like that. | Max: keep going |
 | 2026-08-22 | Computer-use slice 1: tools + permission chrome + honesty tests landed. Fail closed without grant. §1 still does not claim screen/mouse. Not 99%. | Max: implement now |
 | 2026-08-22 | Computer-use slice 0 freeze: now = screenshot + click/type/scroll on this Mac with permission; not cloud; not LAN remote. Later = unattended, browser-only agent, storefront. App cannot see the screen today. Docs only. | Max: freeze now vs later |
