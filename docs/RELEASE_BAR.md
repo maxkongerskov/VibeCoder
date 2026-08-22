@@ -4,6 +4,8 @@ What **99%** means for a **BYO OpenAI-compatible HTTP** local agent. Not a hobby
 
 Ada owns this file. Lin/Pixel/Rigel raise the numbers with **evidence**, not vibes. Do not claim 99% without the proof column filled.
 
+**Today (2026-08-22): not 99% daily-driver.** Required cells can be filled without being 99%. Proof is unit / mock-worker / characterization. No live first-chat against a local model. App tests do not gate merge (GHA `SKIP_APP_TESTS=1`).
+
 ---
 
 ## Max-approved decisions (do not reopen this cut)
@@ -20,7 +22,7 @@ Ada owns this file. Lin/Pixel/Rigel raise the numbers with **evidence**, not vib
 
 ## 99% — explicit meaning
 
-A daily-driver is 99% when **all** of the following are true **and** Rigel has written evidence (command + result, or eval id + pass). Partial UI is not enough.
+A daily-driver is 99% when **all** of the following are true **and** Rigel has written evidence (command + result, or eval id + pass). Partial UI is not enough. Filled cells below are **not** that bar yet — mock-worker 012/013 ≠ live HTTP model ≠ in-app first chat.
 
 ### First-run
 
@@ -81,7 +83,7 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 
 ### Proof pack (Rigel owns the folder)
 
-Write results under `docs/orchestration/` or `Evals/results/` with date. A scorecard with empty cells is not 99%.
+Write results under `docs/orchestration/` or `Evals/results/` with date. Empty cells are not 99%. Filled cells are also not 99% if the evidence is mock-worker, unit, or skipped App tests.
 
 ---
 
@@ -92,7 +94,7 @@ Write results under `docs/orchestration/` or `Evals/results/` with date. A score
 - App Sandbox entitlement redesign
 - SQLite session store
 - ZCode chrome leftovers: mermaid, KaTeX, queue **Edit**, `node_repl`, in-app browser/whiteboard
-- Growing `ChatViewModel.swift` (~3596 lines) or `AgentLoop.swift` (~2110) except to **move code out**
+- Growing `ChatViewModel.swift` (2836 lines) or `AgentLoop.swift` (~2110) except to **move code out**
 - Making Local API full in-app parity (worktrees, review sheets, MCP)
 
 ---
@@ -129,10 +131,10 @@ Write results under `docs/orchestration/` or `Evals/results/` with date. A score
 
 ## Extraction map (do not grow these files)
 
-| File | Lines (2026-08-20) | Allowed this cut | Later extract |
+| File | Lines (2026-08-22) | Allowed this cut | Later extract |
 |------|--------------------|------------------|---------------|
-| `App/ViewModels/ChatViewModel.swift` | ~3596 | UI wiring only if Pixel must; **no** new loop policy | persist, slash commands, queue, stream coalesce |
-| `Sources/AgentCore/Agent/AgentLoop.swift` | ~2110 | **no** default-worktree logic | already has `AgentRunBootstrap` — keep using it |
+| `App/ViewModels/ChatViewModel.swift` | 2836 (was ~3596) | UI wiring only if Pixel must; **no** new loop policy | persist, slash commands, queue **already extracted** (`ChatViewModel+SlashCommands`, persist/queue out). Do not list as undone. Stream coalesce if still in-file. |
+| `Sources/AgentCore/Agent/AgentLoop.swift` | ~2110 | **no** default-worktree logic; **do not grow** | already has `AgentRunBootstrap` — keep using it |
 | `Sources/AgentCore/Agent/ChatLoop.swift` | ~1019 | no | leave |
 
 New worktree default belongs in `WorktreeCoordinator` / `ConversationCoordinator` bind paths. Pixel’s first-run hero belongs in `ChatView` empty state + `LoopbackServerProbe`.
@@ -150,12 +152,14 @@ BLOCKERS: …
 NEXT_ASSIGNMENT: …
 ```
 
-**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts. Those cells are filled (2026-08-20; L2 named live POST 2026-08-21). Accepted residuals (not 99% gates): no in-app window / live model server; no ⌘Q or SIGKILL; no mid-stream persist checkpoint; 012/013 mock-worker only (not a real model). Cluster/worktree App tests landed: `ClusterPaneUITests`, `WorktreeReviewSheetTests` (e72a114) — characterization, not XCUI; GHA `SKIP_APP_TESTS=1` (local App tests WARN unless `APP_TESTS_STRICT=1`) so they do not gate CI. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
+**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts that prove the bar. **Filled cells ≠ 99%.** Current honest status (2026-08-22): **not 99% daily-driver.** No first-chat against a real local model (no LM Studio/Ollama on this Mac). 012/013 are mock-worker scripted cells, not live HTTP, not in-app first chat — do not treat them as 99% live proof. App tests (`MenuChromeUITests`, `ClusterPaneUITests`, `WorktreeReviewSheetTests`, e72a114) are characterization, not XCUI; GHA `SKIP_APP_TESTS=1` (local WARN unless `APP_TESTS_STRICT=1`) — they **do not gate merge**. Residuals that still block 99%: no in-app window / live model server / SwiftUI token paint; no ⌘Q or SIGKILL; no mid-stream persist checkpoint. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
 
-### Five-way (2026-08-21)
+### Five-way (2026-08-21) — historical, not today’s score
 
-| Who | CONFIDENCE | Note |
-|-----|------------|------|
+Everyone wrote 99% that day because required cells were filled. **That rule overclaimed.** Do not copy these numbers forward as current confidence.
+
+| Who | CONFIDENCE (then) | Note |
+|-----|-------------------|------|
 | Ada | 99% | Required cells filled; L2 named test is scorecard honesty not a product gate |
 | Lin | 99% | W/L/A3–A5/P; landed `testLocalAPIOptInWithoutUsableProjectReturns400` |
 | Pixel | 99% | F1–F3, W5/W6 chrome; live window residual. W5 sheet = `WorktreeReviewSheetTests` (not XCUI; not a GHA gate) |
