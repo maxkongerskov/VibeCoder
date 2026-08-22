@@ -504,6 +504,12 @@ struct ZCodeActivityStack: View {
                         items.append(.line(states[i]))
                     }
                 }
+            case .fileChange(_, let indices):
+                // File-change family from ToolCallGrouping: keep existing
+                // per-tool activity lines (edits also live in InlineEditCardView).
+                for i in indices {
+                    items.append(.line(states[i]))
+                }
             case .standalone(let index, _):
                 items.append(.line(states[index]))
             }
