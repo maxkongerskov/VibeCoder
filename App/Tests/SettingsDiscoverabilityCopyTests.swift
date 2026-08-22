@@ -304,11 +304,22 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
             "Ask for follow-up changes")
         XCTAssertEqual(
             EmptyChatCopy.composerPlaceholder(isEmptyChat: true, isRunning: true),
-            "Keep typing to queue…")
+            "Keep typing to queue follow-up changes")
+        XCTAssertEqual(
+            EmptyChatCopy.composerPlaceholder(isEmptyChat: false, isRunning: true),
+            EmptyChatCopy.composerQueue)
+        XCTAssertEqual(EmptyChatCopy.sendButtonLabel(isRunning: false), "Send")
+        XCTAssertEqual(EmptyChatCopy.sendButtonLabel(isRunning: true), "Queue message")
+        XCTAssertEqual(EmptyChatCopy.sendButtonHelp(isRunning: true), "Queue after the current response")
+        XCTAssertTrue(EmptyChatCopy.queueHelp.lowercased().contains("queue"))
+        XCTAssertFalse(EmptyChatCopy.queueLabel.lowercased().contains("interject"))
+        XCTAssertFalse(EmptyChatCopy.composerQueue.lowercased().contains("interject"))
         let empty = EmptyChatCopy.composerEmpty.lowercased()
         XCTAssertFalse(empty.contains("zcode"))
         XCTAssertFalse(empty.contains("electron"))
         XCTAssertTrue(empty.contains("agent"))
+        XCTAssertFalse(EmptyChatCopy.composerQueue.lowercased().contains("zcode"))
+        XCTAssertFalse(EmptyChatCopy.queueLabel.lowercased().contains("zcode"))
     }
 
     func testExploreCardCopyBuckets() {

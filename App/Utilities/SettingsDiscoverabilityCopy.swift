@@ -101,12 +101,27 @@ enum EmptyChatCopy {
     /// Composer field. VibeCoder wording — never "Ask ZCode".
     static let composerEmpty = "Ask the agent…"
     static let composerFollowUp = "Ask for follow-up changes"
-    static let composerQueue = "Keep typing to queue…"
+    /// While a turn is live, Send enqueues. Steer on a queued row injects now.
+    static let composerQueue = "Keep typing to queue follow-up changes"
+    static let sendLabel = "Send"
+    static let queueLabel = "Queue message"
+    static let sendHelp = "Send message"
+    static let queueHelp = "Queue after the current response"
+    static let stopLabel = "Stop"
+    static let stopHelp = "Stop this response. Queued messages stay."
 
     static func composerPlaceholder(isEmptyChat: Bool, isRunning: Bool) -> String {
         if isRunning { return composerQueue }
         if isEmptyChat { return composerEmpty }
         return composerFollowUp
+    }
+
+    static func sendButtonLabel(isRunning: Bool) -> String {
+        isRunning ? queueLabel : sendLabel
+    }
+
+    static func sendButtonHelp(isRunning: Bool) -> String {
+        isRunning ? queueHelp : sendHelp
     }
 }
 

@@ -859,8 +859,8 @@ private struct SendStopButton: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.escape, modifiers: [])
-                .help("Stop generation")
-                .accessibilityLabel("Stop")
+                .help(EmptyChatCopy.stopHelp)
+                .accessibilityLabel(EmptyChatCopy.stopLabel)
 
                 if canSend {
                     Button(action: onSend) {
@@ -872,8 +872,8 @@ private struct SendStopButton: View {
                             .contentShape(Circle())
                     }
                     .buttonStyle(.plain)
-                    .help("Queue message")
-                    .accessibilityLabel("Queue message")
+                    .help(EmptyChatCopy.queueHelp)
+                    .accessibilityLabel(EmptyChatCopy.queueLabel)
                 }
             }
         } else {
@@ -893,11 +893,11 @@ private struct SendStopButton: View {
             }
             .buttonStyle(.plain)
             .disabled(!canSend)
-            .help(canSend ? "Send message" : (disabledReason ?? "Send message"))
+            .help(canSend ? EmptyChatCopy.sendHelp : (disabledReason ?? EmptyChatCopy.sendHelp))
             .accessibilityLabel(
                 canSend
-                    ? "Send"
-                    : (disabledReason.map { "Send disabled. \($0)" } ?? "Send")
+                    ? EmptyChatCopy.sendLabel
+                    : (disabledReason.map { "Send disabled. \($0)" } ?? EmptyChatCopy.sendLabel)
             )
         }
     }
