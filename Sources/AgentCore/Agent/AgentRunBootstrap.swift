@@ -32,7 +32,6 @@ public enum AgentRunBootstrap {
         // (including maxTokens). Do not rebuild without maxTokens — the
         // Developer Inference UI persists maxTokens on ModelSettings.
         let sampling = samplingOverride ?? modelSettings.samplingParams()
-        _ = planApprovalReviewer
         let contextBudget = ContextBudget.resolveForChatRun(
             modelSettings: modelSettings.loadSettings,
             workerModel: workerModel,
@@ -46,6 +45,7 @@ public enum AgentRunBootstrap {
             safeMode: safeMode,
             patchReviewer: patchReviewer,
             userQuestionReviewer: userQuestionReviewer,
+            planApprovalReviewer: planApprovalReviewer,
             shellApprovalCoordinator: shellApprovalCoordinator,
             disabledToolNames: settings.disabledToolNames,
             contextBudgetTokens: contextBudget,

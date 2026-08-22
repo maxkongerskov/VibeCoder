@@ -34,17 +34,14 @@ public actor AgentLoop {
         public var stallWindow: Int       // turns to look back for loop detection
         public var verifyEdits: Bool      // run BuildGuard after mutating turns
         public var safeMode: SafeModeConfig?
-        /// Optional host-installed gate for `apply_patch`. When non-nil,
-        /// the tool surfaces previews before writing — typically wired
-        /// only when Safe Mode is engaged.
+        /// Optional host-installed gate for `apply_patch`. When non-nil, typically Safe Mode.
         public var patchReviewer: PatchReviewer?
-        /// Optional host-installed gate for `ask_user`. When non-nil,
-        /// the tool suspends the loop and surfaces a question card to
-        /// the user. When nil, `ask_user` returns a degraded message.
+        /// Optional host-installed gate for `ask_user`; nil returns a degraded message.
         public var userQuestionReviewer: UserQuestionReviewer?
-        /// Optional host gate for shell / executes / MCP `.ask` outcomes
-        /// (Once / Always / Never). When nil, those asks hard-deny.
-        /// Shared with ToolRegistry via `ShellApprovalGate` (Wave B S4).
+        /// Optional host gate for `exit_plan_mode` (Approve). Nil auto-approves.
+        public var planApprovalReviewer: PlanApprovalReviewer?
+        /// Optional host gate for shell / executes / MCP `.ask` (Once / Always / Never).
+        /// When nil, those asks hard-deny. Shared with ToolRegistry via `ShellApprovalGate` (Wave B S4).
         public var shellApprovalCoordinator: ShellApprovalCoordinator?
         /// Tools the user switched off in Settings → Tools. Excluded
         /// from the schemas the model sees AND rejected at dispatch
@@ -151,7 +148,7 @@ public actor AgentLoop {
                     verifyEdits: Bool = true,
                     safeMode: SafeModeConfig? = nil,
                     patchReviewer: PatchReviewer? = nil,
-                    userQuestionReviewer: UserQuestionReviewer? = nil,
+                    userQuestionReviewer: UserQuestionReviewer? = nil, planApprovalReviewer: PlanApprovalReviewer? = nil,
                     shellApprovalCoordinator: ShellApprovalCoordinator? = nil,
                     disabledToolNames: Set<String> = [],
                     contextBudgetTokens: Int? = nil,
@@ -179,6 +176,7 @@ public actor AgentLoop {
             self.safeMode = safeMode
             self.patchReviewer = patchReviewer
             self.userQuestionReviewer = userQuestionReviewer
+            self.planApprovalReviewer = planApprovalReviewer
             self.shellApprovalCoordinator = shellApprovalCoordinator
             self.disabledToolNames = disabledToolNames
             self.contextBudgetTokens = contextBudgetTokens
@@ -339,6 +337,7 @@ public actor AgentLoop {
             safeMode: config.safeMode,
             patchReviewer: config.patchReviewer,
             userQuestionReviewer: config.userQuestionReviewer,
+            planApprovalReviewer: config.planApprovalReviewer,
             shellApprovalCoordinator: config.shellApprovalCoordinator,
             conversationID: convo.id,
             inferenceBackend: backend,
@@ -1943,6 +1942,7 @@ public actor AgentLoop {
             safeMode: context.safeMode,
             patchReviewer: context.patchReviewer,
             userQuestionReviewer: context.userQuestionReviewer,
+            planApprovalReviewer: context.planApprovalReviewer,
             shellApprovalCoordinator: context.shellApprovalCoordinator,
             conversationID: context.conversationID,
             inferenceBackend: context.inferenceBackend,

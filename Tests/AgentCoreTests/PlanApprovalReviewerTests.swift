@@ -118,4 +118,49 @@ final class PlanApprovalReviewerTests: XCTestCase {
         XCTAssertNil(stored)
         XCTAssertFalse(FileManager.default.fileExists(atPath: planURL.path))
     }
+
+    func testLoopConfigurationAndBootstrapKeepPlanApprovalReviewer() async throws {
+        let reviewer = PlanApprovalReviewer { plan in plan == "keep-me" }
+
+        let loopConfig = AgentLoop.Configuration(planApprovalReviewer: reviewer)
+        XCTAssertNotNil(loopConfig.planApprovalReviewer)
+        let keep = await loopConfig.planApprovalReviewer!.approve("keep-me")
+        let other = await loopConfig.planApprovalReviewer!.approve("other")
+        XCTAssertTrue(keep)
+        XCTAssertFalse(other)
+
+        var appSettings = AppSettings()
+        appSettings.xcodeMCPEnabled = false
+        let built = AgentRunBootstrap.buildLoopConfiguration(
+            modelSettings: ModelSettings(
+                modelId: "test",
+                loadSettings: .init(
+                    contextLength: ModelSettings.defaultContextLength,
+                    gpuOffloadLayers: ModelSettings.defaultGPUOffloadLayers,
+                    flashAttention: ModelSettings.defaultFlashAttention,
+                    kvCacheType: ModelSettings.defaultKVCacheType),
+                inferenceSettings: .init(
+                    temperature: 0.7, topP: 0.9, topK: 40, repeatPenalty: 1.0),
+                savedAt: Date()),
+            workerModel: ModelDescriptor(id: "test", displayName: "Test", backend: .lmStudio),
+            settings: appSettings,
+            xcodeMCPLive: false,
+            headless: false,
+            safeMode: nil,
+            patchReviewer: nil,
+            planApprovalReviewer: reviewer,
+            orchestratorBrief: nil).config
+
+        XCTAssertNotNil(built.planApprovalReviewer,
+                        "bootstrap must not drop planApprovalReviewer")
+        let builtKeep = await built.planApprovalReviewer!.approve("keep-me")
+        XCTAssertTrue(builtKeep)
+
+        let context = ToolContext(
+            projectRoot: nil,
+            planApprovalReviewer: built.planApprovalReviewer,
+            conversationID: UUID()
+        )
+        XCTAssertNotNil(context.planApprovalReviewer)
+    }
 }
