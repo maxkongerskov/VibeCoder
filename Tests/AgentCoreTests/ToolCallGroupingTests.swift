@@ -23,7 +23,16 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "run_shell"), .shell)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "update_todo"), .todo)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "load_skill"), .skill)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "Skill"), .skill)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "task"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "Agent"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "Task"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "get_task_output"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "wait_tasks"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "kill_task"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "TaskOutput"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "TaskStop"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "send_message"), .other)
         XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "write_file"), .write)
         XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "edit_file"), .update)
         XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "delete_file"), .delete)
@@ -398,5 +407,81 @@ final class ToolCallGroupingTests: XCTestCase {
         }
         XCTAssertEqual(a.command, "ls")
         XCTAssertEqual(b.statusLabel, "Failed")
+    }
+
+    func testLoadSkillIsSkillCardWithRunningAndRanLabels() {
+        let running = ToolCallEvent(
+            name: "load_skill",
+            isRunning: true,
+            skillName: "review-pr",
+            skillArgs: "focus tests")
+        let done = ToolCallEvent(
+            name: "load_skill",
+            skillName: "review-pr",
+            skillArgs: "focus tests")
+        guard case .skill(let a) = ToolCallGrouping.group([running])[0] else {
+            return XCTFail("running load_skill is a skill card")
+        }
+        XCTAssertEqual(a.kindLabel, "Running skill")
+        XCTAssertEqual(a.skillName, "review-pr")
+        XCTAssertEqual(a.args, "focus tests")
+        XCTAssertEqual(ToolCallGrouping.skillKindLabel(isRunning: true), "Running skill")
+        guard case .skill(let b) = ToolCallGrouping.group([done])[0] else {
+            return XCTFail("finished load_skill is a skill card")
+        }
+        XCTAssertEqual(b.kindLabel, "Ran skill")
+        XCTAssertEqual(ToolCallGrouping.skillKindLabel(isRunning: false), "Ran skill")
+    }
+
+    func testTaskIsSubAgentCard() {
+        let running = ToolCallEvent(
+            name: "task",
+            isRunning: true,
+            agentPrompt: "Find the grouping tests",
+            agentType: "explore")
+        guard case .agent(let card) = ToolCallGrouping.group([running])[0] else {
+            return XCTFail("task is an agent card")
+        }
+        XCTAssertEqual(card.title, "SubAgent")
+        XCTAssertEqual(card.kindLabel, "Launching")
+        XCTAssertEqual(card.prompt, "Find the grouping tests")
+        XCTAssertEqual(card.agentType, "explore")
+        XCTAssertEqual(card.toolName, "task")
+        XCTAssertEqual(ToolCallGrouping.agentKindLabel(isRunning: false), "Launched")
+    }
+
+    func testTaskOutputAndKillStayAgentFamilyNotOther() {
+        let events = [
+            ToolCallEvent(name: "get_task_output"),
+            ToolCallEvent(name: "kill_task", agentType: "explore"),
+            ToolCallEvent(name: "wait_tasks"),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 3)
+        for g in groups {
+            guard case .agent(let card) = g else {
+                return XCTFail("task output/stop tools are agent cards, got \(g)")
+            }
+            XCTAssertEqual(card.title, "SubAgent")
+            XCTAssertEqual(card.kindLabel, "Launched")
+        }
+    }
+
+    func testSkillAndAgentDoNotCollapseIntoExplore() {
+        let events = [
+            ToolCallEvent(name: "grep_code"),
+            ToolCallEvent(name: "load_skill", skillName: "ship"),
+            ToolCallEvent(name: "task", agentPrompt: "plan next"),
+            ToolCallEvent(name: "read_file"),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 4)
+        guard case .explore = groups[0] else { return XCTFail("search is explore") }
+        guard case .skill(let skill) = groups[1] else { return XCTFail("skill card") }
+        XCTAssertEqual(skill.skillName, "ship")
+        guard case .agent(let agent) = groups[2] else { return XCTFail("agent card") }
+        XCTAssertEqual(agent.prompt, "plan next")
+        guard case .explore(let counts, _) = groups[3] else { return XCTFail("read after agent is new explore") }
+        XCTAssertEqual(counts.files, 1)
     }
 }

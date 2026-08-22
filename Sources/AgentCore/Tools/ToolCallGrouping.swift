@@ -8,6 +8,9 @@
 //  Updating/Updated). Shell cards use Running/Ran plus Failed/Denied/Stopped
 //  and skip empty in-flight commands. Long-running shells carry startedAt so
 //  the composer chip can show "Running for Ns" without App chrome here.
+//  Skill cards use Running skill / Ran skill + Args; Agent/Task cards use
+//  SubAgent + prompt (Launching/Launched). Maps VibeCoder load_skill / task
+//  / get_task_output / wait_tasks / kill_task (not send_message).
 //  Pure functions so App/Sable can render later — this file does not
 //  touch AgentLoop.swift.
 //
@@ -51,6 +54,14 @@ public struct ToolCallEvent: Sendable, Equatable {
     public var deleted: Int
     /// Wall-clock start for long-running shells (composer chip "Running for Ns").
     public var startedAt: Date?
+    /// Skill name for `load_skill` cards (ZCode `chat.toolCall.skill.*`).
+    public var skillName: String?
+    /// Skill args string shown next to Running skill / Ran skill.
+    public var skillArgs: String?
+    /// Subagent prompt for Agent/Task cards.
+    public var agentPrompt: String?
+    /// `subagent_type` / catalog id (explore, plan, general-purpose).
+    public var agentType: String?
 
     public init(
         name: String,
@@ -60,7 +71,11 @@ public struct ToolCallEvent: Sendable, Equatable {
         path: String? = nil,
         added: Int = 0,
         deleted: Int = 0,
-        startedAt: Date? = nil
+        startedAt: Date? = nil,
+        skillName: String? = nil,
+        skillArgs: String? = nil,
+        agentPrompt: String? = nil,
+        agentType: String? = nil
     ) {
         self.name = name
         self.isRunning = isRunning
@@ -70,6 +85,10 @@ public struct ToolCallEvent: Sendable, Equatable {
         self.added = added
         self.deleted = deleted
         self.startedAt = startedAt
+        self.skillName = skillName
+        self.skillArgs = skillArgs
+        self.agentPrompt = agentPrompt
+        self.agentType = agentType
     }
 }
 
@@ -184,6 +203,50 @@ public struct ShellCard: Sendable, Equatable {
     }
 }
 
+/// Skill card (ZCode `chat.toolCall.skill.*`): Running skill / Ran skill + Args.
+public struct SkillCard: Sendable, Equatable {
+    public var index: Int
+    public var isRunning: Bool
+    public var skillName: String
+    public var args: String
+
+    public init(index: Int, isRunning: Bool, skillName: String, args: String = "") {
+        self.index = index
+        self.isRunning = isRunning
+        self.skillName = skillName
+        self.args = args
+    }
+
+    public var kindLabel: String { ToolCallGrouping.skillKindLabel(isRunning: isRunning) }
+}
+
+/// Agent/Task card (ZCode `chat.toolCall.agent.*`): title SubAgent + prompt.
+public struct AgentCard: Sendable, Equatable {
+    public var index: Int
+    public var isRunning: Bool
+    public var prompt: String
+    public var agentType: String
+    /// Tool name that produced the card (`task`, `get_task_output`, …).
+    public var toolName: String
+
+    public init(
+        index: Int,
+        isRunning: Bool,
+        prompt: String = "",
+        agentType: String = "",
+        toolName: String = "task"
+    ) {
+        self.index = index
+        self.isRunning = isRunning
+        self.prompt = prompt
+        self.agentType = agentType
+        self.toolName = toolName
+    }
+
+    public var title: String { "SubAgent" }
+    public var kindLabel: String { ToolCallGrouping.agentKindLabel(isRunning: isRunning) }
+}
+
 public enum GroupedToolCalls: Sendable, Equatable {
     /// Consecutive read-only tools → one Explore card.
     case explore(counts: ExploreBucketCounts, memberIndices: [Int])
@@ -191,7 +254,11 @@ public enum GroupedToolCalls: Sendable, Equatable {
     case fileChange(counts: FileChangeGroupCounts, memberIndices: [Int])
     /// Shell with parsed command (empty in-flight shells are omitted).
     case shell(ShellCard)
-    /// Todo / skill / agent / other, shown as its own card.
+    /// Skill load card.
+    case skill(SkillCard)
+    /// Subagent / task / task-output / task-stop card.
+    case agent(AgentCard)
+    /// Todo / other, shown as its own card.
     case standalone(index: Int, family: ToolFamily)
 }
 
@@ -214,9 +281,11 @@ public enum ToolCallGrouping: Sendable {
             return .explore
         case "update_todo":
             return .todo
-        case "load_skill":
+        case "load_skill", "Skill":
             return .skill
-        case "task":
+        case "task", "Agent", "Task",
+             "get_task_output", "wait_tasks", "kill_task",
+             "TaskOutput", "TaskStop":
             return .agent
         default:
             return .other
@@ -330,6 +399,16 @@ public enum ToolCallGrouping: Sendable {
         return running ? "Updating" : "Updated"
     }
 
+    /// ZCode skill card kind: Running skill while in flight, Ran skill once done.
+    public static func skillKindLabel(isRunning: Bool) -> String {
+        isRunning ? "Running skill" : "Ran skill"
+    }
+
+    /// ZCode agent background kind: Launching while in flight, Launched once up.
+    public static func agentKindLabel(isRunning: Bool) -> String {
+        isRunning ? "Launching" : "Launched"
+    }
+
     /// Pure grouping over a list of tool call events.
     public static func group(_ events: [ToolCallEvent]) -> [GroupedToolCalls] {
         var out: [GroupedToolCalls] = []
@@ -415,6 +494,23 @@ public enum ToolCallGrouping: Sendable {
                     status: status,
                     command: parsedShellCommand(ev),
                     startedAt: ev.startedAt)))
+                i += 1
+            } else if fam == .skill {
+                let ev = events[i]
+                out.append(.skill(SkillCard(
+                    index: i,
+                    isRunning: ev.isRunning,
+                    skillName: (ev.skillName ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                    args: (ev.skillArgs ?? "").trimmingCharacters(in: .whitespacesAndNewlines))))
+                i += 1
+            } else if fam == .agent {
+                let ev = events[i]
+                out.append(.agent(AgentCard(
+                    index: i,
+                    isRunning: ev.isRunning,
+                    prompt: (ev.agentPrompt ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                    agentType: (ev.agentType ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                    toolName: ev.name)))
                 i += 1
             } else {
                 out.append(.standalone(index: i, family: fam))
