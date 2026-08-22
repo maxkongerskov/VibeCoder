@@ -538,6 +538,10 @@ struct ZCodeActivityStack: View {
                 }
             case .shell(let card):
                 items.append(.shell(card))
+            case .skill(let card):
+                items.append(.line(states[card.index]))
+            case .agent(let card):
+                items.append(.line(states[card.index]))
             case .standalone(let index, _):
                 items.append(.line(states[index]))
             }
