@@ -469,6 +469,12 @@ struct ZCodeActivityStack: View {
                             todoRow(card)
                         case .mcp(let card):
                             mcpRow(card)
+                        case .planGuidance(let card):
+                            planGuidanceRow(card)
+                        case .switchMode(let card):
+                            switchModeRow(card)
+                        case .askUserQuestion(let card):
+                            askUserQuestionRow(card)
                         case .line(let state):
                             ZCodeActivityLineView(
                                 state: state,
@@ -517,6 +523,9 @@ struct ZCodeActivityStack: View {
         case agent(AgentCard)
         case todo(TodoCard)
         case mcp(MCPCard)
+        case planGuidance(PlanGuidanceCard)
+        case switchMode(SwitchModeCard)
+        case askUserQuestion(AskUserQuestionCard)
         var id: String {
             switch self {
             case .explore(let id, _, _): return "explore-\(id)"
@@ -527,6 +536,9 @@ struct ZCodeActivityStack: View {
             case .agent(let card): return "agent-\(card.index)-\(card.toolName)"
             case .todo(let card): return "todo-\(card.index)"
             case .mcp(let card): return "mcp-\(card.index)-\(card.toolName)"
+            case .planGuidance(let card): return "plan-\(card.index)-\(card.toolName)"
+            case .switchMode(let card): return "switch-\(card.index)-\(card.toolName)"
+            case .askUserQuestion(let card): return "ask-\(card.index)-\(card.toolName)"
             }
         }
     }
@@ -547,7 +559,9 @@ struct ZCodeActivityStack: View {
                 agentType: jsonString(state.input, keys: ["subagent_type", "agent_type", "type"]),
                 todoSummary: jsonString(state.input, keys: ["summary", "merge", "todos"]),
                 mcpParameters: state.input,
-                mcpResult: state.output)
+                mcpResult: state.output,
+                planText: jsonString(state.input, keys: ["plan", "plan_text", "markdown", "content"]),
+                question: jsonString(state.input, keys: ["question", "prompt", "message"]))
         }
         var items: [StackItem] = []
         for group in ToolCallGrouping.group(events) {
@@ -588,11 +602,11 @@ struct ZCodeActivityStack: View {
             case .mcp(let card):
                 items.append(.mcp(card))
             case .planGuidance(let card):
-                items.append(.line(states[card.index]))
+                items.append(.planGuidance(card))
             case .switchMode(let card):
-                items.append(.line(states[card.index]))
+                items.append(.switchMode(card))
             case .askUserQuestion(let card):
-                items.append(.line(states[card.index]))
+                items.append(.askUserQuestion(card))
             case .standalone(let index, _):
                 items.append(.line(states[index]))
             }
@@ -831,6 +845,112 @@ struct ZCodeActivityStack: View {
             }
         }
         .accessibilityLabel("\(MCPCardCopy.title(card)) · \(MCPCardCopy.viewCallDetails)")
+    }
+
+
+    @ViewBuilder
+    private func planGuidanceRow(_ card: PlanGuidanceCard) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "list.bullet.clipboard")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text(PlanGuidanceCardCopy.verb(card))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text("·")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(Theme.Palette.activityDivider)
+                Text(PlanGuidanceCardCopy.status(card))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityStatus)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if card.isRunning {
+                    ProgressView().controlSize(.mini)
+                }
+                Spacer(minLength: 0)
+            }
+            if !card.planText.isEmpty {
+                Text(card.planText)
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.Palette.secondary)
+                    .lineLimit(6)
+            }
+        }
+        .accessibilityLabel("\(PlanGuidanceCardCopy.verb(card)) · \(PlanGuidanceCardCopy.status(card))")
+    }
+
+    @ViewBuilder
+    private func switchModeRow(_ card: SwitchModeCard) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "arrow.triangle.swap")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text(SwitchModeCardCopy.verb(card))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text("·")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(Theme.Palette.activityDivider)
+                Text(SwitchModeCardCopy.status(card))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityStatus)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                if card.isRunning {
+                    ProgressView().controlSize(.mini)
+                }
+                Spacer(minLength: 0)
+            }
+            Text(SwitchModeCardCopy.approve)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text(SwitchModeCardCopy.approveDescription)
+                .font(.system(size: 11))
+                .foregroundColor(Theme.Palette.tertiary)
+                .lineLimit(2)
+        }
+        .accessibilityLabel("\(SwitchModeCardCopy.verb(card)) · \(SwitchModeCardCopy.approve)")
+    }
+
+    @ViewBuilder
+    private func askUserQuestionRow(_ card: AskUserQuestionCard) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text(AskUserQuestionCardCopy.verb(card))
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text("·")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(Theme.Palette.activityDivider)
+                Text(AskUserQuestionCardCopy.status(card))
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityStatus)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
+                if card.isRunning {
+                    ProgressView().controlSize(.mini)
+                }
+                Spacer(minLength: 0)
+            }
+            HStack(spacing: 8) {
+                Text(AskUserQuestionCardCopy.continueLabel)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text(AskUserQuestionCardCopy.submit)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text(AskUserQuestionCardCopy.customAnswer)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.Palette.tertiary)
+            }
+        }
+        .accessibilityLabel("\(AskUserQuestionCardCopy.verb(card)) · \(AskUserQuestionCardCopy.status(card))")
     }
 
     private var toolsHeader: some View {

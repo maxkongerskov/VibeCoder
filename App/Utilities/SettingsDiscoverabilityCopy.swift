@@ -227,6 +227,38 @@ enum MCPCardCopy {
     static var copyResult: String { ToolCallGrouping.mcpCopyResultLabel }
 }
 
+/// Enter plan mode. VibeCoder wording.
+enum PlanGuidanceCardCopy {
+    static func verb(_ card: PlanGuidanceCard) -> String { card.kindLabel }
+    static func status(_ card: PlanGuidanceCard) -> String {
+        let s = card.planText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? "Plan" : s
+    }
+}
+
+/// Exit plan mode / approval. VibeCoder wording.
+enum SwitchModeCardCopy {
+    static func verb(_ card: SwitchModeCard) -> String { card.kindLabel }
+    static func status(_ card: SwitchModeCard) -> String {
+        let s = card.planText.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? card.placeholderTitle : s
+    }
+    static var approve: String { ToolCallGrouping.switchModeApproveLabel }
+    static var approveDescription: String { ToolCallGrouping.switchModeApproveDescription }
+}
+
+/// Ask-user question. VibeCoder wording.
+enum AskUserQuestionCardCopy {
+    static func verb(_ card: AskUserQuestionCard) -> String { card.kindLabel }
+    static func status(_ card: AskUserQuestionCard) -> String {
+        let s = card.question.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? "Question" : s
+    }
+    static var continueLabel: String { ToolCallGrouping.askUserContinueLabel }
+    static var submit: String { ToolCallGrouping.askUserSubmitLabel }
+    static var customAnswer: String { ToolCallGrouping.askUserCustomAnswerLabel }
+}
+
 /// Chat shell card (command title + Running/Ran). VibeCoder wording.
 enum ShellCardCopy {
     static func title(_ card: ShellCard) -> String {

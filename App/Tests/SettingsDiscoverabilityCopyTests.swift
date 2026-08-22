@@ -365,6 +365,19 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
     }
 
 
+
+    func testPlanAndAskUserCardCopy() {
+        XCTAssertEqual(PlanGuidanceCardCopy.verb(PlanGuidanceCard(index: 0, isRunning: true)), "Entering plan mode")
+        XCTAssertEqual(PlanGuidanceCardCopy.verb(PlanGuidanceCard(index: 0, isRunning: false)), "Entered plan mode")
+        XCTAssertEqual(SwitchModeCardCopy.verb(SwitchModeCard(index: 0, isRunning: true)), "Awaiting approval")
+        XCTAssertEqual(SwitchModeCardCopy.approve, "Approve")
+        XCTAssertEqual(AskUserQuestionCardCopy.verb(AskUserQuestionCard(index: 0, isRunning: true, question: "Ship?")), "Asking")
+        XCTAssertEqual(AskUserQuestionCardCopy.status(AskUserQuestionCard(index: 0, isRunning: false, question: "Ship?")), "Ship?")
+        XCTAssertEqual(AskUserQuestionCardCopy.submit, "Submit")
+        XCTAssertEqual(AskUserQuestionCardCopy.continueLabel, "Continue")
+        XCTAssertFalse(SwitchModeCardCopy.approve.lowercased().contains("zcode"))
+    }
+
     func testTodoAndMCPCardCopy() {
         XCTAssertEqual(TodoCardCopy.verb(TodoCard(index: 0, isRunning: true)), "Updating todo")
         XCTAssertEqual(TodoCardCopy.verb(TodoCard(index: 0, isRunning: false, summary: "ship")), "Updated todo")
