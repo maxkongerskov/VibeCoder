@@ -438,6 +438,12 @@ struct ZCodeActivityStack: View {
                         switch item {
                         case .explore(_, let counts, let running):
                             exploreRow(counts: counts, running: running)
+                        case .fileChange(_, let counts, let events, let indices, let running):
+                            fileChangeRow(
+                                counts: counts,
+                                events: events,
+                                memberIndices: indices,
+                                running: running)
                         case .line(let state):
                             ZCodeActivityLineView(
                                 state: state,
@@ -474,10 +480,17 @@ struct ZCodeActivityStack: View {
 
     private enum StackItem: Identifiable {
         case explore(id: String, counts: ExploreBucketCounts, running: Bool)
+        case fileChange(
+            id: String,
+            counts: FileChangeGroupCounts,
+            events: [ToolCallEvent],
+            memberIndices: [Int],
+            running: Bool)
         case line(ToolCallUIState)
         var id: String {
             switch self {
             case .explore(let id, _, _): return "explore-\(id)"
+            case .fileChange(let id, _, _, _, _): return "fileChange-\(id)"
             case .line(let state): return state.id
             }
         }
@@ -504,12 +517,23 @@ struct ZCodeActivityStack: View {
                         items.append(.line(states[i]))
                     }
                 }
-            case .fileChange(_, let indices):
-                // File-change family from ToolCallGrouping: keep existing
-                // per-tool activity lines (edits also live in InlineEditCardView).
-                for i in indices {
-                    items.append(.line(states[i]))
+            case .fileChange(let counts, let indices):
+                if counts.total >= 2 {
+                    let running = indices.contains { events[$0].isRunning }
+                    let id = indices.map { states[$0].id }.joined(separator: "+")
+                    items.append(.fileChange(
+                        id: id,
+                        counts: counts,
+                        events: events,
+                        memberIndices: indices,
+                        running: running))
+                } else {
+                    for i in indices {
+                        items.append(.line(states[i]))
+                    }
                 }
+            case .shell(let card):
+                items.append(.line(states[card.index]))
             case .standalone(let index, _):
                 items.append(.line(states[index]))
             }
@@ -539,6 +563,37 @@ struct ZCodeActivityStack: View {
             Spacer(minLength: 0)
         }
         .accessibilityLabel("\(ExploreCardCopy.verb) · \(ExploreCardCopy.status(counts: counts))")
+    }
+
+    @ViewBuilder
+    private func fileChangeRow(
+        counts: FileChangeGroupCounts,
+        events: [ToolCallEvent],
+        memberIndices: [Int],
+        running: Bool
+    ) -> some View {
+        let verb = FileChangeCardCopy.verb(events: events, memberIndices: memberIndices)
+        let status = FileChangeCardCopy.status(counts: counts)
+        HStack(spacing: 6) {
+            Image(systemName: "doc.badge.arrow.up")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text(verb)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text("·")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(Theme.Palette.activityDivider)
+            Text(status)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Theme.Palette.activityStatus)
+                .lineLimit(1)
+            if running {
+                ProgressView().controlSize(.mini)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityLabel("\(verb) · \(status)")
     }
 
     private var toolsHeader: some View {

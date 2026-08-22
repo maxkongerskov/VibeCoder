@@ -345,4 +345,45 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
             XCTFail("expected explore group")
         }
     }
+    func testFileChangeCardCopyBuckets() {
+        let mixed = FileChangeGroupCounts(writes: 2, updates: 1, deletes: 1, fileCount: 4)
+        XCTAssertEqual(FileChangeCardCopy.status(counts: mixed), "2 writes, 1 update, 1 delete")
+        XCTAssertEqual(
+            FileChangeCardCopy.status(counts: FileChangeGroupCounts()),
+            "0 files")
+        XCTAssertEqual(
+            FileChangeCardCopy.status(counts: FileChangeGroupCounts(fileCount: 3)),
+            "3 files")
+        let writeEvents = [
+            ToolCallEvent(name: "write_file"),
+            ToolCallEvent(name: "write_file"),
+        ]
+        XCTAssertEqual(
+            FileChangeCardCopy.verb(events: writeEvents, memberIndices: [0, 1]),
+            "Wrote")
+        XCTAssertEqual(
+            FileChangeCardCopy.verb(
+                events: [ToolCallEvent(name: "edit_file", isRunning: true)],
+                memberIndices: [0]),
+            "Updating")
+        XCTAssertFalse(
+            FileChangeCardCopy.verb(events: writeEvents, memberIndices: [0, 1])
+                .lowercased().contains("zcode"))
+        XCTAssertFalse(FileChangeCardCopy.status(counts: mixed).lowercased().contains("zcode"))
+        let grouped = ToolCallGrouping.group([
+            ToolCallEvent(name: "write_file"),
+            ToolCallEvent(name: "edit_file"),
+            ToolCallEvent(name: "delete_file"),
+        ])
+        XCTAssertEqual(grouped.count, 1)
+        if case .fileChange(let c, let idx) = grouped[0] {
+            XCTAssertEqual(c.writes, 1)
+            XCTAssertEqual(c.updates, 1)
+            XCTAssertEqual(c.deletes, 1)
+            XCTAssertEqual(c.total, 3)
+            XCTAssertEqual(idx.count, 3)
+        } else {
+            XCTFail("expected fileChange group")
+        }
+    }
 }

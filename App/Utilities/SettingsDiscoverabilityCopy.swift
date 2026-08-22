@@ -145,6 +145,31 @@ enum ExploreCardCopy {
     }
 }
 
+/// Chat file-change group card (ZCode grouping, VibeCoder wording).
+enum FileChangeCardCopy {
+    static func verb(events: [ToolCallEvent], memberIndices: [Int]) -> String {
+        ToolCallGrouping.fileChangeGroupLabel(events: events, memberIndices: memberIndices)
+    }
+
+    static func status(counts: FileChangeGroupCounts) -> String {
+        var parts: [String] = []
+        if counts.writes > 0 {
+            parts.append("\(counts.writes) write\(counts.writes == 1 ? "" : "s")")
+        }
+        if counts.updates > 0 {
+            parts.append("\(counts.updates) update\(counts.updates == 1 ? "" : "s")")
+        }
+        if counts.deletes > 0 {
+            parts.append("\(counts.deletes) delete\(counts.deletes == 1 ? "" : "s")")
+        }
+        if parts.isEmpty {
+            let n = counts.fileCount
+            return n == 1 ? "1 file" : "\(n) files"
+        }
+        return parts.joined(separator: ", ")
+    }
+}
+
 /// Bind outcomes that need a modest visible reason (not a wizard).
 enum WorktreeBindCopy {
     static func notice(for result: WorktreeBindResult) -> String? {
