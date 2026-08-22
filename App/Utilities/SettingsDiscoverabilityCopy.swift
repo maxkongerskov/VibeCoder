@@ -246,6 +246,7 @@ enum SwitchModeCardCopy {
     }
     static var approve: String { ToolCallGrouping.switchModeApproveLabel }
     static var approveDescription: String { ToolCallGrouping.switchModeApproveDescription }
+    static var stayInPlan: String { "Stay in Plan" }
 }
 
 /// Ask-user question. VibeCoder wording.

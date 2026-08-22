@@ -146,6 +146,8 @@
 		AA71582C1525A62A84B7FA03 /* PlanApprovalFlowTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE427D6185C4DDD69CD8CBFD /* PlanApprovalFlowTests.swift */; };
 		ABBC6EACF1C4149A2EF4927D /* DiffSyntaxHighlighterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C92F29FC0BF70E6CCDF614EC /* DiffSyntaxHighlighterTests.swift */; };
 		AC6C8F1E6456B8F052A4F440 /* UserQuestionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D4DB65F8F6D36FC144DC7E6 /* UserQuestionCoordinator.swift */; };
+		F5A2B3C4D6E78091A2B3C49F /* PlanApprovalCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4F1A2B3C5D67E8091A2B38F /* PlanApprovalCoordinator.swift */; };
+		B7C4D5E6F091A2B3C4D5E6FA /* PlanApprovalCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6B3C4D5E7F091A2B3C4D5E8 /* PlanApprovalCoordinatorTests.swift */; };
 		AE28336E02C26F1129ECCF33 /* ArtifactCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47E9C640CA77329DCCF6AD00 /* ArtifactCard.swift */; };
 		AEE629F0E9233DF0A76FDE26 /* FindInTaskUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF7B4FEC42E80C4763C77303 /* FindInTaskUITests.swift */; };
 		B1BFC96F63BFF94401F6C31E /* FindInTaskSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E502525563C371AFE0E34DA /* FindInTaskSearch.swift */; };
@@ -311,6 +313,8 @@
 		67E5A28FD4C760075977067F /* MCPServersSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MCPServersSettingsView.swift; sourceTree = "<group>"; };
 		6CAE1A257C2C63880D36C561 /* UnslothContextHonestyCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnslothContextHonestyCopyTests.swift; sourceTree = "<group>"; };
 		6D4DB65F8F6D36FC144DC7E6 /* UserQuestionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserQuestionCoordinator.swift; sourceTree = "<group>"; };
+		E4F1A2B3C5D67E8091A2B38F /* PlanApprovalCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanApprovalCoordinator.swift; sourceTree = "<group>"; };
+		A6B3C4D5E7F091A2B3C4D5E8 /* PlanApprovalCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlanApprovalCoordinatorTests.swift; sourceTree = "<group>"; };
 		6DA504C7309DE22124E922D7 /* SidebarArchiveUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidebarArchiveUITests.swift; sourceTree = "<group>"; };
 		72474C46EA823DDEA0A37F8D /* MentionSearchCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MentionSearchCoordinatorTests.swift; sourceTree = "<group>"; };
 		75293DD122CDE318438A0FB4 /* PatchPreviewAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PatchPreviewAdapter.swift; sourceTree = "<group>"; };
@@ -710,6 +714,7 @@
 				22558A3FE3FAEF25D97A5F46 /* ToolSnapshotTruncationCopyTests.swift */,
 				6CAE1A257C2C63880D36C561 /* UnslothContextHonestyCopyTests.swift */,
 				559C4EC7FF321C82ED458937 /* UserQuestionCoordinatorTests.swift */,
+				A6B3C4D5E7F091A2B3C4D5E8 /* PlanApprovalCoordinatorTests.swift */,
 				4193B477D301751163E32974 /* WorkDurationFormatTests.swift */,
 				D7FEB5C929232363CAFFC304 /* WorktreeReviewSheetTests.swift */,
 			);
@@ -730,6 +735,7 @@
 				1A6876BD4B82701125E41DBE /* SleepAssertionService.swift */,
 				BAF88B117EBA74D5E65D4CD2 /* SpellcheckService.swift */,
 				6D4DB65F8F6D36FC144DC7E6 /* UserQuestionCoordinator.swift */,
+				E4F1A2B3C5D67E8091A2B38F /* PlanApprovalCoordinator.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -1077,6 +1083,7 @@
 				EDBC1E6B912E299001E77CFF /* ToolsSettingsView.swift in Sources */,
 				F59A9777D6F6D430664DDD6A /* TurnChangeSummaryView.swift in Sources */,
 				AC6C8F1E6456B8F052A4F440 /* UserQuestionCoordinator.swift in Sources */,
+				F5A2B3C4D6E78091A2B3C49F /* PlanApprovalCoordinator.swift in Sources */,
 				822EFB57FB76D86F54B8530D /* VibeCoderApp.swift in Sources */,
 				85A9252696A2BA8A4A6E4470 /* ViewExtensions.swift in Sources */,
 				1E507794C8C3174E646F2A8E /* ViewExtensionsPlus.swift in Sources */,
@@ -1147,6 +1154,7 @@
 				18F71C2CBD379CA927075902 /* ToolSnapshotTruncationCopyTests.swift in Sources */,
 				82E0D5F616E3D9AA53CAAAB3 /* UnslothContextHonestyCopyTests.swift in Sources */,
 				01E12010DE6C2969E89A783F /* UserQuestionCoordinatorTests.swift in Sources */,
+				B7C4D5E6F091A2B3C4D5E6FA /* PlanApprovalCoordinatorTests.swift in Sources */,
 				0A953334BA2672744A472532 /* WorkDurationFormatTests.swift in Sources */,
 				563DBE88E55FE16188845F08 /* WorktreeReviewSheetTests.swift in Sources */,
 			);

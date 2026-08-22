@@ -1046,6 +1046,9 @@ final class ChatViewModel: ObservableObject {
         let questionReviewer: UserQuestionReviewer? = headless
             ? nil
             : app.userQuestionCoordinator.makeReviewer()
+        let planApprovalReviewer: PlanApprovalReviewer? = headless
+            ? nil
+            : app.planApprovalCoordinator.makeReviewer()
         isHeadlessRun = headless
         if headless { app.beginHeadlessRun() }
 
@@ -1208,6 +1211,7 @@ final class ChatViewModel: ObservableObject {
                 safeMode: resolvedSafeMode,
                 patchReviewer: reviewer,
                 userQuestionReviewer: questionReviewer,
+                planApprovalReviewer: planApprovalReviewer,
                 shellApprovalCoordinator: shellApprover,
                 orchestratorBrief: orchestratorBrief,
                 thinking: thinkingConfig,

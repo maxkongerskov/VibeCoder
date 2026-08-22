@@ -385,6 +385,7 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         XCTAssertEqual(PlanGuidanceCardCopy.verb(PlanGuidanceCard(index: 0, isRunning: false)), "Entered plan mode")
         XCTAssertEqual(SwitchModeCardCopy.verb(SwitchModeCard(index: 0, isRunning: true)), "Awaiting approval")
         XCTAssertEqual(SwitchModeCardCopy.approve, "Approve")
+        XCTAssertEqual(SwitchModeCardCopy.stayInPlan, "Stay in Plan")
         XCTAssertEqual(AskUserQuestionCardCopy.verb(AskUserQuestionCard(index: 0, isRunning: true, question: "Ship?")), "Asking")
         XCTAssertEqual(AskUserQuestionCardCopy.status(AskUserQuestionCard(index: 0, isRunning: false, question: "Ship?")), "Ship?")
         XCTAssertEqual(AskUserQuestionCardCopy.submit, "Submit")

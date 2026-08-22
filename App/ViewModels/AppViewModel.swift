@@ -130,6 +130,7 @@ final class AppViewModel: ObservableObject {
     let sleepAssertion = SleepAssertionService()
     let patchReviewCoordinator = PatchReviewCoordinator()
     let userQuestionCoordinator = UserQuestionCoordinator()
+    let planApprovalCoordinator = PlanApprovalCoordinator()
     let shellApprovalCoordinatorService = ShellApprovalCoordinatorService()
     private var headlessRunCount = 0
 

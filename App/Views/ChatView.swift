@@ -411,6 +411,12 @@ struct ChatView: View {
                 .animation(.spring(response: 0.35, dampingFraction: 0.82),
                            value: app.userQuestionCoordinator.pendingQuestion != nil)
 
+            PlanApprovalCardMount(coordinator: app.planApprovalCoordinator)
+                .chatFluidColumn(width: columnWidth)
+                .padding(.bottom, 4)
+                .animation(.spring(response: 0.35, dampingFraction: 0.82),
+                           value: app.planApprovalCoordinator.pendingPlan != nil)
+
             // No ProcessingStatusBar above the composer — run/thinking state
             // already lives in the transcript (Working header, ReasoningBlock,
             // PendingAssistantBubble). Docked bar was redundant chrome.
@@ -1447,6 +1453,41 @@ private struct OrchestratorPlanView: View {
 }
 
 // MARK: - QuestionCardMount
+
+private struct PlanApprovalCardMount: View {
+    @ObservedObject var coordinator: PlanApprovalCoordinator
+
+    var body: some View {
+        if let plan = coordinator.pendingPlan {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(SwitchModeCardCopy.approve)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.Palette.activityVerb)
+                Text(plan)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.Palette.secondary)
+                    .lineLimit(8)
+                Text(SwitchModeCardCopy.approveDescription)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.Palette.tertiary)
+                HStack(spacing: 8) {
+                    Button("Stay in Plan") {
+                        coordinator.resolve(approved: false)
+                    }
+                    .buttonStyle(.bordered)
+                    Button(SwitchModeCardCopy.approve) {
+                        coordinator.resolve(approved: true)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(12)
+            .background(Theme.Palette.surface)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .accessibilityLabel("\(SwitchModeCardCopy.approve) · plan waiting")
+        }
+    }
+}
 
 private struct QuestionCardMount: View {
     @ObservedObject var coordinator: UserQuestionCoordinator

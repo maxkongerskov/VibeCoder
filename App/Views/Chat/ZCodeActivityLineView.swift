@@ -488,6 +488,7 @@ private struct MCPActivityCard: View {
 /// stack auto-expands so the user sees which tool is active. User toggle
 /// always wins. File edits stay outside this stack (`InlineEditCardView`).
 struct ZCodeActivityStack: View {
+    @EnvironmentObject var app: AppViewModel
     let states: [ToolCallUIState]
     var isStreaming: Bool = false
     var onKillJob: ((UUID) -> Void)? = nil
@@ -939,9 +940,13 @@ struct ZCodeActivityStack: View {
                 }
                 Spacer(minLength: 0)
             }
-            Text(SwitchModeCardCopy.approve)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(Theme.Palette.activityVerb)
+            Button(SwitchModeCardCopy.approve) {
+                app.planApprovalCoordinator.resolve(approved: true)
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(Theme.Palette.activityVerb)
+            .disabled(app.planApprovalCoordinator.pendingPlan == nil)
             Text(SwitchModeCardCopy.approveDescription)
                 .font(.system(size: 11))
                 .foregroundColor(Theme.Palette.tertiary)
