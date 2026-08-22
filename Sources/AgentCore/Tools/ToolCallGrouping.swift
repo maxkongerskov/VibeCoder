@@ -5,8 +5,9 @@
 //  into renderer families and collapse consecutive read-only calls into one
 //  Explore card (N searches, N lists, N files) and consecutive file
 //  write/edit/delete into one file-change family (Writing/Wrote,
-//  Updating/Updated). Pure functions so App/Sable can render later — this
-//  file does not touch AgentLoop.swift.
+//  Updating/Updated). Shell cards use Running/Ran plus Failed/Denied/Stopped
+//  and skip empty in-flight commands. Pure functions so App/Sable can render
+//  later — this file does not touch AgentLoop.swift.
 //
 
 import Foundation
@@ -38,6 +39,8 @@ public struct ToolCallEvent: Sendable, Equatable {
     public var isRunning: Bool
     /// Parsed shell command when family is shell. Empty + running → skip.
     public var parsedCommand: String?
+    /// Terminal shell outcome when not running (success / failed / denied / stopped).
+    public var shellStatus: ShellToolStatus
     /// Path when the tool mutates a file (optional; grouping still works without it).
     public var path: String?
     /// Line adds from patch/tool result when already known.
@@ -49,6 +52,7 @@ public struct ToolCallEvent: Sendable, Equatable {
         name: String,
         isRunning: Bool = false,
         parsedCommand: String? = nil,
+        shellStatus: ShellToolStatus = .success,
         path: String? = nil,
         added: Int = 0,
         deleted: Int = 0
@@ -56,6 +60,7 @@ public struct ToolCallEvent: Sendable, Equatable {
         self.name = name
         self.isRunning = isRunning
         self.parsedCommand = parsedCommand
+        self.shellStatus = shellStatus
         self.path = path
         self.added = added
         self.deleted = deleted
@@ -127,12 +132,40 @@ public struct FileChangeTurnTotals: Sendable, Equatable {
     }
 }
 
+/// Shell card outcome (ZCode `chat.toolCall.execute.*` / status pills).
+/// Kind is Running vs Ran; Failed/Denied/Stopped are status overlays.
+public enum ShellToolStatus: String, Sendable, Equatable {
+    case running
+    case success
+    case failed
+    case denied
+    case stopped
+}
+
+/// One shell tool as a chat card (title = command).
+public struct ShellCard: Sendable, Equatable {
+    public var index: Int
+    public var status: ShellToolStatus
+    public var command: String
+
+    public init(index: Int, status: ShellToolStatus, command: String) {
+        self.index = index
+        self.status = status
+        self.command = command
+    }
+
+    public var kindLabel: String { ToolCallGrouping.shellKindLabel(status) }
+    public var statusLabel: String? { ToolCallGrouping.shellStatusLabel(status) }
+}
+
 public enum GroupedToolCalls: Sendable, Equatable {
     /// Consecutive read-only tools → one Explore card.
     case explore(counts: ExploreBucketCounts, memberIndices: [Int])
     /// Consecutive write / edit / delete → one file-change family card.
     case fileChange(counts: FileChangeGroupCounts, memberIndices: [Int])
-    /// Shell / todo / skill / agent / other, shown as its own card.
+    /// Shell with parsed command (empty in-flight shells are omitted).
+    case shell(ShellCard)
+    /// Todo / skill / agent / other, shown as its own card.
     case standalone(index: Int, family: ToolFamily)
 }
 
@@ -192,12 +225,34 @@ public enum ToolCallGrouping: Sendable {
 
     /// ZCode: skip shells with empty parsed command while streaming/running.
     public static func shouldSkipInGrouping(_ event: ToolCallEvent) -> Bool {
-        guard family(forToolName: event.name) == .shell, event.isRunning else {
-            return false
+        guard family(forToolName: event.name) == .shell else { return false }
+        let running = event.isRunning || event.shellStatus == .running
+        guard running else { return false }
+        return parsedShellCommand(event).isEmpty
+    }
+
+    public static func parsedShellCommand(_ event: ToolCallEvent) -> String {
+        (event.parsedCommand ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public static func resolveShellStatus(_ event: ToolCallEvent) -> ShellToolStatus {
+        if event.isRunning { return .running }
+        return event.shellStatus
+    }
+
+    /// Card kind: Running while in flight, Ran once finished (incl. fail/deny/stop).
+    public static func shellKindLabel(_ status: ShellToolStatus) -> String {
+        status == .running ? "Running" : "Ran"
+    }
+
+    /// Overlay status. Nil for Running / Ran success.
+    public static func shellStatusLabel(_ status: ShellToolStatus) -> String? {
+        switch status {
+        case .running, .success: return nil
+        case .failed: return "Failed"
+        case .denied: return "Denied"
+        case .stopped: return "Stopped"
         }
-        let cmd = (event.parsedCommand ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return cmd.isEmpty
     }
 
     /// Activity verb for a single file-write tool. Sable binds chrome.
@@ -307,6 +362,14 @@ public enum ToolCallGrouping: Sendable {
                         added: added,
                         deleted: deleted),
                     memberIndices: indices))
+            } else if fam == .shell {
+                let ev = events[i]
+                let status = resolveShellStatus(ev)
+                out.append(.shell(ShellCard(
+                    index: i,
+                    status: status,
+                    command: parsedShellCommand(ev))))
+                i += 1
             } else {
                 out.append(.standalone(index: i, family: fam))
                 i += 1

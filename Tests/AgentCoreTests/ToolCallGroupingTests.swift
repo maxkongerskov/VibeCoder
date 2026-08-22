@@ -1,8 +1,8 @@
 //
 //  ToolCallGroupingTests.swift
 //
-//  Explore grouping + file-change family grouping + stop-when-done (ZCode §3).
-//  Does not grow AgentLoop.
+//  Explore grouping + file-change family grouping + shell cards +
+//  stop-when-done (ZCode §3). Does not grow AgentLoop.
 //
 
 import XCTest
@@ -142,12 +142,12 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertTrue(groups.isEmpty)
         let onlyShell = ToolCallGrouping.group([ToolCallEvent(name: "run_shell", parsedCommand: "ls")])
         XCTAssertEqual(onlyShell.count, 1)
-        if case .explore = onlyShell[0] {
-            XCTFail("shell is not explore")
+        guard case .shell(let card) = onlyShell[0] else {
+            return XCTFail("shell is a shell card")
         }
-        if case .fileChange = onlyShell[0] {
-            XCTFail("shell is not file-change")
-        }
+        XCTAssertEqual(card.command, "ls")
+        XCTAssertEqual(card.kindLabel, "Ran")
+        XCTAssertNil(card.statusLabel)
     }
 
     func testHidesRunningShellWithEmptyCommand() {
@@ -191,9 +191,12 @@ final class ToolCallGroupingTests: XCTestCase {
         let groups = ToolCallGrouping.group(events)
         XCTAssertEqual(groups.count, 2)
         guard case .explore = groups[0] else { return XCTFail("read is explore") }
-        guard case .standalone(_, .shell) = groups[1] else {
+        guard case .shell(let card) = groups[1] else {
             return XCTFail("finished shell is its own card")
         }
+        XCTAssertEqual(card.command, "gh pr view 1")
+        XCTAssertEqual(card.status, .success)
+        XCTAssertEqual(card.kindLabel, "Ran")
     }
 
     func testStopWhenMergedBanner() {
@@ -249,5 +252,97 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertFalse(ToolCallGrouping.shouldStopToolBurst(
             lastResultContent: "wrote",
             toolEvents: events))
+    }
+
+    func testRunningShellWithCommandShowsRunningKind() {
+        let events = [ToolCallEvent(name: "run_shell", isRunning: true, parsedCommand: "swift test")]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 1)
+        guard case .shell(let card) = groups[0] else {
+            return XCTFail("expected shell card")
+        }
+        XCTAssertEqual(card.status, .running)
+        XCTAssertEqual(card.kindLabel, "Running")
+        XCTAssertNil(card.statusLabel)
+        XCTAssertEqual(card.command, "swift test")
+        XCTAssertEqual(card.index, 0)
+    }
+
+    func testWhitespaceOnlyInFlightShellIsSkipped() {
+        let events = [
+            ToolCallEvent(name: "run_shell", isRunning: true, parsedCommand: " \t  "),
+            ToolCallEvent(name: "update_todo"),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 1)
+        guard case .standalone(_, .todo) = groups[0] else {
+            return XCTFail("noisy in-flight bash skipped")
+        }
+    }
+
+    func testShellFailedDeniedStoppedOverlays() {
+        let cases: [(ShellToolStatus, String)] = [
+            (.failed, "Failed"),
+            (.denied, "Denied"),
+            (.stopped, "Stopped"),
+        ]
+        for (status, label) in cases {
+            let events = [ToolCallEvent(
+                name: "run_shell",
+                parsedCommand: "rm -rf /tmp/x",
+                shellStatus: status)]
+            let groups = ToolCallGrouping.group(events)
+            guard case .shell(let card) = groups[0] else {
+                return XCTFail("expected shell card for \(status)")
+            }
+            XCTAssertEqual(card.kindLabel, "Ran")
+            XCTAssertEqual(card.statusLabel, label)
+            XCTAssertEqual(card.status, status)
+        }
+        XCTAssertEqual(ToolCallGrouping.shellKindLabel(.running), "Running")
+        XCTAssertEqual(ToolCallGrouping.shellKindLabel(.success), "Ran")
+        XCTAssertNil(ToolCallGrouping.shellStatusLabel(.success))
+        XCTAssertNil(ToolCallGrouping.shellStatusLabel(.running))
+    }
+
+    func testShellStatusRunningWithoutIsRunningFlagStillSkippedWhenEmpty() {
+        let events = [
+            ToolCallEvent(name: "grep_code"),
+            ToolCallEvent(name: "run_shell", parsedCommand: nil, shellStatus: .running),
+            ToolCallEvent(name: "read_file"),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 1)
+        guard case .explore(let counts, let members) = groups[0] else {
+            return XCTFail("empty running shell skipped")
+        }
+        XCTAssertEqual(counts.searches, 1)
+        XCTAssertEqual(counts.files, 1)
+        XCTAssertEqual(members, [0, 2])
+    }
+
+    func testFinishedEmptyCommandShellStillShowsCard() {
+        let events = [ToolCallEvent(name: "run_shell", parsedCommand: "", shellStatus: .success)]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 1)
+        guard case .shell(let card) = groups[0] else {
+            return XCTFail("finished empty command is still a card")
+        }
+        XCTAssertEqual(card.command, "")
+        XCTAssertEqual(card.kindLabel, "Ran")
+    }
+
+    func testShellDoesNotJoinAdjacentShells() {
+        let events = [
+            ToolCallEvent(name: "run_shell", parsedCommand: "ls"),
+            ToolCallEvent(name: "run_shell", parsedCommand: "pwd", shellStatus: .failed),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 2)
+        guard case .shell(let a) = groups[0], case .shell(let b) = groups[1] else {
+            return XCTFail("each shell is its own card")
+        }
+        XCTAssertEqual(a.command, "ls")
+        XCTAssertEqual(b.statusLabel, "Failed")
     }
 }
