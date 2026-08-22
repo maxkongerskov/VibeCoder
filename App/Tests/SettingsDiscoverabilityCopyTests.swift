@@ -369,18 +369,37 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
 
 
     func testMessageBodyPreviewCopy() {
+        XCTAssertEqual(MessageBodyPreviewCopy.limitBytes, 32_000)
         let small = MessageBodyPreviewCopy.preview("hi")
         XCTAssertFalse(small.isTruncated)
+        XCTAssertEqual(small.shown, "hi")
         let big = String(repeating: "a", count: MessageBodyPreviewCopy.limitBytes + 50)
         let preview = MessageBodyPreviewCopy.preview(big)
         XCTAssertTrue(preview.isTruncated)
         XCTAssertEqual(preview.previewBytes, MessageBodyPreviewCopy.limitBytes)
         XCTAssertEqual(preview.fullBytes, MessageBodyPreviewCopy.limitBytes + 50)
+        XCTAssertEqual(preview.shown.utf8.count, MessageBodyPreviewCopy.limitBytes)
         XCTAssertEqual(
             MessageBodyPreviewCopy.notice(previewBytes: 32000, fullBytes: 32050),
             "This reply is large. Showing a preview only (32000/32050). View full message")
         XCTAssertEqual(MessageBodyPreviewCopy.viewFullMessage, "View full message")
         XCTAssertFalse(MessageBodyPreviewCopy.viewFullMessage.lowercased().contains("zcode"))
+        // Honesty: View full message is an in-memory uncap (MarkdownTextView.showFullMessage),
+        // not a network fetch. Copy must not claim load/download/fetch.
+        let view = MessageBodyPreviewCopy.viewFullMessage.lowercased()
+        XCTAssertFalse(view.contains("fetch"))
+        XCTAssertFalse(view.contains("download"))
+        XCTAssertFalse(view.contains("load"))
+        let notice = MessageBodyPreviewCopy.notice(previewBytes: 1, fullBytes: 2).lowercased()
+        XCTAssertFalse(notice.contains("fetch"))
+        XCTAssertFalse(notice.contains("download"))
+    }
+
+    /// Ask-user Continue / Submit remain painted labels (not wired actions). Not 99%.
+    func testAskUserContinueSubmitAreStillLabels() {
+        XCTAssertEqual(AskUserQuestionCardCopy.continueLabel, "Continue")
+        XCTAssertEqual(AskUserQuestionCardCopy.submit, "Submit")
+        XCTAssertEqual(AskUserQuestionCardCopy.customAnswer, ToolCallGrouping.askUserCustomAnswerLabel)
     }
 
     func testToolSnapshotCardCopyNotice() {

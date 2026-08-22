@@ -263,6 +263,9 @@ enum AskUserQuestionCardCopy {
 }
 
 /// Finished assistant reply larger than the preview cap. VibeCoder wording.
+/// Streaming bodies are not truncated (MarkdownTextView.isStreaming). View full
+/// message is an in-memory uncap of the already-held string — not a network fetch.
+/// Ask-user Continue/Submit remain painted labels only (not wired).
 enum MessageBodyPreviewCopy {
     static let limitBytes = 32_000
     static var viewFullMessage: String { "View full message" }
