@@ -210,6 +210,14 @@ Update in place. Newest first. Format:
 - Not doing: one sentence if temptation appeared
 ```
 
+### 2026-08-23 (wire tail)
+
+- Milestone: W1 400-fix done; W2.1 C1 next  
+- Track: —  
+- Numbers: Unsloth 013 re-run **oracle PASS, eval-runner exit 0, 29s**, no two-assistant 400 (blocked duplicate `read_file` then `stop`)  
+- Next action: W2.1 C1 on this git repo (worktree + patch + `swift test`); Unsloth only  
+- Not doing: other providers, CloudBots, Flutter, AgentLoop rewrite, GitHub push  
+
 ### 2026-08-23 (evening)
 
 - Milestone: W1.3 done (day-0). W1.1–1.2 committed.  

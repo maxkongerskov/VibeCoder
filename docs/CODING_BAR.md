@@ -33,7 +33,7 @@ Use this row as the baseline. Day-30 compares **the same model** if possible. Ot
 |---|---|---|
 | C1 | Git project bound → worktree → patch (`apply_patch` or `edit_file`) → project test/build runs → main tree clean until merge | **Not yet.** Day-0 is toy 013 in a temp dir (oracle pass). This-repo worktree C1 is Week 2. |
 | C2 | Same class of task **in-app** (VibeCoder.app), not only headless | Not yet |
-| C3 | Failure injects compiler/test output; loop does not hang | **Fail (Unsloth).** After a successful patch, the next model call 400s (`two assistant messages at end of list`). Not a hang; not a compiler inject. |
+| C3 | Failure injects compiler/test output; loop does not hang | **013 loop no longer 400s (2026-08-23 re-run).** After blocked identical `read_file`, turn `finished: stop`, eval-runner exit 0. Compiler/test inject still not this cell. |
 | C4 | Cancel (⌘. / SIGINT) leaves a paired transcript | plumbing may already pass; re-verify if the loop changes |
 
 C1 project: this repo **or** another real Swift package. Toy `Evals/tasks/001-hello-world` is not C1.
@@ -66,7 +66,7 @@ For each: **down** (honest skip) / **connect** (`listModels` or Connection Test)
 | LM Studio (`:1234`) | skip (this window) | — | — | Max: Unsloth only for now |
 | oMLX (`:8080`) | skip (this window) | — | — | Max: Unsloth only for now |
 | Ollama (`:11434`) | skip (this window) | — | — | Max: Unsloth only for now |
-| Unsloth Studio (`:8888`) | up | **pass** (`listModels`, Nemotron Lightning `loaded`) | **partial** — 013 patch landed; loop 400 after | F4 “Hey” ≠ this row |
+| Unsloth Studio (`:8888`) | up | **pass** (`listModels`, Nemotron Lightning `loaded`) | **013 pass** (oracle + exit 0, 29s, no 400) | F4 “Hey” ≠ this row |
 | EXO (`:52415`) | skip (this window) | — | — | Max: Unsloth only for now |
 | Custom `/v1` | skip (this window) | — | — | Max: Unsloth only for now |
 
