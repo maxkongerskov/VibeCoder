@@ -267,4 +267,31 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         XCTAssertEqual(name, "VibeCoder-conversations.json")
         XCTAssertFalse(name.lowercased().contains("agentos"))
     }
+
+    func testComputerUseCopyIsThisMacNotCloud() {
+        XCTAssertEqual(ComputerUseCopy.macLabel, "This Mac")
+        XCTAssertNotEqual(ComputerUseCopy.macLabel, "Cloud")
+        let intro = ComputerUseCopy.intro.lowercased()
+        XCTAssertTrue(intro.contains("this mac"))
+        XCTAssertTrue(intro.contains("screenshot"))
+        XCTAssertTrue(intro.contains("click"))
+        XCTAssertTrue(intro.contains("permission"))
+        XCTAssertTrue(intro.contains("not cloud"))
+        XCTAssertTrue(intro.contains("not a storefront"))
+        XCTAssertFalse(intro.contains("nothing leaves"))
+        let honesty = ComputerUseCopy.honesty.lowercased()
+        XCTAssertTrue(honesty.contains("screen recording"))
+        XCTAssertTrue(honesty.contains("accessibility"))
+        XCTAssertFalse(AppSettings().computerUseEnabled)
+        XCTAssertTrue(ComputerUseCopy.status(enabled: false).lowercased().contains("default"))
+        XCTAssertTrue(ComputerUseCopy.status(enabled: true).lowercased().contains("this mac"))
+        XCTAssertTrue(
+            SettingsDiscoverabilityCopy.tabMatchesSearch(
+                label: "Privacy",
+                subtitle: "Data & backup",
+                rawValue: "privacy",
+                query: "screenshot"
+            )
+        )
+    }
 }

@@ -57,7 +57,7 @@ enum SettingsDiscoverabilityCopy {
         case "model":
             return ["two-model", "orchestrator", "worker", "sampling"]
         case "privacy":
-            return ["cloudbot", "cloud bots", "cloud"]
+            return ["cloudbot", "cloud bots", "cloud", "screenshot", "computer use", "accessibility", "screen recording"]
         default:
             return []
         }

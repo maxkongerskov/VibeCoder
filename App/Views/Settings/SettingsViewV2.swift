@@ -8,6 +8,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import AgentCore
+import ApplicationServices
 
 // MARK: - Tabs
 
@@ -404,6 +405,8 @@ struct PrivacySettingsView: View {
     @State private var backupStatus: String = ""
     @State private var backupStatusIsError: Bool = false
     @State private var showClearAllConfirm: Bool = false
+    @State private var screenRecordingGranted: Bool = false
+    @State private var accessibilityGranted: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -470,6 +473,80 @@ struct PrivacySettingsView: View {
 
             settingsCard {
                 HStack(spacing: 6) {
+                    Image(systemName: "desktopcomputer")
+                        .foregroundColor(Theme.Palette.success)
+                    Text(ComputerUseCopy.settingsTitle)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(ComputerUseCopy.macLabel)
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.success)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Theme.Palette.success.opacity(0.14), in: Capsule())
+                }
+                Text(ComputerUseCopy.intro)
+                    .font(.system(size: 12))
+                    .foregroundColor(Theme.Palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(ComputerUseCopy.honesty)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle(isOn: $settings.computerUseEnabled) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(ComputerUseCopy.toggleTitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.Palette.primary)
+                        Text(ComputerUseCopy.status(enabled: settings.computerUseEnabled))
+                            .font(.system(size: 10.5))
+                            .foregroundStyle(Theme.Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .toggleStyle(.switch)
+                .accessibilityIdentifier("computer-use-settings")
+
+                HStack(spacing: 8) {
+                    Label(
+                        screenRecordingGranted ? "Screen Recording on" : "Screen Recording off",
+                        systemImage: screenRecordingGranted ? "checkmark.circle.fill" : "xmark.circle"
+                    )
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(screenRecordingGranted ? Theme.Palette.success : Theme.Palette.tertiary)
+                    Label(
+                        accessibilityGranted ? "Accessibility on" : "Accessibility off",
+                        systemImage: accessibilityGranted ? "checkmark.circle.fill" : "xmark.circle"
+                    )
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(accessibilityGranted ? Theme.Palette.success : Theme.Palette.tertiary)
+                    Spacer()
+                    Button("Check Again") { refreshComputerUseGrants() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+
+                Button(ComputerUseCopy.screenRecordingButton) {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button(ComputerUseCopy.accessibilityButton) {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Text(ComputerUseCopy.howTo)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            settingsCard {
+                HStack(spacing: 6) {
                     Image(systemName: "archivebox")
                         .foregroundColor(Theme.Palette.accent)
                     Text("Conversation Backup")
@@ -509,6 +586,12 @@ struct PrivacySettingsView: View {
                 Text("This permanently removes every conversation from this Mac. This cannot be undone. Export first if you want a backup.")
             }
         }
+        .onAppear { refreshComputerUseGrants() }
+    }
+
+    private func refreshComputerUseGrants() {
+        screenRecordingGranted = CGPreflightScreenCaptureAccess()
+        accessibilityGranted = AXIsProcessTrusted()
     }
 
     private func exportConversations() {

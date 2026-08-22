@@ -257,6 +257,7 @@ struct ChatView: View {
                 // WorktreeService via AppViewModel.
                 worktreeActive: viewModel.conversation.worktreeBranch != nil,
                 cloudBotsEnabled: app.settings.cloudBotsEnabled,
+                computerUseEnabled: app.settings.computerUseEnabled,
                 contextTokens: contextTokens > 0 ? contextTokens : nil,
                 contextLimit: contextLimit,
                 onRename: { newTitle in

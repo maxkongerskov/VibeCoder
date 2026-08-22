@@ -22,6 +22,8 @@ struct ChatHeaderView: View {
     let worktreeActive: Bool
     /// Settings opt-in. When true, chrome must say Cloud (not local).
     var cloudBotsEnabled: Bool = false
+    /// Settings opt-in. When true, chrome must say This Mac (not cloud).
+    var computerUseEnabled: Bool = false
     /// Context usage values. Pass nil to hide the chip.
     let contextTokens: Int?
     let contextLimit: Int?
@@ -82,6 +84,7 @@ struct ChatHeaderView: View {
             titleMenu
             Spacer(minLength: 8)
             cloudChip
+            computerUseChip
             worktreeChip
         }
         .padding(.horizontal, 16)
@@ -206,6 +209,29 @@ struct ChatHeaderView: View {
             .help(CloudBotCopy.chipHelp)
             .accessibilityLabel(CloudBotCopy.chipAccessibility)
             .accessibilityIdentifier("cloud-bot-label")
+            .layoutPriority(1)
+        }
+    }
+
+    // MARK: - Computer-use chip (this Mac, not cloud)
+
+    @ViewBuilder
+    private var computerUseChip: some View {
+        if computerUseEnabled {
+            HStack(spacing: 5) {
+                Image(systemName: "desktopcomputer")
+                    .font(.system(size: 11, weight: .semibold))
+                Text(ComputerUseCopy.macLabel)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+            }
+            .foregroundStyle(Theme.Palette.success)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Theme.Palette.success.opacity(0.14), in: Capsule())
+            .help(ComputerUseCopy.chipHelp)
+            .accessibilityLabel(ComputerUseCopy.chipAccessibility)
+            .accessibilityIdentifier("computer-use-label")
             .layoutPriority(1)
         }
     }
