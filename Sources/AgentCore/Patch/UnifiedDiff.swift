@@ -165,6 +165,59 @@ public enum UnifiedDiff {
         return (oldStart, oldLen, newStart, newLen)
     }
 
+    // MARK: - Review preview (ZCode Review card)
+
+    /// Default cap for Review-card unified-diff text. Huge patches get a
+    /// truncation footer instead of dumping thousands of lines into chat.
+    public static let reviewPreviewMaxLines = 400
+
+    /// Rebuild unified `--- a/ +++ b/ @@` text from already-parsed hunks.
+    /// Per-hunk accept/reject is not a ZCode behavior — this is display only.
+    public static func reviewPreview(
+        path: String,
+        hunks: [Hunk],
+        maxLines: Int = reviewPreviewMaxLines
+    ) -> String {
+        var lines: [String] = [
+            "--- a/\(path)",
+            "+++ b/\(path)",
+        ]
+        for hunk in hunks {
+            lines.append(hunkHeader(hunk))
+            for line in hunk.lines {
+                switch line {
+                case .context(let s): lines.append(" \(s)")
+                case .removed(let s): lines.append("-\(s)")
+                case .added(let s): lines.append("+\(s)")
+                }
+            }
+        }
+        return truncatePreview(lines, maxLines: maxLines)
+    }
+
+    /// Same preview for a parsed file patch.
+    public static func reviewPreview(
+        filePatch: FilePatch,
+        maxLines: Int = reviewPreviewMaxLines
+    ) -> String {
+        reviewPreview(path: filePatch.path, hunks: filePatch.hunks, maxLines: maxLines)
+    }
+
+    private static func hunkHeader(_ hunk: Hunk) -> String {
+        "@@ -\(hunk.oldStart),\(hunk.oldLen) +\(hunk.newStart),\(hunk.newLen) @@"
+    }
+
+    private static func truncatePreview(_ lines: [String], maxLines: Int) -> String {
+        let cap = max(0, maxLines)
+        if lines.count <= cap {
+            return lines.joined(separator: "\n")
+        }
+        let omitted = lines.count - cap
+        var kept = Array(lines.prefix(cap))
+        kept.append("Diff preview truncated: \(omitted) lines omitted…")
+        return kept.joined(separator: "\n")
+    }
+
     // MARK: - Applying
 
     public static func apply(filePatch: FilePatch, to original: String) -> ApplyResult {

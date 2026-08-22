@@ -115,6 +115,25 @@ final class PatchReviewerTests: XCTestCase {
         let decision = await reviewer.review([])
         XCTAssertEqual(decision, .rejectAll)
     }
+
+    func testPreviewUnifiedReviewText() {
+        let hunk = UnifiedDiff.Hunk(
+            oldStart: 1, oldLen: 1, newStart: 1, newLen: 1,
+            lines: [.added("hello")]
+        )
+        let p = PatchPreview(
+            path: "n.swift",
+            originalContent: "",
+            updatedContent: "hello",
+            hunks: [hunk]
+        )
+        let text = p.unifiedReviewPreview()
+        XCTAssertTrue(text.contains("--- a/n.swift"))
+        XCTAssertTrue(text.contains("+++ b/n.swift"))
+        XCTAssertTrue(text.contains("@@ -1,1 +1,1 @@"))
+        XCTAssertTrue(text.contains("+hello"))
+    }
+
 }
 
 /// Thread-safe call counter for `@Sendable` test closures (a captured

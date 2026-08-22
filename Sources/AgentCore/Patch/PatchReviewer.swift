@@ -14,9 +14,8 @@
 //      boilerplate. The struct wraps a single async closure — host
 //      apps build one over a MainActor coordinator (see
 //      `PatchReviewCoordinator` in the App target).
-//    * File-level accept/reject in v1. Per-hunk granularity is a
-//      P3-polish follow-up (the UI sheet already renders per-hunk
-//      decisions visually; only the wire format changes).
+//    * File-level accept/reject in v1. Per-hunk accept/reject is not
+//      in ZCode; Review cards show a unified-diff preview of hunks.
 //
 //  This file lives next to `UnifiedDiff.swift` because the preview
 //  type leans on `UnifiedDiff.Hunk` for the diff lines.
@@ -75,5 +74,12 @@ public struct PatchReviewer: Sendable {
 
     public init(review: @escaping @Sendable ([PatchPreview]) async -> PatchDecision) {
         self.review = review
+    }
+}
+
+extension PatchPreview {
+    /// Unified-diff text for a Sable/ZCode Review card (`--- a/ +++ b/ @@`).
+    public func unifiedReviewPreview(maxLines: Int = UnifiedDiff.reviewPreviewMaxLines) -> String {
+        UnifiedDiff.reviewPreview(path: path, hunks: hunks, maxLines: maxLines)
     }
 }
