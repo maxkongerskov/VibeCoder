@@ -4,7 +4,7 @@ What **99%** means for a **BYO OpenAI-compatible HTTP** local agent. Not a hobby
 
 Ada owns this file. Lin/Pixel/Rigel raise the numbers with **evidence**, not vibes. Do not claim 99% without the proof column filled.
 
-**Today (2026-08-22): not 99% daily-driver.** Required cells can be filled without being 99%. Proof is unit / mock-worker / characterization. No live first-chat against a local model. App tests do not gate merge (GHA `SKIP_APP_TESTS=1`).
+**Today (2026-08-22): not 99% daily-driver.** F4 is live in-app Unsloth first chat (Reed, this Mac) — filled cells still ≠ 99%. GitHub unpushed. GHA `SKIP_APP_TESTS=1`. A1/A2 and Connection Test still not live.
 
 ---
 
@@ -31,7 +31,7 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 | F1 | Cold launch, **no** wizard, lands on main UI | **Unit, not launched:** `VibeCoderApp` force-sets `hasCompletedOnboarding`. `WorkspaceChatRouting` wait→seed→showChat — `MenuChromeUITests.testWorkspaceRouting*` (characterization, not XCUI; GHA `SKIP_APP_TESTS=1`). Historical class 10/10 (2026-08-20) is stale — Cluster nav tests now sit in this class (e72a114). No screenshot. |
 | F2 | Server **down** → empty chat tells the user to start a local server (all live HTTP backends named, including Unsloth) and Send is not a silent no-op | **Unit:** `SettingsDiscoverabilityCopyTests.testEmptyChatCopyListsUnslothOnNoBackend` (LM Studio/Ollama/oMLX/Unsloth) + `testComposerSendDisabledUntilModelUnlessRunning` pass. `BugHuntViewModelsTests.testEnsureFirstConversationWaitsForStoreThenSeedsOnce` pass. App not launched. |
 | F3 | Server **up**, no model → pick a model (composer chip / Connection Test) | **Copy only:** same EmptyChatCopy test → title `"Pick a model to start"`. No live server. |
-| F4 | Server up + model selected → first user turn streams tokens | **Mock-worker, not a live model (3487777).** 99% does **not** require an in-app window. Stream path is `InferenceBackend.stream` → `AgentLoop` (same as `eval-runner`). 012/013 are in-tree mock scripted cells (`Evals/support/scripts/012-write-file.json`, `013-apply-patch.json`); Nash runs them in `scripts/ci-pr.sh`. Artifacts `Evals/results/2026-08-20-091027-mock-mock-worker.json` (012, 1 `write_file`) and `Evals/results/2026-08-20-091614-mock-mock-worker.json` (013, 2 tools). **Not** live-backend proof. **Not** in-app chat. SwiftUI token paint is a **manual residual** when a local server is up — not a 99% gate. No LM Studio/Ollama on this machine. |
+| F4 | Server up + model selected → first user turn streams tokens | **Live in-app first chat (2026-08-22), Unsloth Studio.** One user turn “Hey”; tokens in the Mac app window. Witness: Reed (tech lead) during Max’s session. **Not** mock-worker 012/013, **not** eval-runner, **not** CLI. 012/013 stay mock scripted cells (A1/A2 only). B1 Connection Test still not live. F4 alone is not 99%. |
 
 ### Local backends
 
@@ -152,7 +152,7 @@ BLOCKERS: …
 NEXT_ASSIGNMENT: …
 ```
 
-**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts that prove the bar. **Filled cells ≠ 99%.** Current honest status (2026-08-22): **not 99% daily-driver.** No first-chat against a real local model (no LM Studio/Ollama on this Mac). 012/013 are mock-worker scripted cells, not live HTTP, not in-app first chat — do not treat them as 99% live proof. App tests (`MenuChromeUITests`, `ClusterPaneUITests`, `WorktreeReviewSheetTests`, e72a114) are characterization, not XCUI; GHA `SKIP_APP_TESTS=1` (local WARN unless `APP_TESTS_STRICT=1`) — they **do not gate merge**. Residuals that still block 99%: no in-app window / live model server / SwiftUI token paint; no ⌘Q or SIGKILL; no mid-stream persist checkpoint. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
+**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts that prove the bar. **Filled cells ≠ 99%.** Current honest status (2026-08-22): **not 99% daily-driver.** F4 live Unsloth first chat witnessed by Reed (Mac app window, one turn “Hey”) — **not** 012/013, **not** eval-runner, **not** CLI. GitHub still unpushed. GHA `SKIP_APP_TESTS=1` (local WARN unless `APP_TESTS_STRICT=1`) — App tests **do not gate merge**. B1 Connection Test and A1/A2 still unit/mock, not live. 012/013 remain mock-worker. Residuals that still block 99%: App tests not a merge gate; no live Connection Test; A1/A2 not live HTTP/in-app; no ⌘Q or SIGKILL; no mid-stream persist checkpoint. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
 
 ### Five-way (2026-08-21) — historical, not today’s score
 
