@@ -162,4 +162,44 @@ final class UnslothStudioBackendTests: XCTestCase {
         XCTAssertEqual(BackendIdentifier.migrating(fromRaw: "unslothStudio"), .unslothStudio)
         XCTAssertTrue(BackendIdentifier.unslothStudio.supportsLoadUnload)
     }
+
+    func testListModelsNative1MNotCollapsedToLoaded32k() async throws {
+        MockURLProtocol.handler = { req in
+            let path = req.url?.path ?? ""
+            if path.hasSuffix("/v1/models") || path == "/v1/models" {
+                let body = """
+                {
+                  "object": "list",
+                  "data": [
+                    {
+                      "id": "unsloth/gemma-4-26B-A4B-it-GGUF",
+                      "object": "model",
+                      "owned_by": "unsloth-studio",
+                      "native_context_length": 1048576,
+                      "max_context_length": 1048576,
+                      "context_length": 32768,
+                      "loaded": true
+                    }
+                  ]
+                }
+                """
+                return (200, Data(body.utf8))
+            }
+            return (404, Data())
+        }
+        let backend = UnslothStudioBackend(
+            host: "127.0.0.1", port: 8888, apiKey: "sk-test", session: makeSession())
+        let models = try await backend.listModels()
+        XCTAssertEqual(models.count, 1)
+        XCTAssertEqual(models[0].contextLength, 1_048_576,
+                       "descriptor window is native/max 1M, not loaded 32k")
+        XCTAssertNotEqual(models[0].contextLength, 32_768)
+        let label = ModelContextLengthResolver.honestyLabel(fromAPIItem: [
+            "native_context_length": 1_048_576,
+            "max_context_length": 1_048_576,
+            "context_length": 32_768,
+        ])
+        XCTAssertNotEqual(label, ContextUsageBreakdown.formatTokenCount(32_768))
+        XCTAssertTrue(label.contains("1.0M") || label.contains("1M"), label)
+    }
 }

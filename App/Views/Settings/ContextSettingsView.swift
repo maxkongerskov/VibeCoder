@@ -83,13 +83,9 @@ struct ContextSettingsView: View {
     }
 
     private var exampleBudgetLine: String {
-        let pct = settings.autoCompactThresholdPercent
-        let window = settings.maxContextWindowTokens > 0
-            ? settings.maxContextWindowTokens
-            : 32_768
-        let budget = Int((Double(window) * min(100, max(10, pct)) / 100.0).rounded())
-        let wLabel = settings.maxContextWindowTokens == 0 ? "a 32.8k window" : "\(window) tokens"
-        return "Example: at \(Int(pct))% of \(wLabel), the wire budget is ~\(budget) tokens (FullReplace fires at that budget; elision always applies if still over)."
+        ContextWindowHonestyCopy.settingsExampleBudgetLine(
+            percent: settings.autoCompactThresholdPercent,
+            maxContextWindowTokens: settings.maxContextWindowTokens)
     }
 
     // MARK: - Layout helpers (match Appearance / Connection cards)

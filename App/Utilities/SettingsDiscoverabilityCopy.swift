@@ -249,3 +249,26 @@ enum LoopbackServerProbe {
         var value: LoopbackProbeVerdict = .unreachable
     }
 }
+
+/// Context meter / Settings readout: Unsloth 1M native + 32k loaded is not "32k".
+enum ContextWindowHonestyCopy {
+    static func label(nativeMax: Int?, loaded: Int?) -> String {
+        ModelContextLengthResolver.honestyLabel(nativeMax: nativeMax, loaded: loaded)
+    }
+
+    static func meterHelp(nativeMax: Int?, loaded: Int?, used: Int) -> String {
+        let windows = label(nativeMax: nativeMax, loaded: loaded)
+        return "\(ContextUsageBreakdown.formatTokenCount(used)) used · \(windows)"
+    }
+
+    /// Settings auto-cap example is a generic 32k illustration, not Unsloth native.
+    static func settingsExampleBudgetLine(percent: Double, maxContextWindowTokens: Int) -> String {
+        let pct = min(100, max(10, percent))
+        let window = maxContextWindowTokens > 0 ? maxContextWindowTokens : 32_768
+        let budget = Int((Double(window) * pct / 100.0).rounded())
+        if maxContextWindowTokens == 0 {
+            return "Example: at \(Int(pct))% of an example 32.8k cap (not Unsloth native/max), the wire budget is ~\(budget) tokens. Unsloth 1M native + 32k loaded is 32.8k loaded / 1.0M native — not 32k."
+        }
+        return "Example: at \(Int(pct))% of \(window) tokens, the wire budget is ~\(budget) tokens (FullReplace fires at that budget; elision always applies if still over)."
+    }
+}

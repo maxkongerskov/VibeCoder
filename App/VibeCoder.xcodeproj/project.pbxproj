@@ -39,6 +39,7 @@
 		22E2933FCF00B5070E317ED0 /* BackendConnectionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0334B2156978A808F83F02A0 /* BackendConnectionCoordinator.swift */; };
 		238352DE2C8C15730D397DDF /* BuiltinToolCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEDBB123C5164ACA1E459504 /* BuiltinToolCatalogTests.swift */; };
 		D1F6F2B6D12B6F1D1EF002 /* ComputerUseCopyHonestyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5E1A5C01A5E0C0DE001 /* ComputerUseCopyHonestyTests.swift */; };
+		D2F6F2B6D12B6F1D1EF003 /* UnslothContextHonestyCopyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1E5E1A5C01A5E0C0DE002 /* UnslothContextHonestyCopyTests.swift */; };
 		240A2777B8AFF137CC3D36F9 /* PatchReviewCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B0DD155162E24B5E3BDB2BF /* PatchReviewCoordinator.swift */; };
 		254AA977FD00BF817492ED14 /* NotesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20D51635BC60F5B32A29F57B /* NotesViewModel.swift */; };
 		25A0AA0328FE57CBC1E61A50 /* ChatHeaderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8266859ED1747193F15FC9C /* ChatHeaderView.swift */; };
@@ -393,6 +394,7 @@
 		ED9397382F2FA362002469C5 /* ZCodeActivityLineView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZCodeActivityLineView.swift; sourceTree = "<group>"; };
 		EEDBB123C5164ACA1E459504 /* BuiltinToolCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BuiltinToolCatalogTests.swift; sourceTree = "<group>"; };
 		C0E5E1A5C01A5E0C0DE001 /* ComputerUseCopyHonestyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ComputerUseCopyHonestyTests.swift; sourceTree = "<group>"; };
+		C1E5E1A5C01A5E0C0DE002 /* UnslothContextHonestyCopyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnslothContextHonestyCopyTests.swift; sourceTree = "<group>"; };
 		EF419887240A1B2E63574DC2 /* SettingsManagersUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsManagersUITests.swift; sourceTree = "<group>"; };
 		F014B2B26B29FFE9B2126949 /* ArtifactLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArtifactLabel.swift; sourceTree = "<group>"; };
 		F0F67DCFD86592D2D5A2E8D4 /* ChronologicalTurnScopeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChronologicalTurnScopeTests.swift; sourceTree = "<group>"; };
@@ -648,6 +650,7 @@
 				D1B2FE1CFB262743E7E05677 /* BuildVerifyNoticeTests.swift */,
 				EEDBB123C5164ACA1E459504 /* BuiltinToolCatalogTests.swift */,
 				C0E5E1A5C01A5E0C0DE001 /* ComputerUseCopyHonestyTests.swift */,
+				C1E5E1A5C01A5E0C0DE002 /* UnslothContextHonestyCopyTests.swift */,
 				D5AA8471EA6F1E9E1D8ED724 /* ChatLayoutContentWidthTests.swift */,
 				8A40733269E59D04121DB45C /* ChatPromptHooksTests.swift */,
 				B058B03B66A0B2440FE3E389 /* ChatStatusSurfacesTests.swift */,
@@ -1077,6 +1080,7 @@
 				5F0318C3CBDF3E477ED0AEC3 /* BuildVerifyNoticeTests.swift in Sources */,
 				238352DE2C8C15730D397DDF /* BuiltinToolCatalogTests.swift in Sources */,
 				D1F6F2B6D12B6F1D1EF002 /* ComputerUseCopyHonestyTests.swift in Sources */,
+				D2F6F2B6D12B6F1D1EF003 /* UnslothContextHonestyCopyTests.swift in Sources */,
 				1E1DB1E43A58F25724EB78B6 /* ChatLayoutContentWidthTests.swift in Sources */,
 				96A9A4B04D815C8887B0C94C /* ChatPromptHooksTests.swift in Sources */,
 				E63437F18815A62D741555BC /* ChatStatusSurfacesTests.swift in Sources */,
