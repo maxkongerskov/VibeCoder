@@ -4,7 +4,7 @@ What **99%** means for the interactive **`vibecoder` REPL**. Not a hobby demo. N
 
 Ada owns this file. Lin/Pixel/Rigel/Turnip raise the numbers with **evidence**, not vibes. Do not claim 99% without the proof column filled. Max ships only when Ada, Lin, Pixel, Rigel, and Turnip are each 99% confident it is launchable.
 
-Inspected (2026-08-21): `Sources/VibeCoderCLI/main.swift`, `Sources/VibeCoderCLILib/{CLIArgs,EventPrinter,REPL,TTYApprovals,TurnRunner}.swift`, `Tests/VibeCoderCLILibTests/*`. HEAD `3718799` (C1–C3 + F3/F2/B2 probe). Do not mix the dirty 99% app tree into this cut.
+Inspected (2026-08-22): `Sources/VibeCoderCLI/main.swift`, `Sources/VibeCoderCLILib/{CLIArgs,EventPrinter,REPL,TTYApprovals,TurnRunner}.swift`, `Tests/VibeCoderCLILibTests/*`. Local `main` HEAD `dee1383` (C1–C3 still on this line). App 99% and CloudBots slice 0 are already committed here — a Max origin push is this whole line, not the old CLI-only cut.
 
 ---
 
@@ -76,7 +76,7 @@ Write results under `docs/orchestration/` or `Evals/results/` with date. A score
 | P1 | Dedicated CI step: `swift test --filter VibeCoderCLILib` (full `swift test` in `ci-pr.sh` is **not** this cell). Today: no CLI-specific job on the CLI commit; `.github/workflows/pr.yml` is untracked 99% tree | **Rigel 2026-08-21.** `a59c6b0` `ci(cli): VibeCoderCLILib job (P1) and live TTY notes (P2)` — only `scripts/ci-cli.sh`, `.github/workflows/cli.yml`, `docs/orchestration/cli-tty-2026-08-21.md`. Does **not** import `pr.yml`. **Turnip 2026-08-21 01:22.** `./scripts/ci-cli.sh` → **31/31**. Dirty `ci-pr.sh` / untracked `pr.yml` stay out of this cut. |
 | P2 | One **live TTY** session artifact (script or notes): help, one turn, SIGINT mid-turn returns to `›`, idle Ctrl+C exits. Unit tests are not a TTY | **Rigel 2026-08-21.** `docs/orchestration/cli-tty-2026-08-21.md` — PTY `/help` + continuation `/exit`; F4 `hello`/`[done] stop`; mid-turn SIGINT → `[done] cancelled` then `›`; dedicated idle `^C` → signal 2. |
 | P3 | Rail honesty on the **CLI commit line**, not mixed into uncommitted 99% diffs | **Ada 2026-08-21.** `eb507a5` `docs(cli): rail honesty for vibecoder REPL (C1–C3)` still on HEAD `3718799` (no later edits to those files). `git show HEAD:README.md`: heading `### CLI (\`vibecoder\`)` (no “C1” title); `swift run vibecoder --project …`; C2/C3 truth; **not** “CLI removed”. `git show HEAD:ARCHITECTURE.md` §5.8: REPL + C2 color/`NO_COLOR` + C3 SIGINT/`always`. DESIGN surfaces + Interactive CLI row = C1–C3, not agentos. Working-tree README re-added “C1” titles in the dirty app 99% mix — **not** the commit line; do not retitle that tree. |
-| P4 | `origin` has the CLI commit when Max says ship. Today: HEAD `d08fb28` is **12 ahead of origin/main, not pushed** | |
+| P4 | `origin` has the CLI commit when Max says ship. Today: local HEAD `dee1383` is **47 ahead of origin/main `aefcff9`, not pushed**. That line is CLI C1–C3 **plus** app 99% **plus** CloudBots slice 0 stub — not the old CLI-only cut (`d08fb28`, 12 ahead). | **Nash 2026-08-22.** `git log --oneline origin/main..HEAD` = 47. Origin still `aefcff9`. P4 remains Max. |
 
 ---
 
@@ -90,7 +90,7 @@ Keep these until the matching cell has evidence. Do not drop.
 | (b) no CI job dedicated to `VibeCoderCLILib` besides full `swift test` | P1 | **closed on the commit line** (Rigel `a59c6b0`): `scripts/ci-cli.sh` + `.github/workflows/cli.yml`; Turnip `./scripts/ci-cli.sh` **31/31** |
 | (c) no live TTY session | P2, F4, K2 | **closed** (Rigel): `docs/orchestration/cli-tty-2026-08-21.md` |
 | (d) README still titled “C1” (working tree); committed README still says CLI removed | P3 | **closed on the commit line** (Ada 2026-08-21): `eb507a5` / HEAD `README.md` is `### CLI (\`vibecoder\`)`, not “CLI removed”. Working-tree “C1” titles are the dirty 99% mix — leave them |
-| (e) not pushed | P4 | ship gate; Max — **not pushed** (`d08fb28`, 12 ahead) |
+| (e) not pushed | P4 | ship gate; Max — **not pushed** (`dee1383`, 47 ahead of `aefcff9`; mixed CLI + app 99% + CloudBots slice 0) |
 | (f) rail-doc honesty mixed into uncommitted 99% diffs | P3 | **closed on the commit line** (Ada 2026-08-21): CLI sentences live in `eb507a5`; 99% app hunks stay uncommitted |
 
 Also inspect, not a 99% reopen: `--backend mlx` now **refuses** before `›` (B2 live exit 2). F2 down-server no longer `try?` empty-catalog. Live R5 non-git stderr + git `worktreeBranch` recorded. Residual: live F4 PTY log had no CSI because this shell exports `NO_COLOR=1` (Pixel: that is C2, not a miss; public `isatty` paints when `NO_COLOR` is unset). Post-cancel SIGINT race **closed** (Turnip 2026-08-21): first SIGINT restores default disposition.
@@ -175,4 +175,4 @@ NEXT_ASSIGNMENT: …
 | Rigel | 99% | P1/P2 `a59c6b0`; live TTY artifact |
 | Turnip | 99% | Re-ran `./scripts/ci-cli.sh` **31/31**; scorecard cells filled |
 
-P4 remains Max. Do not mix the dirty app 99% tree into this push.
+P4 remains Max. Local `main` is already mixed (CLI C1–C3 + app 99% + CloudBots slice 0). An origin push publishes that whole line, not a CLI-only cut.
