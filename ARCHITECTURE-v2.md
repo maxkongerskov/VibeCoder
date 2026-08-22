@@ -2,7 +2,7 @@
 
 Shipped product: [`ARCHITECTURE.md`](./ARCHITECTURE.md) §1 / §17. Bars: `docs/RELEASE_BAR.md`, `docs/CLI_RELEASE_BAR.md`. Order: [`PLAN.md`](./PLAN.md).
 
-This file is the **target** contract (CloudBots + computer-use). **§1 of the freeze does not change** until a later §17 row says a slice landed in the app.
+This file is the **target** contract (ZCode look + harness, CloudBots, computer-use). **§1 of the freeze does not change** until a later §17 row says a slice landed in the app.
 
 ---
 
@@ -65,6 +65,27 @@ Landed: Atlas four tools (fail closed without Screen Recording + Accessibility);
 
 ---
 
+
+---
+
+## ZCode look + harness — UX target (docs)
+
+Max (2026-08-22): keep going until VibeCoder **looks and works like ZCode** (greatest local agent harness he knows). Native SwiftUI. Still BYO HTTP. **Not Electron. Not a ZCode product.** Freeze §1 does not change: no bundled llama, MLX stub, no Sparkle/Sentry/license.
+
+### Now
+
+- Sable: chat chrome (live stream, then composer / user bubble / “Ask the agent…” / tool Verb · Status) matching zcode-chat.
+- Atlas: harness toward ZCode tool grouping / stop-when-done; prefer `gh`; refuse identical consecutive tools. Do not grow AgentLoop.swift.
+- Mira: copy never claims we are ZCode or Electron; no 99% and no “as fast as Unsloth” without a timed turn.
+- Nash: hold CI unless a cut breaks `swift test`.
+- Reed: this freeze. Shipping §1 stays BYO HTTP.
+
+**Not 99%** until the app actually feels like that. Origin push stays Max.
+
+### Out
+
+Electron rewrite, claiming we are ZCode, bundled llama.cpp, in-process MLX as a ship, CloudBots slice 1 (still parked unless Max reopens).
+
 ## Honesty (shared)
 
 - Freeze §1 stays BYO HTTP local agent. CloudBots and computer-use are **not** shipped there.
@@ -77,6 +98,7 @@ Landed: Atlas four tools (fail closed without Screen Recording + Accessibility);
 
 | Date | Change | Reason |
 |---|---|---|
+| 2026-08-22 | ZCode look + harness UX target: native SwiftUI VibeCoder, still BYO HTTP, not Electron, not a ZCode product. Not 99% until it feels like that. | Max: keep going |
 | 2026-08-22 | Computer-use slice 1: tools + permission chrome + honesty tests landed. Fail closed without grant. §1 still does not claim screen/mouse. Not 99%. | Max: implement now |
 | 2026-08-22 | Computer-use slice 0 freeze: now = screenshot + click/type/scroll on this Mac with permission; not cloud; not LAN remote. Later = unattended, browser-only agent, storefront. App cannot see the screen today. Docs only. | Max: freeze now vs later |
 | 2026-08-21 | Slice 0 freeze: stub + cloud label + honesty tests + no CI phone-home. Platform deferred. | Lead Chief: thin slice, not a platform |

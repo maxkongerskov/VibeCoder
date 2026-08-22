@@ -6,7 +6,7 @@
 >
 > Identity (locked 2026-08-16): **orange accent + SF Pro / SF Mono**. Local-model-first. No onboarding, no license/trial chrome.
 >
-> **Merge bar (stream slice 1, Sable):** chrome may *look* like ZCode (density, orange send, leftover `ZCode*` type names). The product is **VibeCoder**: native macOS SwiftUI. Not Electron. Not ZCode. Not a ZCode fork. Do not market or document it as those.
+> **UX target (Max 2026-08-22):** match **ZCode’s look and harness** in VibeCoder — same style and UX, native SwiftUI. Chat (composer, user bubble, live stream, tool Verb · Status) and agent harness (few tools, stop when done). The product is still **VibeCoder**: BYO HTTP, not Electron, not ZCode, not a ZCode fork. Do not market or document it as those. Not 99% until it actually feels like that.
 
 ---
 
@@ -696,7 +696,7 @@ Once §1, §2.3, and §3 match the running app, the rest is execution.
 | 2026-06-02 | §4.7 (new) | Models Library / Discover (HF browser + catalog) | Hybrid catalog + power-user browse |
 | 2026-06-02 | §4.1, §4.7 | Removed “recommended for your Mac” framing | Voice / support burden |
 | 2026-06-02 | §2.3 | Azure → Cobalt (`#3385F2`) + Ember send (`#E75D3C`) + extra semantics | DEV PLAN palette pass — **superseded** |
-| 2026-08-22 | identity | Looks-ZCode, still VibeCoder: native SwiftUI, not Electron, not a ZCode product. Stream slice 1 is Sable. | Max / Lead Chief: merge bar |
+| 2026-08-22 | identity | UX target: ZCode look + harness in VibeCoder (native SwiftUI, BYO HTTP). Not Electron, not a ZCode product. Not 99% until it feels like that. | Max: keep going |
 | 2026-08-16 | **all** | **Rewritten to match shipped 1.0.5 code; identity confirmed as orange accent + SF (was Azure/Geist spec). Wave U1 additions recorded: syntax-highlighted chat code blocks; turn-end change-summary card with Undo; session-scoped permission grant + keyboard nav in approval sheet; command palette sections/arrow-key selection (~22 items); Settings → Hooks editor tab.** | UI parity wave — live app is source of truth. Also recorded as **removed** (do not resurrect): onboarding, license/trial, Geist, Azure/Cobalt, 4-icon sidebar, icon-only collapse, 1280×800 default, per-hunk Accept/Reject, ToolStub, in-transcript PlanCard, Library/Discover, load sliders, visible focus rings, docked status bar |
 
 **Intentionally not in this spec (compiled leftovers):** `SidebarShell` engine strip, `ToolCallView` / `ThoughtProcessBlock` / `StepperRailSpec`, `ProcessingStatusBar` / `ZCodeStatusBar`, `PermissionsSheetView`, `ConversationListViewModel`, `NavigationState`, `EmptyDetailView`. Do not treat them as UX requirements.
