@@ -364,6 +364,18 @@ final class SettingsDiscoverabilityCopyTests: XCTestCase {
         XCTAssertFalse(SubAgentCardCopy.title.lowercased().contains("zcode"))
     }
 
+
+    func testTodoAndMCPCardCopy() {
+        XCTAssertEqual(TodoCardCopy.verb(TodoCard(index: 0, isRunning: true)), "Updating todo")
+        XCTAssertEqual(TodoCardCopy.verb(TodoCard(index: 0, isRunning: false, summary: "ship")), "Updated todo")
+        XCTAssertEqual(TodoCardCopy.status(TodoCard(index: 0, isRunning: false, summary: "ship")), "ship")
+        let mcp = MCPCard(index: 0, isRunning: false, toolName: "github__list_issues")
+        XCTAssertEqual(MCPCardCopy.title(mcp), "github__list_issues")
+        XCTAssertEqual(MCPCardCopy.viewCallDetails, "View call details")
+        XCTAssertEqual(MCPCardCopy.copyResult, "Copy result")
+        XCTAssertFalse(MCPCardCopy.viewCallDetails.lowercased().contains("zcode"))
+    }
+
     func testExploreCardCopyBuckets() {
         let counts = ExploreBucketCounts(searches: 2, lists: 1, files: 3)
         XCTAssertEqual(ExploreCardCopy.verb, "Explore")

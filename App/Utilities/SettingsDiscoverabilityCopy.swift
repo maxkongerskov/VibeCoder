@@ -209,6 +209,24 @@ enum SubAgentCardCopy {
     }
 }
 
+/// Todo write/read card. VibeCoder wording.
+enum TodoCardCopy {
+    static func verb(_ card: TodoCard) -> String { card.kindLabel }
+    static func status(_ card: TodoCard) -> String {
+        let s = card.summary.trimmingCharacters(in: .whitespacesAndNewlines)
+        return s.isEmpty ? "Todo" : s
+    }
+}
+
+/// MCP `server__tool` card.
+enum MCPCardCopy {
+    static func title(_ card: MCPCard) -> String { card.toolName }
+    static var viewCallDetails: String { ToolCallGrouping.mcpViewCallDetailsLabel }
+    static var parameters: String { ToolCallGrouping.mcpParametersLabel }
+    static var result: String { ToolCallGrouping.mcpResultLabel }
+    static var copyResult: String { ToolCallGrouping.mcpCopyResultLabel }
+}
+
 /// Chat shell card (command title + Running/Ran). VibeCoder wording.
 enum ShellCardCopy {
     static func title(_ card: ShellCard) -> String {

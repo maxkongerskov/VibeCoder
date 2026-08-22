@@ -465,6 +465,10 @@ struct ZCodeActivityStack: View {
                             skillRow(card)
                         case .agent(let card):
                             subAgentRow(card)
+                        case .todo(let card):
+                            todoRow(card)
+                        case .mcp(let card):
+                            mcpRow(card)
                         case .line(let state):
                             ZCodeActivityLineView(
                                 state: state,
@@ -511,6 +515,8 @@ struct ZCodeActivityStack: View {
         case shell(ShellCard)
         case skill(SkillCard)
         case agent(AgentCard)
+        case todo(TodoCard)
+        case mcp(MCPCard)
         var id: String {
             switch self {
             case .explore(let id, _, _): return "explore-\(id)"
@@ -519,6 +525,8 @@ struct ZCodeActivityStack: View {
             case .shell(let card): return "shell-\(card.index)-\(card.command)"
             case .skill(let card): return "skill-\(card.index)-\(card.skillName)"
             case .agent(let card): return "agent-\(card.index)-\(card.toolName)"
+            case .todo(let card): return "todo-\(card.index)"
+            case .mcp(let card): return "mcp-\(card.index)-\(card.toolName)"
             }
         }
     }
@@ -536,7 +544,10 @@ struct ZCodeActivityStack: View {
                 skillName: jsonString(state.input, keys: ["name", "skill", "skill_name"]),
                 skillArgs: jsonString(state.input, keys: ["args", "arguments"]),
                 agentPrompt: jsonString(state.input, keys: ["prompt", "description", "task"]),
-                agentType: jsonString(state.input, keys: ["subagent_type", "agent_type", "type"]))
+                agentType: jsonString(state.input, keys: ["subagent_type", "agent_type", "type"]),
+                todoSummary: jsonString(state.input, keys: ["summary", "merge", "todos"]),
+                mcpParameters: state.input,
+                mcpResult: state.output)
         }
         var items: [StackItem] = []
         for group in ToolCallGrouping.group(events) {
@@ -572,6 +583,10 @@ struct ZCodeActivityStack: View {
                 items.append(.skill(card))
             case .agent(let card):
                 items.append(.agent(card))
+            case .todo(let card):
+                items.append(.todo(card))
+            case .mcp(let card):
+                items.append(.mcp(card))
             case .standalone(let index, _):
                 items.append(.line(states[index]))
             }
@@ -744,6 +759,72 @@ struct ZCodeActivityStack: View {
             Spacer(minLength: 0)
         }
         .accessibilityLabel("\(SubAgentCardCopy.title) · \(SubAgentCardCopy.verb(card))")
+    }
+
+
+    @ViewBuilder
+    private func todoRow(_ card: TodoCard) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "checklist")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text(TodoCardCopy.verb(card))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(Theme.Palette.activityVerb)
+            Text("·")
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(Theme.Palette.activityDivider)
+            Text(TodoCardCopy.status(card))
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(Theme.Palette.activityStatus)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if card.isRunning {
+                ProgressView().controlSize(.mini)
+            }
+            Spacer(minLength: 0)
+        }
+        .accessibilityLabel("\(TodoCardCopy.verb(card)) · \(TodoCardCopy.status(card))")
+    }
+
+    @ViewBuilder
+    private func mcpRow(_ card: MCPCard) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "puzzlepiece.extension")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text(MCPCardCopy.title(card))
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("·")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(Theme.Palette.activityDivider)
+                Text(card.isRunning ? "Running" : MCPCardCopy.viewCallDetails)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityStatus)
+                    .lineLimit(1)
+                if card.isRunning {
+                    ProgressView().controlSize(.mini)
+                }
+                Spacer(minLength: 0)
+            }
+            if !card.parameters.isEmpty {
+                Text("\(MCPCardCopy.parameters) · \(card.parameters)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .lineLimit(card.wrapLines ? 6 : 1)
+            }
+            if !card.result.isEmpty {
+                Text("\(MCPCardCopy.result) · \(card.result)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .lineLimit(card.wrapLines ? 8 : 1)
+            }
+        }
+        .accessibilityLabel("\(MCPCardCopy.title(card)) · \(MCPCardCopy.viewCallDetails)")
     }
 
     private var toolsHeader: some View {
