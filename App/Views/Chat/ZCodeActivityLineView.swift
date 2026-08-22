@@ -419,6 +419,68 @@ struct ZCodeActivityLineView: View {
     }
 }
 
+/// MCP card with in-memory Load full tool data (same cap as Atlas snapshot).
+private struct MCPActivityCard: View {
+    let card: MCPCard
+    @State private var showFull = false
+
+    private var snap: ToolSnapshotTruncation.Snapshot {
+        ToolSnapshotTruncation.snapshot(args: card.parameters, result: card.result)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "puzzlepiece.extension")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                Text(MCPCardCopy.title(card))
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .foregroundColor(Theme.Palette.activityVerb)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text("·")
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(Theme.Palette.activityDivider)
+                Text(card.isRunning ? "Running" : MCPCardCopy.viewCallDetails)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(Theme.Palette.activityStatus)
+                    .lineLimit(1)
+                if card.isRunning {
+                    ProgressView().controlSize(.mini)
+                }
+                Spacer(minLength: 0)
+            }
+            let argsText = showFull ? card.parameters : snap.args.preview
+            let resultText = showFull ? card.result : snap.result.preview
+            if !argsText.isEmpty {
+                Text("\(MCPCardCopy.parameters) · \(argsText)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .lineLimit(card.wrapLines ? (showFull ? 40 : 6) : 1)
+            }
+            if !resultText.isEmpty {
+                Text("\(MCPCardCopy.result) · \(resultText)")
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(Theme.Palette.tertiary)
+                    .lineLimit(card.wrapLines ? (showFull ? 40 : 8) : 1)
+            }
+            if !showFull, let notice = ToolSnapshotCardCopy.notice(snap) {
+                Text(notice)
+                    .font(.system(size: 11))
+                    .foregroundColor(Theme.Palette.tertiary)
+                Button(ToolSnapshotCardCopy.loadFullToolData) {
+                    showFull = true
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.Palette.accent)
+            }
+        }
+        .accessibilityLabel("\(MCPCardCopy.title(card)) · \(MCPCardCopy.viewCallDetails)")
+    }
+}
+
 /// Stack of non-edit tool activity for a turn.
 ///
 /// **Default: collapsed** under a single "Tools" subheader with a chevron
@@ -817,48 +879,7 @@ struct ZCodeActivityStack: View {
 
     @ViewBuilder
     private func mcpRow(_ card: MCPCard) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Image(systemName: "puzzlepiece.extension")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundColor(Theme.Palette.activityVerb)
-                Text(MCPCardCopy.title(card))
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                    .foregroundColor(Theme.Palette.activityVerb)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("·")
-                    .font(.system(size: 13, weight: .regular))
-                    .foregroundColor(Theme.Palette.activityDivider)
-                Text(card.isRunning ? "Running" : MCPCardCopy.viewCallDetails)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(Theme.Palette.activityStatus)
-                    .lineLimit(1)
-                if card.isRunning {
-                    ProgressView().controlSize(.mini)
-                }
-                Spacer(minLength: 0)
-            }
-            let snap = ToolSnapshotTruncation.snapshot(args: card.parameters, result: card.result)
-            if !snap.args.preview.isEmpty {
-                Text("\(MCPCardCopy.parameters) · \(snap.args.preview)")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(Theme.Palette.tertiary)
-                    .lineLimit(card.wrapLines ? 6 : 1)
-            }
-            if !snap.result.preview.isEmpty {
-                Text("\(MCPCardCopy.result) · \(snap.result.preview)")
-                    .font(.system(size: 11, design: .monospaced))
-                    .foregroundColor(Theme.Palette.tertiary)
-                    .lineLimit(card.wrapLines ? 8 : 1)
-            }
-            if let notice = ToolSnapshotCardCopy.notice(snap) {
-                Text(notice)
-                    .font(.system(size: 11))
-                    .foregroundColor(Theme.Palette.tertiary)
-            }
-        }
-        .accessibilityLabel("\(MCPCardCopy.title(card)) · \(MCPCardCopy.viewCallDetails)")
+        MCPActivityCard(card: card)
     }
 
 
