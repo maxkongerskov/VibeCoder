@@ -25,6 +25,17 @@ struct ZCodeActivityLineView: View {
     @State private var childThread: [SubagentThreadItem] = []
 
     private var isTask: Bool { state.toolName == "task" }
+    private var isAgentFamily: Bool {
+        ToolCallGrouping.family(forToolName: state.toolName) == .agent
+    }
+    private var asAgentCard: AgentCard {
+        AgentCard(
+            index: 0,
+            isRunning: state.status == .running || state.status == .pending,
+            prompt: taskArgs.description,
+            agentType: taskArgs.type,
+            toolName: state.toolName)
+    }
 
     private var taskArgs: (type: String, description: String) {
         guard let data = state.input.data(using: .utf8),
@@ -90,7 +101,7 @@ struct ZCodeActivityLineView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            if isTask {
+            if isAgentFamily {
                 subagentRow
             } else {
                 genericRow
@@ -216,21 +227,25 @@ struct ZCodeActivityLineView: View {
                         .foregroundStyle(Theme.Palette.tertiary)
                         .frame(width: 16)
 
-                    Text("SubAgent")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.Palette.secondary)
-
-                    Text(taskArgs.type)
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(Theme.Palette.subagentType)
+                    Text(SubAgentCardCopy.title)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.Palette.activityVerb)
 
                     Text("·")
                         .font(.system(size: 13))
                         .foregroundStyle(Theme.Palette.activityDivider)
 
-                    Text(subagentStatusText)
+                    Text(SubAgentCardCopy.verb(asAgentCard))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.Palette.activityStatus)
+
+                    Text("·")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.Palette.activityDivider)
+
+                    Text(SubAgentCardCopy.status(asAgentCard))
                         .font(.system(size: 13, weight: .regular))
-                        .foregroundStyle(Theme.Palette.tertiary)
+                        .foregroundStyle(Theme.Palette.activityStatus)
                         .lineLimit(1)
                         .truncationMode(.tail)
 
