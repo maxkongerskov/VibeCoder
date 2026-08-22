@@ -1,11 +1,10 @@
 //
 //  PlanAskUserCardCopyTests.swift
 //
-//  Mira QA: characterize Plan / Ask-user card copy as painted by Sable
-//  (28099e0). Do not restyle. Entering/Entered plan mode, Awaiting
-//  approval with Approve, Asking/Asked with Continue and Submit.
-//  Those three strings are labels only — not wired actions. Tests must
-//  not claim they approve a plan or submit an answer.
+//  Mira QA: Plan / Ask-user card copy. Entering/Entered plan mode,
+//  Awaiting approval with Approve (wired gate via PlanApprovalReviewer),
+//  Asking/Asked with Continue and Submit (those two remain labels).
+//  Approve resumes waiting exit_plan_mode; Stay in Plan declines.
 //  Product is VibeCoder. Looks like ZCode grouping. Not ZCode. Not
 //  Electron. Does not stamp 99%. PRODUCT_NAME VibeCoderTests.
 //
@@ -125,7 +124,7 @@ final class PlanAskUserCardCopyTests: XCTestCase {
         XCTAssertTrue(src.contains("Text(PlanGuidanceCardCopy.verb(card))"))
         XCTAssertTrue(src.contains("Text(PlanGuidanceCardCopy.status(card))"))
         XCTAssertTrue(src.contains("Text(SwitchModeCardCopy.verb(card))"))
-        XCTAssertTrue(src.contains("Text(SwitchModeCardCopy.approve)"))
+        XCTAssertTrue(src.contains("Button(SwitchModeCardCopy.approve)"))
         XCTAssertTrue(src.contains("Text(SwitchModeCardCopy.approveDescription)"))
         XCTAssertTrue(src.contains("Text(AskUserQuestionCardCopy.verb(card))"))
         XCTAssertTrue(src.contains("Text(AskUserQuestionCardCopy.continueLabel)"))
@@ -136,21 +135,49 @@ final class PlanAskUserCardCopyTests: XCTestCase {
         XCTAssertFalse(src.contains("Ask ZCode"))
         XCTAssertFalse(src.localizedCaseInsensitiveContains("99%"))
         assertNotProductIdentityLies(in: src, file: "ZCodeActivityLineView.swift")
-        assertApproveContinueSubmitAreLabelsOnly(in: src)
+        assertContinueSubmitAreLabelsOnly(in: src)
     }
 
-    func testApproveContinueSubmitAreLabelsNotWiredActions() throws {
+    func testApproveIsWiredGateContinueSubmitStayLabels() throws {
         let src = try appSource("Views/Chat/ZCodeActivityLineView.swift")
-        assertApproveContinueSubmitAreLabelsOnly(in: src)
+        assertContinueSubmitAreLabelsOnly(in: src)
+        XCTAssertTrue(
+            src.contains("Button(SwitchModeCardCopy.approve)"),
+            "Approve is a Button that resumes waiting exit_plan_mode")
+        XCTAssertTrue(src.contains("app.planApprovalCoordinator.resolve(approved: true)"))
         XCTAssertFalse(
             src.contains("approvePlanAndContinue"),
-            "activity cards must not claim Approve runs the planner")
-        XCTAssertFalse(
-            src.contains("onApprove"),
-            "activity switch-mode row has no onApprove")
+            "activity Approve gates the in-flight tool, not the panel continue helper")
         XCTAssertEqual(SwitchModeCardCopy.approve, "Approve")
         XCTAssertEqual(AskUserQuestionCardCopy.continueLabel, "Continue")
         XCTAssertEqual(AskUserQuestionCardCopy.submit, "Submit")
+    }
+
+    func testChatSendInstallsPlanApprovalReviewerUnlessHeadless() throws {
+        let src = try appSource("ViewModels/ChatViewModel.swift")
+        XCTAssertTrue(src.contains("prepareChatRun("))
+        XCTAssertTrue(src.contains("userQuestionReviewer: questionReviewer"))
+        XCTAssertTrue(
+            src.contains("planApprovalReviewer: planApprovalReviewer"),
+            "interactive send threads PlanApprovalReviewer into the loop")
+        XCTAssertTrue(src.contains("let planApprovalReviewer: PlanApprovalReviewer? = headless"))
+        XCTAssertTrue(
+            src.contains("func approvePlanAndContinue"),
+            "panel helper remains; activity Approve is the wait gate")
+    }
+
+    func testApproveIsAUserWaitGateOnActivityCards() throws {
+        let src = try appSource("Views/Chat/ZCodeActivityLineView.swift")
+        XCTAssertTrue(src.contains("Button(SwitchModeCardCopy.approve)"))
+        XCTAssertTrue(src.contains("planApprovalCoordinator.resolve(approved: true)"))
+        XCTAssertTrue(src.contains(".disabled(app.planApprovalCoordinator.pendingPlan == nil)"))
+        XCTAssertEqual(SwitchModeCardCopy.approve, "Approve")
+
+        let chat = try appSource("Views/ChatView.swift")
+        XCTAssertTrue(chat.contains("Button(\"Stay in Plan\")"))
+        XCTAssertTrue(chat.contains("coordinator.resolve(approved: false)"))
+        XCTAssertTrue(chat.contains("Button(SwitchModeCardCopy.approve)"))
+        XCTAssertTrue(chat.contains("coordinator.resolve(approved: true)"))
     }
 
     func testPaintedCopyDoesNotClaimZCodeOrStamp99() throws {
@@ -169,23 +196,17 @@ final class PlanAskUserCardCopyTests: XCTestCase {
 
     // MARK: - helpers
 
-    /// Reed: Approve / Continue / Submit on these cards are labels, not buttons.
-    private func assertApproveContinueSubmitAreLabelsOnly(in src: String) {
-        XCTAssertTrue(src.contains("Text(SwitchModeCardCopy.approve)"))
+    /// Continue / Submit on ask-user cards remain labels. Approve is wired.
+    private func assertContinueSubmitAreLabelsOnly(in src: String) {
+        XCTAssertTrue(src.contains("Button(SwitchModeCardCopy.approve)"))
         XCTAssertTrue(src.contains("Text(AskUserQuestionCardCopy.continueLabel)"))
         XCTAssertTrue(src.contains("Text(AskUserQuestionCardCopy.submit)"))
-        XCTAssertFalse(
-            src.contains("Button(SwitchModeCardCopy.approve)"),
-            "Approve is a label, not a wired Button")
         XCTAssertFalse(
             src.contains("Button(AskUserQuestionCardCopy.continueLabel)"),
             "Continue is a label, not a wired Button")
         XCTAssertFalse(
             src.contains("Button(AskUserQuestionCardCopy.submit)"),
             "Submit is a label, not a wired Button")
-        XCTAssertFalse(
-            src.contains("Button(action: onApprove)"),
-            "activity card must not wire planner Approve")
     }
 
     private func assertNotProductIdentityLies(in text: String, file: String) {
