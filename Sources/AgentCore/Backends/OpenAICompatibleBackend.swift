@@ -90,9 +90,8 @@ public actor OpenAICompatibleBackend: InferenceBackend {
         // Match LM Studio / Ollama / EXO encode: empty tool_calls / tools
         // must be omitted (nil), not sent as [] — some servers 400 on empty
         // arrays or treat them as "no function calling support".
-        let wireMessages = request.messages.map {
-            ChatCompletionRequestBody.WireMessage.from($0, emptyTextAsEmptyString: false)
-        }
+        let wireMessages = ChatCompletionRequestBody.assembledWireMessages(
+            from: request.messages, emptyTextAsEmptyString: false)
 
         let wireTools: [ChatCompletionRequestBody.WireTool]? = request.tools.isEmpty
             ? nil

@@ -148,7 +148,7 @@ public actor OMLXBackend: InferenceBackend {
     private func encode(request: ChatRequest) -> ChatCompletionRequestBody {
         // oMLX: empty text as "" (not null) for non-tool assistant turns.
         // Vision messages use multimodal parts regardless.
-        let wireMessages: [ChatCompletionRequestBody.WireMessage] = request.messages.map { msg in
+        let mapped: [ChatCompletionRequestBody.WireMessage] = request.messages.map { msg in
             let isAssistantWithTools = msg.role == .assistant && !msg.toolCalls.isEmpty
             // Tool-call assistants: prefer null text when empty (OpenAI convention).
             let emptyAsString = !isAssistantWithTools
@@ -157,6 +157,7 @@ public actor OMLXBackend: InferenceBackend {
                 emptyTextAsEmptyString: emptyAsString
             )
         }
+        let wireMessages = ChatCompletionRequestBody.collapsingTrailingAssistants(mapped)
         let wireTools: [ChatCompletionRequestBody.WireTool]? = request.tools.isEmpty ? nil : request.tools.map {
             .init(function: .init(name: $0.name, description: $0.description, parameters: $0.parameters))
         }

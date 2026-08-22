@@ -582,17 +582,21 @@ public struct ChatCompletionRequestBody: Encodable, @unchecked Sendable {
         public let content: WireContent
         public let toolCalls: [WireToolCall]?
         public let toolCallId: String?
+        /// Tool-role `name` (llama.cpp / Unsloth). Nil for non-tool rows.
+        public let name: String?
 
         public init(
             role: String,
             content: WireContent,
             toolCalls: [WireToolCall]? = nil,
-            toolCallId: String? = nil
+            toolCallId: String? = nil,
+            name: String? = nil
         ) {
             self.role = role
             self.content = content
             self.toolCalls = toolCalls
             self.toolCallId = toolCallId
+            self.name = name
         }
 
         /// Convenience for text-only messages (nil content → JSON null).
@@ -600,13 +604,15 @@ public struct ChatCompletionRequestBody: Encodable, @unchecked Sendable {
             role: String,
             content: String?,
             toolCalls: [WireToolCall]? = nil,
-            toolCallId: String? = nil
+            toolCallId: String? = nil,
+            name: String? = nil
         ) {
             self.init(
                 role: role,
                 content: .text(content),
                 toolCalls: toolCalls,
-                toolCallId: toolCallId
+                toolCallId: toolCallId,
+                name: name
             )
         }
 
@@ -632,8 +638,21 @@ public struct ChatCompletionRequestBody: Encodable, @unchecked Sendable {
                 role: msg.role.rawValue,
                 content: content,
                 toolCalls: wireToolCalls,
-                toolCallId: msg.toolCallID
+                toolCallId: msg.toolCallID,
+                name: nil
             )
+        }
+
+        /// Plain text of this wire row (empty / null → nil).
+        public var textValue: String? {
+            switch content {
+            case .text(let s):
+                let t = s?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                return t.isEmpty ? nil : s
+            case .parts(let parts):
+                let joined = parts.compactMap(\.text).joined()
+                return joined.isEmpty ? nil : joined
+            }
         }
 
         public static func wireContent(

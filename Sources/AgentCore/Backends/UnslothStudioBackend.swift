@@ -356,9 +356,8 @@ public actor UnslothStudioBackend: InferenceBackend {
     // MARK: - Encoding
 
     private func encode(request: ChatRequest) -> ChatCompletionRequestBody {
-        let wireMessages: [ChatCompletionRequestBody.WireMessage] = request.messages.map {
-            ChatCompletionRequestBody.WireMessage.from($0, emptyTextAsEmptyString: false)
-        }
+        let wireMessages = ChatCompletionRequestBody.assembledWireMessages(
+            from: request.messages, emptyTextAsEmptyString: false)
         let wireTools: [ChatCompletionRequestBody.WireTool]? =
             request.tools.isEmpty ? nil : request.tools.map {
                 .init(function: .init(
