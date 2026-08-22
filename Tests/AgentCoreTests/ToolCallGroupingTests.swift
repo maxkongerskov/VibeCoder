@@ -22,6 +22,9 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "edit_file"), .fileWrite)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "run_shell"), .shell)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "update_todo"), .todo)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "TodoWrite"), .todo)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "TodoRead"), .todo)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "node_repl__js_eval"), .mcp)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "load_skill"), .skill)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "Skill"), .skill)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "task"), .agent)
@@ -284,7 +287,7 @@ final class ToolCallGroupingTests: XCTestCase {
         ]
         let groups = ToolCallGrouping.group(events)
         XCTAssertEqual(groups.count, 1)
-        guard case .standalone(_, .todo) = groups[0] else {
+        guard case .todo = groups[0] else {
             return XCTFail("noisy in-flight bash skipped")
         }
     }
@@ -484,4 +487,77 @@ final class ToolCallGroupingTests: XCTestCase {
         guard case .explore(let counts, _) = groups[3] else { return XCTFail("read after agent is new explore") }
         XCTAssertEqual(counts.files, 1)
     }
+
+    func testUpdateTodoIsTodoCardWithUpdatingAndUpdatedLabels() {
+        let running = ToolCallEvent(
+            name: "update_todo",
+            isRunning: true,
+            todoSummary: "land mcp cards")
+        let done = ToolCallEvent(
+            name: "update_todo",
+            todoSummary: "land mcp cards")
+        guard case .todo(let a) = ToolCallGrouping.group([running])[0] else {
+            return XCTFail("running update_todo is a todo card")
+        }
+        XCTAssertEqual(a.kindLabel, "Updating todo")
+        XCTAssertEqual(a.summary, "land mcp cards")
+        XCTAssertEqual(a.toolName, "update_todo")
+        XCTAssertEqual(ToolCallGrouping.todoKindLabel(isRunning: true), "Updating todo")
+        guard case .todo(let b) = ToolCallGrouping.group([done])[0] else {
+            return XCTFail("finished update_todo is a todo card")
+        }
+        XCTAssertEqual(b.kindLabel, "Updated todo")
+        XCTAssertEqual(ToolCallGrouping.todoKindLabel(isRunning: false), "Updated todo")
+    }
+
+    func testNamespacedMCPIsMCPCardWithCallDetailsCopy() {
+        let running = ToolCallEvent(
+            name: "node_repl__js_eval",
+            isRunning: true,
+            mcpParameters: "{\"code\":\"1+1\"}",
+            wrapResultLines: true)
+        let done = ToolCallEvent(
+            name: "node_repl__js_eval",
+            mcpParameters: "{\"code\":\"1+1\"}",
+            mcpResult: "2",
+            wrapResultLines: false)
+        guard case .mcp(let a) = ToolCallGrouping.group([running])[0] else {
+            return XCTFail("running MCP tool is an mcp card")
+        }
+        XCTAssertEqual(a.toolName, "node_repl__js_eval")
+        XCTAssertEqual(a.serverName, "node_repl")
+        XCTAssertEqual(ToolCallGrouping.mcpUnqualifiedName(forToolName: a.toolName), "js_eval")
+        XCTAssertEqual(a.parameters, "{\"code\":\"1+1\"}")
+        XCTAssertEqual(a.viewCallDetailsLabel, "View call details")
+        XCTAssertEqual(a.parametersLabel, "Parameters")
+        XCTAssertEqual(a.resultLabel, "Result")
+        XCTAssertEqual(a.copyResultLabel, "Copy result")
+        XCTAssertTrue(a.wrapLines)
+        guard case .mcp(let b) = ToolCallGrouping.group([done])[0] else {
+            return XCTFail("finished MCP tool is an mcp card")
+        }
+        XCTAssertEqual(b.result, "2")
+        XCTAssertFalse(b.wrapLines)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "send_message"), .other)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "__bare"), .other)
+    }
+
+    func testTodoAndMCPDoNotCollapseIntoExplore() {
+        let events = [
+            ToolCallEvent(name: "grep_code"),
+            ToolCallEvent(name: "update_todo", todoSummary: "next"),
+            ToolCallEvent(name: "github__create_issue", mcpParameters: "{}"),
+            ToolCallEvent(name: "read_file"),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 4)
+        guard case .explore = groups[0] else { return XCTFail("search is explore") }
+        guard case .todo(let todo) = groups[1] else { return XCTFail("todo card") }
+        XCTAssertEqual(todo.summary, "next")
+        guard case .mcp(let mcp) = groups[2] else { return XCTFail("mcp card") }
+        XCTAssertEqual(mcp.serverName, "github")
+        guard case .explore(let counts, _) = groups[3] else { return XCTFail("read after mcp is new explore") }
+        XCTAssertEqual(counts.files, 1)
+    }
+
 }

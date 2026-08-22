@@ -11,14 +11,17 @@
 //  Skill cards use Running skill / Ran skill + Args; Agent/Task cards use
 //  SubAgent + prompt (Launching/Launched). Maps VibeCoder load_skill / task
 //  / get_task_output / wait_tasks / kill_task (not send_message).
-//  Pure functions so App/Sable can render later — this file does not
-//  touch AgentLoop.swift.
+//  Todo cards use Updating todo / Updated todo (`update_todo`, TodoWrite,
+//  TodoRead). MCP cards (`server__tool`) expose View call details,
+//  Parameters, Result, Copy result, wrap lines. Pure functions so App/Sable
+//  can render later — this file does not touch AgentLoop.swift.
 //
 
 import Foundation
 
 /// Renderer families from ZCode `Qme` / `og`: file-read, file-write, shell,
-/// search, explore, todo, skill, agent. Unknown names map to `other`.
+/// search, explore, todo, skill, agent, plus mcp (`server__tool`).
+/// Unknown names map to `other`.
 public enum ToolFamily: String, Sendable, Equatable {
     case fileRead = "file-read"
     case fileWrite = "file-write"
@@ -28,6 +31,7 @@ public enum ToolFamily: String, Sendable, Equatable {
     case todo
     case skill
     case agent
+    case mcp
     case other
 }
 
@@ -62,6 +66,14 @@ public struct ToolCallEvent: Sendable, Equatable {
     public var agentPrompt: String?
     /// `subagent_type` / catalog id (explore, plan, general-purpose).
     public var agentType: String?
+    /// Todo item / list summary for todo cards.
+    public var todoSummary: String?
+    /// JSON/text parameters shown on MCP "View call details".
+    public var mcpParameters: String?
+    /// MCP tool result body (Copy result).
+    public var mcpResult: String?
+    /// ZCode wrap-lines toggle for MCP result pane.
+    public var wrapResultLines: Bool
 
     public init(
         name: String,
@@ -75,7 +87,11 @@ public struct ToolCallEvent: Sendable, Equatable {
         skillName: String? = nil,
         skillArgs: String? = nil,
         agentPrompt: String? = nil,
-        agentType: String? = nil
+        agentType: String? = nil,
+        todoSummary: String? = nil,
+        mcpParameters: String? = nil,
+        mcpResult: String? = nil,
+        wrapResultLines: Bool = true
     ) {
         self.name = name
         self.isRunning = isRunning
@@ -89,6 +105,10 @@ public struct ToolCallEvent: Sendable, Equatable {
         self.skillArgs = skillArgs
         self.agentPrompt = agentPrompt
         self.agentType = agentType
+        self.todoSummary = todoSummary
+        self.mcpParameters = mcpParameters
+        self.mcpResult = mcpResult
+        self.wrapResultLines = wrapResultLines
     }
 }
 
@@ -247,6 +267,64 @@ public struct AgentCard: Sendable, Equatable {
     public var kindLabel: String { ToolCallGrouping.agentKindLabel(isRunning: isRunning) }
 }
 
+/// Todo card (ZCode `chat.toolCall.todo.*`): Updating todo / Updated todo.
+public struct TodoCard: Sendable, Equatable {
+    public var index: Int
+    public var isRunning: Bool
+    public var summary: String
+    /// Tool name (`update_todo`, `TodoWrite`, `TodoRead`).
+    public var toolName: String
+
+    public init(
+        index: Int,
+        isRunning: Bool,
+        summary: String = "",
+        toolName: String = "update_todo"
+    ) {
+        self.index = index
+        self.isRunning = isRunning
+        self.summary = summary
+        self.toolName = toolName
+    }
+
+    public var kindLabel: String { ToolCallGrouping.todoKindLabel(isRunning: isRunning) }
+}
+
+/// MCP card (ZCode `chat.toolCall.mcp.*`): View call details, Parameters,
+/// Result, Copy result, wrap lines. Title is the namespaced `server__tool`.
+public struct MCPCard: Sendable, Equatable {
+    public var index: Int
+    public var isRunning: Bool
+    public var toolName: String
+    public var serverName: String
+    public var parameters: String
+    public var result: String
+    public var wrapLines: Bool
+
+    public init(
+        index: Int,
+        isRunning: Bool,
+        toolName: String,
+        serverName: String = "",
+        parameters: String = "",
+        result: String = "",
+        wrapLines: Bool = true
+    ) {
+        self.index = index
+        self.isRunning = isRunning
+        self.toolName = toolName
+        self.serverName = serverName
+        self.parameters = parameters
+        self.result = result
+        self.wrapLines = wrapLines
+    }
+
+    public var viewCallDetailsLabel: String { ToolCallGrouping.mcpViewCallDetailsLabel }
+    public var parametersLabel: String { ToolCallGrouping.mcpParametersLabel }
+    public var resultLabel: String { ToolCallGrouping.mcpResultLabel }
+    public var copyResultLabel: String { ToolCallGrouping.mcpCopyResultLabel }
+}
+
 public enum GroupedToolCalls: Sendable, Equatable {
     /// Consecutive read-only tools → one Explore card.
     case explore(counts: ExploreBucketCounts, memberIndices: [Int])
@@ -258,7 +336,11 @@ public enum GroupedToolCalls: Sendable, Equatable {
     case skill(SkillCard)
     /// Subagent / task / task-output / task-stop card.
     case agent(AgentCard)
-    /// Todo / other, shown as its own card.
+    /// Todo write/read card.
+    case todo(TodoCard)
+    /// Namespaced MCP `server__tool` card.
+    case mcp(MCPCard)
+    /// Unmapped tools, shown as their own card.
     case standalone(index: Int, family: ToolFamily)
 }
 
@@ -279,7 +361,7 @@ public enum ToolCallGrouping: Sendable {
             return .search
         case "list_directory", "list_dir":
             return .explore
-        case "update_todo":
+        case "update_todo", "TodoWrite", "TodoRead":
             return .todo
         case "load_skill", "Skill":
             return .skill
@@ -288,6 +370,9 @@ public enum ToolCallGrouping: Sendable {
              "TaskOutput", "TaskStop":
             return .agent
         default:
+            if ToolAuthorization.isMCPToolName(name) {
+                return .mcp
+            }
             return .other
         }
     }
@@ -409,6 +494,30 @@ public enum ToolCallGrouping: Sendable {
         isRunning ? "Launching" : "Launched"
     }
 
+    /// ZCode todo card kind: Updating todo while in flight, Updated todo once done.
+    public static func todoKindLabel(isRunning: Bool) -> String {
+        isRunning ? "Updating todo" : "Updated todo"
+    }
+
+    public static let mcpViewCallDetailsLabel = "View call details"
+    public static let mcpParametersLabel = "Parameters"
+    public static let mcpResultLabel = "Result"
+    public static let mcpCopyResultLabel = "Copy result"
+
+    /// Server prefix of `server__tool`. Empty when the name is not MCP.
+    public static func mcpServerName(forToolName name: String) -> String {
+        guard ToolAuthorization.isMCPToolName(name),
+              let sep = name.range(of: MCPToolNaming.delimiter) else { return "" }
+        return String(name[..<sep.lowerBound])
+    }
+
+    /// Tool suffix of `server__tool` (may itself contain `__`).
+    public static func mcpUnqualifiedName(forToolName name: String) -> String {
+        guard ToolAuthorization.isMCPToolName(name),
+              let sep = name.range(of: MCPToolNaming.delimiter) else { return name }
+        return String(name[sep.upperBound...])
+    }
+
     /// Pure grouping over a list of tool call events.
     public static func group(_ events: [ToolCallEvent]) -> [GroupedToolCalls] {
         var out: [GroupedToolCalls] = []
@@ -511,6 +620,25 @@ public enum ToolCallGrouping: Sendable {
                     prompt: (ev.agentPrompt ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
                     agentType: (ev.agentType ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
                     toolName: ev.name)))
+                i += 1
+            } else if fam == .todo {
+                let ev = events[i]
+                out.append(.todo(TodoCard(
+                    index: i,
+                    isRunning: ev.isRunning,
+                    summary: (ev.todoSummary ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                    toolName: ev.name)))
+                i += 1
+            } else if fam == .mcp {
+                let ev = events[i]
+                out.append(.mcp(MCPCard(
+                    index: i,
+                    isRunning: ev.isRunning,
+                    toolName: ev.name,
+                    serverName: mcpServerName(forToolName: ev.name),
+                    parameters: (ev.mcpParameters ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                    result: (ev.mcpResult ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
+                    wrapLines: ev.wrapResultLines)))
                 i += 1
             } else {
                 out.append(.standalone(index: i, family: fam))
