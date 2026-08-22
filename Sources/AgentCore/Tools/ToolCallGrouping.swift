@@ -13,15 +13,18 @@
 //  / get_task_output / wait_tasks / kill_task (not send_message).
 //  Todo cards use Updating todo / Updated todo (`update_todo`, TodoWrite,
 //  TodoRead). MCP cards (`server__tool`) expose View call details,
-//  Parameters, Result, Copy result, wrap lines. Pure functions so App/Sable
-//  can render later — this file does not touch AgentLoop.swift.
+//  Parameters, Result, Copy result, wrap lines. Plan-guidance /
+//  switch-mode / ask-user-question map enter_plan_mode, exit_plan_mode,
+//  ask_user (and ZCode EnterPlanMode / ExitPlanMode / AskUserQuestion).
+//  Pure functions so App/Sable can render later — this file does not
+//  touch AgentLoop.swift.
 //
 
 import Foundation
 
 /// Renderer families from ZCode `Qme` / `og`: file-read, file-write, shell,
-/// search, explore, todo, skill, agent, plus mcp (`server__tool`).
-/// Unknown names map to `other`.
+/// search, explore, todo, skill, agent, plan-guidance, switch-mode,
+/// ask-user-question, plus mcp (`server__tool`). Unknown names map to `other`.
 public enum ToolFamily: String, Sendable, Equatable {
     case fileRead = "file-read"
     case fileWrite = "file-write"
@@ -32,6 +35,9 @@ public enum ToolFamily: String, Sendable, Equatable {
     case skill
     case agent
     case mcp
+    case planGuidance = "plan-guidance"
+    case switchMode = "switch-mode"
+    case askUserQuestion = "ask-user-question"
     case other
 }
 
@@ -74,6 +80,10 @@ public struct ToolCallEvent: Sendable, Equatable {
     public var mcpResult: String?
     /// ZCode wrap-lines toggle for MCP result pane.
     public var wrapResultLines: Bool
+    /// Plan body for switch-mode / plan-guidance cards.
+    public var planText: String?
+    /// Question shown on ask-user-question cards.
+    public var question: String?
 
     public init(
         name: String,
@@ -91,7 +101,9 @@ public struct ToolCallEvent: Sendable, Equatable {
         todoSummary: String? = nil,
         mcpParameters: String? = nil,
         mcpResult: String? = nil,
-        wrapResultLines: Bool = true
+        wrapResultLines: Bool = true,
+        planText: String? = nil,
+        question: String? = nil
     ) {
         self.name = name
         self.isRunning = isRunning
@@ -109,6 +121,8 @@ public struct ToolCallEvent: Sendable, Equatable {
         self.mcpParameters = mcpParameters
         self.mcpResult = mcpResult
         self.wrapResultLines = wrapResultLines
+        self.planText = planText
+        self.question = question
     }
 }
 
@@ -325,6 +339,78 @@ public struct MCPCard: Sendable, Equatable {
     public var copyResultLabel: String { ToolCallGrouping.mcpCopyResultLabel }
 }
 
+/// Plan-guidance card (ZCode EnterPlanMode / `plan-guidance`).
+public struct PlanGuidanceCard: Sendable, Equatable {
+    public var index: Int
+    public var isRunning: Bool
+    public var toolName: String
+    public var planText: String
+
+    public init(
+        index: Int,
+        isRunning: Bool,
+        toolName: String = "enter_plan_mode",
+        planText: String = ""
+    ) {
+        self.index = index
+        self.isRunning = isRunning
+        self.toolName = toolName
+        self.planText = planText
+    }
+
+    public var kindLabel: String { ToolCallGrouping.planGuidanceKindLabel(isRunning: isRunning) }
+}
+
+/// Switch-mode / plan-approval card (ZCode ExitPlanMode).
+public struct SwitchModeCard: Sendable, Equatable {
+    public var index: Int
+    public var isRunning: Bool
+    public var toolName: String
+    public var planText: String
+
+    public init(
+        index: Int,
+        isRunning: Bool,
+        toolName: String = "exit_plan_mode",
+        planText: String = ""
+    ) {
+        self.index = index
+        self.isRunning = isRunning
+        self.toolName = toolName
+        self.planText = planText
+    }
+
+    public var kindLabel: String { ToolCallGrouping.switchModeKindLabel(isRunning: isRunning) }
+    public var approveLabel: String { ToolCallGrouping.switchModeApproveLabel }
+    public var approveDescription: String { ToolCallGrouping.switchModeApproveDescription }
+    public var placeholderTitle: String { ToolCallGrouping.switchModePlaceholderTitle }
+}
+
+/// Ask-user-question card (ZCode AskUserQuestion / `ask_user`).
+public struct AskUserQuestionCard: Sendable, Equatable {
+    public var index: Int
+    public var isRunning: Bool
+    public var toolName: String
+    public var question: String
+
+    public init(
+        index: Int,
+        isRunning: Bool,
+        toolName: String = "ask_user",
+        question: String = ""
+    ) {
+        self.index = index
+        self.isRunning = isRunning
+        self.toolName = toolName
+        self.question = question
+    }
+
+    public var kindLabel: String { ToolCallGrouping.askUserQuestionKindLabel(isRunning: isRunning) }
+    public var continueLabel: String { ToolCallGrouping.askUserContinueLabel }
+    public var submitLabel: String { ToolCallGrouping.askUserSubmitLabel }
+    public var customAnswerLabel: String { ToolCallGrouping.askUserCustomAnswerLabel }
+}
+
 public enum GroupedToolCalls: Sendable, Equatable {
     /// Consecutive read-only tools → one Explore card.
     case explore(counts: ExploreBucketCounts, memberIndices: [Int])
@@ -340,6 +426,12 @@ public enum GroupedToolCalls: Sendable, Equatable {
     case todo(TodoCard)
     /// Namespaced MCP `server__tool` card.
     case mcp(MCPCard)
+    /// Enter plan mode card.
+    case planGuidance(PlanGuidanceCard)
+    /// Exit plan mode / plan-approval card.
+    case switchMode(SwitchModeCard)
+    /// Ask-user-question card.
+    case askUserQuestion(AskUserQuestionCard)
     /// Unmapped tools, shown as their own card.
     case standalone(index: Int, family: ToolFamily)
 }
@@ -369,6 +461,12 @@ public enum ToolCallGrouping: Sendable {
              "get_task_output", "wait_tasks", "kill_task",
              "TaskOutput", "TaskStop":
             return .agent
+        case "enter_plan_mode", "EnterPlanMode":
+            return .planGuidance
+        case "exit_plan_mode", "ExitPlanMode":
+            return .switchMode
+        case "ask_user", "AskUserQuestion":
+            return .askUserQuestion
         default:
             if ToolAuthorization.isMCPToolName(name) {
                 return .mcp
@@ -503,6 +601,29 @@ public enum ToolCallGrouping: Sendable {
     public static let mcpParametersLabel = "Parameters"
     public static let mcpResultLabel = "Result"
     public static let mcpCopyResultLabel = "Copy result"
+
+    /// ZCode plan-guidance kind.
+    public static func planGuidanceKindLabel(isRunning: Bool) -> String {
+        isRunning ? "Entering plan mode" : "Entered plan mode"
+    }
+
+    /// ZCode switch-mode kind while waiting for Approve.
+    public static func switchModeKindLabel(isRunning: Bool) -> String {
+        isRunning ? "Awaiting approval" : "Switched mode"
+    }
+
+    public static let switchModeApproveLabel = "Approve"
+    public static let switchModeApproveDescription = "Exit plan mode and start implementation."
+    public static let switchModePlaceholderTitle = "Implementation plan"
+
+    /// ZCode ask-user-question kind.
+    public static func askUserQuestionKindLabel(isRunning: Bool) -> String {
+        isRunning ? "Asking" : "Asked"
+    }
+
+    public static let askUserContinueLabel = "Continue"
+    public static let askUserSubmitLabel = "Submit"
+    public static let askUserCustomAnswerLabel = "Custom answer"
 
     /// Server prefix of `server__tool`. Empty when the name is not MCP.
     public static func mcpServerName(forToolName name: String) -> String {
@@ -639,6 +760,30 @@ public enum ToolCallGrouping: Sendable {
                     parameters: (ev.mcpParameters ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
                     result: (ev.mcpResult ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
                     wrapLines: ev.wrapResultLines)))
+                i += 1
+            } else if fam == .planGuidance {
+                let ev = events[i]
+                out.append(.planGuidance(PlanGuidanceCard(
+                    index: i,
+                    isRunning: ev.isRunning,
+                    toolName: ev.name,
+                    planText: (ev.planText ?? "").trimmingCharacters(in: .whitespacesAndNewlines))))
+                i += 1
+            } else if fam == .switchMode {
+                let ev = events[i]
+                out.append(.switchMode(SwitchModeCard(
+                    index: i,
+                    isRunning: ev.isRunning,
+                    toolName: ev.name,
+                    planText: (ev.planText ?? "").trimmingCharacters(in: .whitespacesAndNewlines))))
+                i += 1
+            } else if fam == .askUserQuestion {
+                let ev = events[i]
+                out.append(.askUserQuestion(AskUserQuestionCard(
+                    index: i,
+                    isRunning: ev.isRunning,
+                    toolName: ev.name,
+                    question: (ev.question ?? "").trimmingCharacters(in: .whitespacesAndNewlines))))
                 i += 1
             } else {
                 out.append(.standalone(index: i, family: fam))

@@ -35,6 +35,12 @@ final class ToolCallGroupingTests: XCTestCase {
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "kill_task"), .agent)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "TaskOutput"), .agent)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "TaskStop"), .agent)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "enter_plan_mode"), .planGuidance)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "EnterPlanMode"), .planGuidance)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "exit_plan_mode"), .switchMode)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "ExitPlanMode"), .switchMode)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "ask_user"), .askUserQuestion)
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "AskUserQuestion"), .askUserQuestion)
         XCTAssertEqual(ToolCallGrouping.family(forToolName: "send_message"), .other)
         XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "write_file"), .write)
         XCTAssertEqual(ToolCallGrouping.fileWriteKind(forToolName: "edit_file"), .update)
@@ -557,6 +563,85 @@ final class ToolCallGroupingTests: XCTestCase {
         guard case .mcp(let mcp) = groups[2] else { return XCTFail("mcp card") }
         XCTAssertEqual(mcp.serverName, "github")
         guard case .explore(let counts, _) = groups[3] else { return XCTFail("read after mcp is new explore") }
+        XCTAssertEqual(counts.files, 1)
+    }
+
+    func testEnterPlanModeIsPlanGuidanceCard() {
+        let running = ToolCallEvent(name: "enter_plan_mode", isRunning: true)
+        let done = ToolCallEvent(name: "enter_plan_mode")
+        guard case .planGuidance(let a) = ToolCallGrouping.group([running])[0] else {
+            return XCTFail("running enter_plan_mode is a plan-guidance card")
+        }
+        XCTAssertEqual(a.kindLabel, "Entering plan mode")
+        XCTAssertEqual(a.toolName, "enter_plan_mode")
+        XCTAssertEqual(ToolCallGrouping.planGuidanceKindLabel(isRunning: true), "Entering plan mode")
+        guard case .planGuidance(let b) = ToolCallGrouping.group([done])[0] else {
+            return XCTFail("finished enter_plan_mode is a plan-guidance card")
+        }
+        XCTAssertEqual(b.kindLabel, "Entered plan mode")
+        XCTAssertEqual(ToolCallGrouping.family(forToolName: "EnterPlanMode"), .planGuidance)
+    }
+
+    func testExitPlanModeIsSwitchModeCardWithApproveCopy() {
+        let running = ToolCallEvent(
+            name: "exit_plan_mode",
+            isRunning: true,
+            planText: "ship grouping")
+        guard case .switchMode(let a) = ToolCallGrouping.group([running])[0] else {
+            return XCTFail("running exit_plan_mode is a switch-mode card")
+        }
+        XCTAssertEqual(a.kindLabel, "Awaiting approval")
+        XCTAssertEqual(a.planText, "ship grouping")
+        XCTAssertEqual(a.approveLabel, "Approve")
+        XCTAssertEqual(a.approveDescription, "Exit plan mode and start implementation.")
+        XCTAssertEqual(a.placeholderTitle, "Implementation plan")
+        XCTAssertEqual(ToolCallGrouping.switchModePlaceholderTitle, "Implementation plan")
+        let done = ToolCallEvent(name: "ExitPlanMode", planText: "ship grouping")
+        guard case .switchMode(let b) = ToolCallGrouping.group([done])[0] else {
+            return XCTFail("finished ExitPlanMode is a switch-mode card")
+        }
+        XCTAssertEqual(b.kindLabel, "Switched mode")
+        XCTAssertEqual(b.toolName, "ExitPlanMode")
+    }
+
+    func testAskUserIsAskUserQuestionCard() {
+        let running = ToolCallEvent(
+            name: "ask_user",
+            isRunning: true,
+            question: "Ship this plan?")
+        guard case .askUserQuestion(let a) = ToolCallGrouping.group([running])[0] else {
+            return XCTFail("running ask_user is an ask-user-question card")
+        }
+        XCTAssertEqual(a.kindLabel, "Asking")
+        XCTAssertEqual(a.question, "Ship this plan?")
+        XCTAssertEqual(a.continueLabel, "Continue")
+        XCTAssertEqual(a.submitLabel, "Submit")
+        XCTAssertEqual(a.customAnswerLabel, "Custom answer")
+        let done = ToolCallEvent(name: "AskUserQuestion", question: "Ship this plan?")
+        guard case .askUserQuestion(let b) = ToolCallGrouping.group([done])[0] else {
+            return XCTFail("finished AskUserQuestion is an ask-user-question card")
+        }
+        XCTAssertEqual(b.kindLabel, "Asked")
+        XCTAssertEqual(b.toolName, "AskUserQuestion")
+    }
+
+    func testPlanAndAskDoNotCollapseIntoExplore() {
+        let events = [
+            ToolCallEvent(name: "grep_code"),
+            ToolCallEvent(name: "enter_plan_mode"),
+            ToolCallEvent(name: "exit_plan_mode", planText: "do it"),
+            ToolCallEvent(name: "ask_user", question: "ok?"),
+            ToolCallEvent(name: "read_file"),
+        ]
+        let groups = ToolCallGrouping.group(events)
+        XCTAssertEqual(groups.count, 5)
+        guard case .explore = groups[0] else { return XCTFail("search is explore") }
+        guard case .planGuidance = groups[1] else { return XCTFail("plan-guidance") }
+        guard case .switchMode(let sw) = groups[2] else { return XCTFail("switch-mode") }
+        XCTAssertEqual(sw.planText, "do it")
+        guard case .askUserQuestion(let q) = groups[3] else { return XCTFail("ask-user-question") }
+        XCTAssertEqual(q.question, "ok?")
+        guard case .explore(let counts, _) = groups[4] else { return XCTFail("read after ask is new explore") }
         XCTAssertEqual(counts.files, 1)
     }
 
