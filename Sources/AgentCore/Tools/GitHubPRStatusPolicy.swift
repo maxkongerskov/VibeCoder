@@ -69,6 +69,14 @@ public enum GitHubPRStatusPolicy: Sendable {
         return false
     }
 
+
+    /// Terminal answer already in the tool result — stop more probes.
+    public static func shouldStopAfterMerged(_ content: String?) -> Bool {
+        guard let content, !content.isEmpty else { return false }
+        if content.hasPrefix("PR_STATUS: MERGED") { return true }
+        return looksMerged(content)
+    }
+
     private static func isGhClient(_ c: String) -> Bool {
         let t = c.trimmingCharacters(in: .whitespacesAndNewlines)
         if t == "gh" || t.hasPrefix("gh ") { return true }
