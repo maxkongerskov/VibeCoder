@@ -18,6 +18,8 @@ public actor ToolRegistry {
     private var metadata: [String: ToolMetadata] = [:]
     /// Runtime-registered tools (e.g. Xcode MCP proxies from `mcpbridge`).
     private var dynamicExecutors: [String: @Sendable (ToolArguments, ToolContext) async throws -> ToolResult] = [:]
+    /// Last successful-dispatch signature per conversation (name + canonical args).
+    private var lastCallSignatureByConversation: [UUID: String] = [:]
 
     public struct ToolMetadata: Sendable {
         public let name: String
@@ -202,6 +204,13 @@ public actor ToolRegistry {
         if let denied = await skillAllowlistDenial(name: name, context: context) {
             return denied
         }
+        let callSig = IdenticalConsecutiveToolCall.signature(name: name, arguments: arguments)
+        if IdenticalConsecutiveToolCall.isRepeat(
+            previous: lastCallSignatureByConversation[context.conversationID],
+            current: callSig
+        ) {
+            return IdenticalConsecutiveToolCall.failClosedResult(toolName: name)
+        }
         guard let meta = metadata[name] else {
             let available = metadata.keys.sorted().joined(separator: ", ")
             throw ToolError.unavailable("Unknown tool: \(name). Available: \(available)")
@@ -219,6 +228,7 @@ public actor ToolRegistry {
                 arguments: effectiveArgs,
                 context: context)
         }
+        lastCallSignatureByConversation[context.conversationID] = callSig
         let result: ToolResult
         do {
             if let executor = dynamicExecutors[name] {

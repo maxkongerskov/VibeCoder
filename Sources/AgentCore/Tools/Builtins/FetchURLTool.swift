@@ -45,6 +45,9 @@ public struct FetchURLTool: Tool {
 
     public func execute(arguments: ToolArguments, context: ToolContext) async throws -> ToolResult {
         let raw = try arguments.string("url")
+        if let denied = GitHubPRStatusPolicy.preferGhDenial(forFetchURL: raw) {
+            return ToolResult(content: denied, isError: true)
+        }
         let result = await Self.fetch(url: raw)
         return ToolResult(content: result.output, isError: result.isError)
     }

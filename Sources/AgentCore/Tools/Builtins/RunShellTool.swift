@@ -35,6 +35,9 @@ public struct RunShellTool: Tool {
 
     public func execute(arguments: ToolArguments, context: ToolContext) async throws -> ToolResult {
         let command = try arguments.string("command")
+        if let denied = GitHubPRStatusPolicy.preferGhDenial(forShellCommand: command) {
+            return ToolResult(content: denied, isError: true)
+        }
         let background = arguments.bool("background", default: false)
         let maxBytes = arguments.intOptional("maxBytes") ?? 65_536
         // Worktree wins — same cwd git_commit / write_file use.
@@ -114,8 +117,12 @@ public struct RunShellTool: Tool {
         header += "[exit \(result.exitCode)]\n"
         let cancelled = result.exitCode == 130
             || combined.contains("[cancelled by user")
+        var body = header + combined
+        if GitHubPRStatusPolicy.shouldAnnotateShellCommand(command) {
+            body = GitHubPRStatusPolicy.decorateIfMerged(body)
+        }
         return ToolResult(
-            content: header + combined,
+            content: body,
             isError: result.exitCode != 0 || cancelled)
     }
 }
