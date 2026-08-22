@@ -4,7 +4,7 @@ What **99%** means for a **BYO OpenAI-compatible HTTP** local agent. Not a hobby
 
 Ada owns this file. Lin/Pixel/Rigel raise the numbers with **evidence**, not vibes. Do not claim 99% without the proof column filled.
 
-**Today (2026-08-22): not 99% daily-driver.** F4 is live in-app Unsloth first chat (Reed, this Mac) — filled cells still ≠ 99%. GitHub unpushed. GHA `SKIP_APP_TESTS=1`. A1/A2 and Connection Test still not live.
+**Today (2026-08-22): not 99% daily-driver.** F4 is live Unsloth first-chat (Mac app window; “Hey”; gemma 4 26B ~6s) — filled cells still ≠ 99%. GitHub unpushed. GHA `SKIP_APP_TESTS=1`. A1/A2 and Connection Test still not live.
 
 ---
 
@@ -22,7 +22,7 @@ Ada owns this file. Lin/Pixel/Rigel raise the numbers with **evidence**, not vib
 
 ## 99% — explicit meaning
 
-A daily-driver is 99% when **all** of the following are true **and** Rigel has written evidence (command + result, or eval id + pass). Partial UI is not enough. Filled cells below are **not** that bar yet — mock-worker 012/013 ≠ live HTTP model ≠ in-app first chat.
+A daily-driver is 99% when **all** of the following are true **and** Rigel has written evidence (command + result, or eval id + pass). Partial UI is not enough. Filled cells below are **not** that bar yet — F4 live Unsloth first chat ≠ 99%; 012/013 still mock.
 
 ### First-run
 
@@ -31,7 +31,7 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 | F1 | Cold launch, **no** wizard, lands on main UI | **Unit, not launched:** `VibeCoderApp` force-sets `hasCompletedOnboarding`. `WorkspaceChatRouting` wait→seed→showChat — `MenuChromeUITests.testWorkspaceRouting*` (characterization, not XCUI; GHA `SKIP_APP_TESTS=1`). Historical class 10/10 (2026-08-20) is stale — Cluster nav tests now sit in this class (e72a114). No screenshot. |
 | F2 | Server **down** → empty chat tells the user to start a local server (all live HTTP backends named, including Unsloth) and Send is not a silent no-op | **Unit:** `SettingsDiscoverabilityCopyTests.testEmptyChatCopyListsUnslothOnNoBackend` (LM Studio/Ollama/oMLX/Unsloth) + `testComposerSendDisabledUntilModelUnlessRunning` pass. `BugHuntViewModelsTests.testEnsureFirstConversationWaitsForStoreThenSeedsOnce` pass. App not launched. |
 | F3 | Server **up**, no model → pick a model (composer chip / Connection Test) | **Copy only:** same EmptyChatCopy test → title `"Pick a model to start"`. No live server. |
-| F4 | Server up + model selected → first user turn streams tokens | **Live in-app first chat (2026-08-22), Unsloth Studio.** One user turn “Hey”; tokens in the Mac app window. Witness: Reed (tech lead) during Max’s session. **Not** mock-worker 012/013, **not** eval-runner, **not** CLI. 012/013 stay mock scripted cells (A1/A2 only). B1 Connection Test still not live. F4 alone is not 99%. |
+| F4 | Server up + model selected → first user turn streams tokens | **Live in-app first chat (2026-08-22), Unsloth Studio.** Mac app window (not CLI, not eval-runner). User “Hey”; gemma 4 26B replied in ~6s. **Not** mock-worker 012/013, **not** eval-runner, **not** CLI. 012/013 stay mock scripted cells (A1/A2 only). B1 Connection Test still not live. F4 alone is not 99%. |
 
 ### Local backends
 
@@ -46,8 +46,8 @@ A daily-driver is 99% when **all** of the following are true **and** Rigel has w
 
 | # | Bar | Evidence |
 |---|-----|----------|
-| A1 | One turn: model → tool call → tool result → model continues | **Mock-worker 012 (3487777), not live-backend / not in-app.** In-tree `Evals/support/scripts/012-write-file.json`; Nash `ci-pr.sh` (T0 then 012). Artifact `Evals/results/2026-08-20-091027-mock-mock-worker.json` (1 `write_file`). Historical `SKIP_UNIT=1 SKIP_APP_TESTS=1` local `ci-pr.sh` is eval-only — does not prove the SwiftUI turn. |
-| A2 | `edit_file` / `apply_patch` changes a file the user can open | **Mock-worker 013 (3487777), not live-backend / not in-app.** In-tree `Evals/support/scripts/013-apply-patch.json`; Nash `ci-pr.sh`. Artifact `Evals/results/2026-08-20-091614-mock-mock-worker.json` (2 tools: `read_file`+`apply_patch`). Historical `SKIP_APP_TESTS=1` local runs are eval-only. |
+| A1 | One turn: model → tool call → tool result → model continues | **Mock-worker 012 (3487777), not live-backend / not in-app.** First-chat is **F4**, not A1/A2. In-tree `Evals/support/scripts/012-write-file.json`; Nash `ci-pr.sh` (T0 then 012). Artifact `Evals/results/2026-08-20-091027-mock-mock-worker.json` (1 `write_file`). Historical `SKIP_UNIT=1 SKIP_APP_TESTS=1` local `ci-pr.sh` is eval-only — does not prove the SwiftUI turn. |
+| A2 | `edit_file` / `apply_patch` changes a file the user can open | **Mock-worker 013 (3487777), not live-backend / not in-app.** First-chat is **F4**, not A1/A2. In-tree `Evals/support/scripts/013-apply-patch.json`; Nash `ci-pr.sh`. Artifact `Evals/results/2026-08-20-091614-mock-mock-worker.json` (2 tools: `read_file`+`apply_patch`). Historical `SKIP_APP_TESTS=1` local runs are eval-only. |
 | A3 | `verifyEdits` default on: BuildGuard skip (no build system) or pass/fail inject, no hang | **PASS (Ada 2026-08-20).** `AppSettings.verifyEdits` default true; `AgentRunBootstrap` passes it through. Skip: `BuildGuardVerifyEditsTests.testVerifyNoBuildSystemInEmptyDir`. Fail inject: `AgentLoopFixesTests.testBuildGuardFailureProducesSingleTranscriptMessage` (broken Package.swift → one user-role BuildGuard reminder). Wire-only not in transcript. No live xcodebuild hang test. |
 | A4 | Cancel (⌘.) returns a persistable partial turn (no dangling `tool_calls`) | **PASS-with-unit (Ada 2026-08-20, same bar as F4).** `AgentLoopCancelPersistTests.testCancelMidToolPersistsPairedTranscript`: cancel while a mutator hangs; `ConversationStore.save` then `load`; `toolCallPairingIsValid`; no unclosed ids; hang + leftover `list_directory` both have tool results. Same store as ChatViewModel. Not in-app ⌘. |
 | A5 | Safe/Ask/Plan modes still fail closed (no YOLO-by-default) | existing executionMode default `.build` |
@@ -152,7 +152,7 @@ BLOCKERS: …
 NEXT_ASSIGNMENT: …
 ```
 
-**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts that prove the bar. **Filled cells ≠ 99%.** Current honest status (2026-08-22): **not 99% daily-driver.** F4 live Unsloth first chat witnessed by Reed (Mac app window, one turn “Hey”) — **not** 012/013, **not** eval-runner, **not** CLI. GitHub still unpushed. GHA `SKIP_APP_TESTS=1` (local WARN unless `APP_TESTS_STRICT=1`) — App tests **do not gate merge**. B1 Connection Test and A1/A2 still unit/mock, not live. 012/013 remain mock-worker. Residuals that still block 99%: App tests not a merge gate; no live Connection Test; A1/A2 not live HTTP/in-app; no ⌘Q or SIGKILL; no mid-stream persist checkpoint. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
+**99%** requires F1–F4, A1–A4, W1–W7, P1–P3, L1–L3 with artifacts that prove the bar. **Filled cells ≠ 99%.** Current honest status (2026-08-22): **not 99% daily-driver.** F4 live Unsloth first-chat (Mac app window, “Hey”, gemma 4 26B ~6s) — **not** 012/013, **not** eval-runner, **not** CLI. GitHub still unpushed. GHA `SKIP_APP_TESTS=1` (local WARN unless `APP_TESTS_STRICT=1`) — App tests **do not gate merge**. B1 Connection Test and A1/A2 still unit/mock, not live. 012/013 remain mock-worker. Residuals that still block 99%: App tests not a merge gate; no live Connection Test; A1/A2 not live HTTP/in-app; no ⌘Q or SIGKILL; no mid-stream persist checkpoint. EXO Cluster pane mounted (b7db51f: read-only `/state` + pin Model ID); not unmounted / not a partial topology UI. `RemoteControlSheet` leftover deleted. `ConversationListViewModel.duplicate` removed (zero callers; it forced `worktreeBranch: nil`).
 
 ### Five-way (2026-08-21) — historical, not today’s score
 
