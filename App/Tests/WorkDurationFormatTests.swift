@@ -37,4 +37,13 @@ final class WorkDurationFormatTests: XCTestCase {
         XCTAssertEqual(WorkDurationFormat.shortElapsed(seconds: 90, streaming: false), "1 minute")
         XCTAssertEqual(WorkDurationFormat.shortElapsed(seconds: 0, streaming: true), "…")
     }
+
+    func testThoughtForAndWorkingForLabels() {
+        XCTAssertEqual(
+            "Thought for \(WorkDurationFormat.shortElapsed(seconds: 8, streaming: false))",
+            "Thought for 8s")
+        XCTAssertEqual(
+            WorkDurationFormat.workingLabel(seconds: 8, isLive: true),
+            "Working for 8s")
+    }
 }

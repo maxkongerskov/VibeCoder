@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 /// Soft light sweep across secondary status text (Thinking, Working, idle phrases).
 struct ShimmerText: View {
@@ -33,6 +34,12 @@ struct ShimmerText: View {
     }
 
     var body: some View {
+        if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            Text(text)
+                .font(font)
+                .foregroundStyle(Theme.Palette.secondary)
+                .accessibilityLabel(text)
+        } else {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             // Continuous 0…1 phase left → right
@@ -63,6 +70,7 @@ struct ShimmerText: View {
                 }
         }
         .accessibilityLabel(text)
+        }
     }
 
     private func clamp(_ v: Double) -> Double {

@@ -91,7 +91,7 @@ struct ReasoningBlockView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Button {
                     userToggled = true
-                    withAnimation(.easeOut(duration: 0.15)) {
+                    withAnimation(Theme.Motion.quick) {
                         isExpanded.toggle()
                     }
                 } label: {
@@ -130,7 +130,7 @@ struct ReasoningBlockView: View {
                             .lineSpacing(4)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .animation(.easeOut(duration: 0.12), value: text.count)
+                            // Tokens append in place — animating count flickers the rail.
                     }
                     .padding(.top, 8)
                     .padding(.bottom, 4)
@@ -149,7 +149,7 @@ struct ReasoningBlockView: View {
             .onChange(of: isStreaming) { _, streaming in
                 if streaming {
                     if !userToggled {
-                        withAnimation(.easeOut(duration: 0.15)) { isExpanded = true }
+                        withAnimation(Theme.Motion.quick) { isExpanded = true }
                     }
                 } else {
                     syncExpandState(animated: true)
@@ -160,12 +160,12 @@ struct ReasoningBlockView: View {
             }
             .onChange(of: hasContent) { _, has in
                 if has, isStreaming, !userToggled {
-                    withAnimation(.easeOut(duration: 0.15)) { isExpanded = true }
+                    withAnimation(Theme.Motion.quick) { isExpanded = true }
                 }
             }
             .task(id: isStreaming) {
                 guard isStreaming else { return }
-                elapsedSeconds = 0
+                // Do not reset elapsedSeconds — remounts were flashing "Thought for 0".
                 while !Task.isCancelled && isStreaming {
                     try? await Task.sleep(nanoseconds: 1_000_000_000)
                     elapsedSeconds += 1
@@ -185,7 +185,7 @@ struct ReasoningBlockView: View {
             next = hasContent
         }
         if animated {
-            withAnimation(.easeOut(duration: 0.15)) { isExpanded = next }
+            withAnimation(Theme.Motion.quick) { isExpanded = next }
         } else {
             isExpanded = next
         }

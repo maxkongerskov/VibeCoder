@@ -27,14 +27,38 @@ struct MarkdownTextView: View {
     var fontSize: CGFloat = Theme.ChatLayout.bodyFontSize
 
     var body: some View {
-        let blocks = parseBlocks(text)
+        let blocks = identifiedBlocks
         VStack(alignment: .leading, spacing: Theme.Spacing.m) { // 12pt — air between blocks
-            ForEach(blocks.indices, id: \.self) { i in
-                blockView(blocks[i])
+            ForEach(blocks) { item in
+                blockView(item.block)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .textSelection(.enabled)
+        // Growing last block only — do not animate the whole stack (flicker).
+    }
+
+    /// Prefix blocks keep a stable id so streaming tokens only rebuild the tail.
+    private var identifiedBlocks: [IdentifiedMarkdownBlock] {
+        let blocks = parseBlocks(text)
+        return blocks.enumerated().map { i, block in
+            let tail = isStreaming && i == blocks.count - 1
+            return IdentifiedMarkdownBlock(
+                id: tail ? "stream-tail" : "\(i)-\(Self.kind(block))",
+                block: block)
+        }
+    }
+
+    private static func kind(_ block: MarkdownBlock) -> String {
+        switch block {
+        case .heading: return "h"
+        case .paragraph: return "p"
+        case .codeBlock: return "code"
+        case .list: return "list"
+        case .table: return "table"
+        case .blockquote: return "quote"
+        case .horizontalRule: return "hr"
+        }
     }
 
     // MARK: - Block rendering
@@ -497,3 +521,9 @@ enum MarkdownBlock {
     case blockquote(String)
     case horizontalRule
 }
+
+private struct IdentifiedMarkdownBlock: Identifiable {
+    let id: String
+    let block: MarkdownBlock
+}
+

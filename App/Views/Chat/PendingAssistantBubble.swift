@@ -14,6 +14,7 @@
 //
 
 import SwiftUI
+import AppKit
 import AgentCore
 
 // MARK: - Engine load bar (legacy slot)
@@ -145,8 +146,7 @@ struct PendingAssistantBubble: View {
     /// Live elapsed seconds for the "Working for Ns" header (from ChatView).
     var elapsedSeconds: Int = 0
 
-    // Order: working header → optional orchestration → thinking → activity → answer.
-    // Option A: no LLM speech bubbles; tool activity keeps its own chrome.
+    // Order: working header, thinking rail, growing markdown, then tools.
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             // Live duration + hairline (ZCode / BuildCode work section).
@@ -169,22 +169,28 @@ struct PendingAssistantBubble: View {
             // Step markers intentionally omitted — "Step 1" / iteration
             // chrome adds noise without helping the user.
 
-            // 1) Live reasoning — expand as tokens arrive so the user can
-            // read the model’s thinking before / alongside the answer.
+            // 1) Live reasoning rail — growing think tokens.
             if showingReasoning {
                 ReasoningBlockView(
                     text: effectiveReasoning,
-                    // Shimmer while still in the think channel / open think tags.
                     isStreaming: (!showingStream && !showingTools) || thinkTagsOpen,
                     startedAt: reasoningStartedAt,
-                    // Collapse when tools/answer take over (user can still expand).
                     preferCollapsed: (showingStream || showingTools) && !thinkTagsOpen,
                     fontSize: fontSize
                 )
-                .transition(.opacity)
             }
 
-            // 2) Activity stack + inline edit cards (same partition as history)
+            // 2) Growing markdown first — live bubble, not tool cards.
+            if showingStream {
+                MarkdownTextView(text: effectiveAnswer,
+                                 isStreaming: true,
+                                 fontSize: fontSize)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if showingWorking {
+                thinkingIdleLine
+            }
+
+            // 3) Tools after the live bubble (history still has cards).
             if showingTools {
                 let parts = ChatToolPartition.split(
                     liveToolStates,
@@ -197,7 +203,6 @@ struct PendingAssistantBubble: View {
                         onKillJob: onKillJob,
                         backgroundJobs: backgroundJobs
                     )
-                    .transition(.opacity)
                 }
                 ForEach(parts.edits) { edit in
                     InlineEditCardView(
@@ -207,9 +212,8 @@ struct PendingAssistantBubble: View {
                             && edit.hunkIDs.allSatisfy { rolledBackHunkIDs.contains($0) },
                         onUndo: edit.canUndo ? { onUndoEdit?(edit) } : nil
                     )
-                    .transition(.opacity)
                 }
-            } else if let line = activityLine {
+            } else if let line = activityLine, !showingStream {
                 HStack(spacing: 6) {
                     Image(systemName: line.icon)
                         .font(.system(size: 12, weight: .medium))
@@ -228,21 +232,7 @@ struct PendingAssistantBubble: View {
                     ProgressView().controlSize(.mini)
                 }
             }
-
-            // 3) Streaming answer OR idle "Thinking…"
-            if showingStream {
-                MarkdownTextView(text: effectiveAnswer,
-                                 isStreaming: true,
-                                 fontSize: fontSize)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .transition(.opacity)
-            } else if showingWorking {
-                thinkingIdleLine
-                    .transition(.opacity)
-            }
         }
-        .animation(.easeOut(duration: 0.2), value: showingStream)
-        .animation(.easeOut(duration: 0.2), value: liveToolStates.count)
         // No horizontal inset — history MessageBubbleViewV2 is full fluid
         // column; ±16 here made live thinking/tools jump wider on commit.
     }
@@ -257,12 +247,13 @@ struct PendingAssistantBubble: View {
         .opacity(phraseVisible ? 1 : 0)
         .task(id: playfulLabels ? "pending-phrases" : "thinking-idle") {
             guard playfulLabels else { return }
+            if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion { return }
             phrases = ThinkingPhrases.all.shuffled()
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(phraseInterval * 1_000_000_000))
                 if Task.isCancelled { break }
                 await MainActor.run {
-                    withAnimation(.easeInOut(duration: 0.45)) {
+                    withAnimation(Theme.Motion.gentle) {
                         phraseVisible = false
                     }
                 }
@@ -270,7 +261,7 @@ struct PendingAssistantBubble: View {
                 if Task.isCancelled { break }
                 await MainActor.run {
                     phraseIdx += 1
-                    withAnimation(.easeInOut(duration: 0.45)) {
+                    withAnimation(Theme.Motion.gentle) {
                         phraseVisible = true
                     }
                 }
