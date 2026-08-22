@@ -1,33 +1,37 @@
 # VibeCoder implementation plan
 
-OSS (MIT). Not a product pitch. Native macOS SwiftUI + AgentCore. No Electron rewrite.
+OSS (MIT). Native macOS SwiftUI + AgentCore. Apple Silicon only.
 
-Current shipped claims: `ARCHITECTURE.md` §1 / §17. Daily-driver bar: `docs/RELEASE_BAR.md`. CLI bar: `docs/CLI_RELEASE_BAR.md`. Every cut must move 99% confidence for the app or for that department.
+**30-day Now (2026-08-23 → 2026-09-22):** [`docs/LEAD_PLAN.md`](./docs/LEAD_PLAN.md).  
+Evidence: [`docs/CODING_BAR.md`](./docs/CODING_BAR.md).
 
-## Now (99% batch)
+Job: **ship real code**, **run fast**, **work on every shipped BYO HTTP provider**. Public GitHub. No Flutter. No empty-repo rewrite.
 
-Computer-use slice 2 + browser-use slice 0 (`ARCHITECTURE-v2.md`). Origin push stays Max.
+If this file and the lead plan disagree, the lead plan wins until 2026-09-22.
 
-Do not mix this with CloudBots platform work (named specialists / shared room / merge bar). CloudBots stay the slice-0 stub.
+## Now
 
-## Next: CloudBots (early / v1)
+1. Land ToolOffer and tighten Recommended to the coding-core catalog (`LEAD_PLAN` §4).
+2. Day-0 speed snapshot, then live C1 (worktree + patch + test/build) in-app.
+3. Provider matrix: LM Studio, oMLX, Ollama, Unsloth, EXO, custom `/v1` — connect or honest skip; two live coding turns minimum.
+4. Week 3 gate: **keep** `AgentLoop` unless the coding bar still fails after catalog + prompt. No second runtime.
 
-Named teammate agents inside VibeCoder, like Grok Bots: specialists, a shared room, a merge bar. Bound to a git project. Same worktree isolation as the main agent.
+## Frozen this window
 
-- **Cloud.** They may leave the Mac. Label them as cloud in Settings, README, and the UI. Not a local-inference path.
-- **Host, not a storefront.** A bot is a tool-using teammate, not a skills marketplace (that stays not-v1).
-- **Opt-in runtime.** Default project agent stays the in-app loop against BYO HTTP. CloudBots are an added surface, not a replacement.
-- **Spec first.** Target: `ARCHITECTURE-v2.md`. Freeze §17 only records that v2 lives next door — not that CloudBots ship. Reed writes that before Atlas/Sable build. Mira owns honesty tests (cloud labeled; no “nothing leaves your Mac”). Nash owns any CI that must not phone home on `pr.yml`.
+Computer-use and browser-use (opt-in, no slice 3). CloudBots slice-0 stub. ZCode parity docs (historical). mlx-swift, llama.cpp, Sparkle, Sentry, LAN remote, Electron, Flutter.
 
-Out of this cut: Electron, mlx-swift, bundled llama.cpp, Sparkle, Sentry, license keys, LAN/phone remote control, local VM (Lima/Tart), Grok-Bot cloud computers, `agentos` CLI.
+## Later (only if Max reopens after 2026-09-22)
 
-## Later (only if Max reopens)
-
-- Live-backend evals / in-app window proof (needs a model server on the Mac).
-- Signed notarized DMG (Developer ID).
-- App XCTest on GitHub Actions (`SKIP_APP_TESTS=1` today).
-- Further ChatViewModel extracts (slash/queue already moved out).
+- `AgentLoop` replacement (only if the Week 3 gate fired and did not finish)
+- Signed notarized DMG
+- App XCTest on GitHub Actions (`SKIP_APP_TESTS=1` today)
+- CloudBots platform, computer-use expansion
+- Live-backend eval suite beyond C1
 
 ## Docs
 
-`README.md` is how to build and run. This file is what we implement next. `ARCHITECTURE.md` remains the claim freeze. Target rail: [`ARCHITECTURE-v2.md`](./ARCHITECTURE-v2.md) (CloudBots). Not a shipping claim.
+`README.md` — build and run.  
+`ARCHITECTURE.md` — product claim freeze (§1 / §17).  
+`docs/LEAD_PLAN.md` — schedule, freezes, loop gate.  
+`docs/CODING_BAR.md` — fill with evidence.  
+`ARCHITECTURE-v2.md` — frozen archive, not this backlog.
