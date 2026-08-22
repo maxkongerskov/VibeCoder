@@ -35,6 +35,47 @@ final class BuiltinToolCatalogTests: XCTestCase {
         XCTAssertTrue(BuiltinToolCatalog.settingsNames.contains("task"))
     }
 
+    func testCatalogMatchesToolOffer() {
+        XCTAssertEqual(
+            BuiltinToolCatalog.registeredBuiltinNames,
+            ToolOffer.builtinNames)
+        XCTAssertEqual(
+            BuiltinToolCatalog.appHostedToolNames,
+            ToolOffer.pdfNames)
+        XCTAssertEqual(
+            BuiltinToolCatalog.allRegisteredNames,
+            ToolOffer.catalogNames)
+        XCTAssertTrue(
+            ToolOffer.recommendedNames.isSubset(of: BuiltinToolCatalog.settingsNames),
+            "recommended missing from Settings: \(ToolOffer.recommendedNames.subtracting(BuiltinToolCatalog.settingsNames).sorted())"
+        )
+        let onByDefault = Set(BuiltinToolCatalog.all.filter(\.defaultEnabled).map(\.name))
+        XCTAssertEqual(onByDefault, ToolOffer.recommendedNames)
+    }
+
+    func testRecommendedTemplateEnablesOnlyCore() {
+        let map = ToolOffer.enabledMap(
+            template: .recommended,
+            catalogNames: BuiltinToolCatalog.settingsNames)
+        XCTAssertEqual(
+            Set(map.filter(\.value).keys),
+            ToolOffer.recommendedNames)
+        XCTAssertEqual(
+            ToolOffer.matchingTemplate(
+                explicit: map,
+                catalogNames: BuiltinToolCatalog.settingsNames),
+            .recommended)
+        let all = ToolOffer.enabledMap(
+            template: .all,
+            catalogNames: BuiltinToolCatalog.settingsNames)
+        XCTAssertTrue(all.values.allSatisfy { $0 })
+        XCTAssertEqual(
+            ToolOffer.matchingTemplate(
+                explicit: all,
+                catalogNames: BuiltinToolCatalog.settingsNames),
+            .all)
+    }
+
     func testPDFToolsListedInSettings() {
         for name in PDFToolRegistration.toolNames {
             XCTAssertTrue(

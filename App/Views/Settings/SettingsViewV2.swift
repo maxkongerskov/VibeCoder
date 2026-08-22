@@ -67,7 +67,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable, Hashable {
         case .connection: return "Local servers & APIs"
         case .model:      return "Providers & sampling"
         case .mcp:        return "External tools"
-        case .tools:      return "Built-in capabilities"
+        case .tools:      return "Template, grants & builtins"
         case .context:    return "Window & compact"
         case .memory:     return "MEMORY & DECISIONS"
         case .general:    return "Theme & type"

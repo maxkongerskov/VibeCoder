@@ -10,14 +10,23 @@ import Foundation
 
 /// Master switches that hide capability tools until the user opts in.
 /// Individual Settings → Tools toggles still apply via `toolEnabled`.
+/// Missing `toolEnabled` keys use `ToolOffer` Recommended (not "all on").
 public enum AgentCapabilityGates: Sendable {
     public static func disabledToolNames(from settings: AppSettings) -> Set<String> {
-        var names = settings.disabledToolNames
+        var names = ToolOffer.disabledNames(explicit: settings.toolEnabled)
         if !settings.computerUseEnabled {
             names.formUnion(ComputerUseToolNames.all)
+        } else {
+            for name in ComputerUseToolNames.all where settings.toolEnabled[name] != false {
+                names.remove(name)
+            }
         }
         if !settings.browserUseEnabled {
             names.formUnion(BrowserUseToolNames.all)
+        } else {
+            for name in BrowserUseToolNames.all where settings.toolEnabled[name] != false {
+                names.remove(name)
+            }
         }
         return names
     }

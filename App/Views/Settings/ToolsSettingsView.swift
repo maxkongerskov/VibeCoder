@@ -3,11 +3,11 @@
 //
 // Ported from DEV PLAN ToolsSettingsView (~416 LOC).
 //
-// 2026-06-09: toggles are REAL now. The list below mirrors
-// ToolRegistry.registerBuiltins() exactly (the old mock listed ~16
-// tools that don't exist), state persists via AppSettings.toolEnabled,
-// and AgentLoop enforces it (schemas filtered + dispatch rejected).
-// When a tool is added to registerBuiltins(), add a row here.
+// Toggles are real. The list mirrors ToolRegistry + PDF tools.
+// State persists via AppSettings.toolEnabled; missing keys follow
+// ToolOffer Recommended. AgentLoop enforces via AgentCapabilityGates
+// (schemas filtered + dispatch rejected). When a tool is added to
+// registerBuiltins(), add it to ToolOffer.builtinNames and a row here.
 
 import SwiftUI
 import AppKit
@@ -128,7 +128,7 @@ struct BuiltinToolInfo: Identifiable {
     let name: String
     let description: String
     let category: ToolsSettingsCategory
-    let defaultEnabled: Bool
+    var defaultEnabled: Bool { ToolOffer.recommendedNames.contains(name) }
     var id: String { name }
 }
 
@@ -142,24 +142,7 @@ struct BuiltinToolInfo: Identifiable {
 enum BuiltinToolCatalog {
     /// Tool names that `ToolRegistry.registerBuiltins()` registers today.
     /// Intentionally excludes unregistered stubs (text_edit, notebook, porting).
-    static let registeredBuiltinNames: Set<String> = [
-        "read_file", "write_file", "edit_file", "apply_patch",
-        "list_directory", "grep_code", "glob_files", "run_shell",
-        "git_status", "git_diff", "git_commit", "create_pull_request", "tool_search",
-        "web_search", "fetch_url", "apple_docs", "fetch_rss",
-        "delete_file", "move_file", "create_directory",
-        "xcode_build", "xcode_project_editor",
-        "create_plan", "update_todo", "revise_plan", "ask_user",
-        "enter_plan_mode", "exit_plan_mode",
-        "cron_create", "cron_list", "cron_update", "cron_delete",
-        "task", "get_task_output", "wait_tasks", "kill_task",
-        "list_background_jobs", "monitor_jobs", "send_message",
-        "memory", "memory_search", "memory_get", "read_session_context", "find_symbol",
-        "load_skill",
-        "restore_checkpoint",
-        "screenshot", "click", "type", "scroll",
-        "browser_navigate", "browser_snapshot", "browser_click", "browser_type",
-    ]
+    static let registeredBuiltinNames: Set<String> = ToolOffer.builtinNames
 
     /// App-hosted tools registered at boot via `PDFToolRegistration` (not in AgentCore builtins).
     static let appHostedToolNames: Set<String> = PDFToolRegistration.toolNames
@@ -170,67 +153,67 @@ enum BuiltinToolCatalog {
     }
 
     static let all: [BuiltinToolInfo] = [
-        .init(name: "read_file",        description: "Read contents of a file under the project root",            category: .filesystem, defaultEnabled: true),
-        .init(name: "write_file",       description: "Write contents to a file",                                  category: .filesystem, defaultEnabled: true),
-        .init(name: "edit_file",        description: "Edit a file with SEARCH/REPLACE blocks (primary edit)",     category: .filesystem, defaultEnabled: true),
-        .init(name: "apply_patch",      description: "Apply a unified diff to one or more files",                 category: .filesystem, defaultEnabled: true),
-        .init(name: "delete_file",      description: "Delete a file or directory",                                category: .filesystem, defaultEnabled: true),
-        .init(name: "move_file",        description: "Move or rename a file or directory",                        category: .filesystem, defaultEnabled: true),
-        .init(name: "create_directory", description: "Create a directory (mkdir -p)",                             category: .filesystem, defaultEnabled: true),
-        .init(name: "list_directory",   description: "List files in a directory",                                 category: .filesystem, defaultEnabled: true),
-        .init(name: "glob_files",       description: "Find files by glob pattern",                                category: .filesystem, defaultEnabled: true),
-        .init(name: "grep_code",        description: "Search files for a regex pattern",                          category: .search,     defaultEnabled: true),
-        .init(name: "find_symbol",      description: "Find a symbol by name in the project",                      category: .search,     defaultEnabled: true),
-        .init(name: "run_shell",        description: "Run a shell command (safe-mode aware)",                     category: .shell,      defaultEnabled: true),
-        .init(name: "xcode_build",      description: "Build/test an Xcode project on demand",                     category: .build,      defaultEnabled: true),
-        .init(name: "xcode_project_editor", description: "Add a file to a .xcodeproj so it compiles",             category: .build,      defaultEnabled: true),
-        .init(name: "git_status",       description: "Show working tree status",                                  category: .git,        defaultEnabled: true),
-        .init(name: "git_diff",         description: "Show uncommitted changes",                                  category: .git,        defaultEnabled: true),
-        .init(name: "git_commit",       description: "Create a git commit (stages by default, does not push)",    category: .git,        defaultEnabled: true),
-        .init(name: "create_pull_request", description: "Open a GitHub pull request via gh",                     category: .git,        defaultEnabled: true),
-        .init(name: "web_search",       description: "Search the web (DuckDuckGo)",                               category: .web,        defaultEnabled: true),
-        .init(name: "fetch_url",        description: "Fetch a URL's contents",                                    category: .web,        defaultEnabled: true),
-        .init(name: "fetch_rss",        description: "Read an RSS feed",                                          category: .web,        defaultEnabled: true),
-        .init(name: "browser_navigate", description: "Open a URL in the isolated this-Mac browser",               category: .web,        defaultEnabled: true),
-        .init(name: "browser_snapshot", description: "Read visible text in the isolated this-Mac browser",        category: .web,        defaultEnabled: true),
-        .init(name: "browser_click",    description: "Click a CSS selector in the isolated this-Mac browser",     category: .web,        defaultEnabled: true),
-        .init(name: "browser_type",     description: "Type into a CSS selector in the isolated this-Mac browser", category: .web,        defaultEnabled: true),
-        .init(name: "screenshot",       description: "Screenshot this Mac (opt-in computer use, vision image)",   category: .computer,   defaultEnabled: true),
-        .init(name: "click",            description: "Click this Mac (opt-in computer use, needs Accessibility)", category: .computer,   defaultEnabled: true),
-        .init(name: "type",             description: "Type on this Mac (opt-in computer use, needs Accessibility)", category: .computer, defaultEnabled: true),
-        .init(name: "scroll",           description: "Scroll this Mac (opt-in computer use, needs Accessibility)", category: .computer,  defaultEnabled: true),
-        .init(name: "apple_docs",       description: "Search developer.apple.com",                                category: .docs,       defaultEnabled: true),
+        .init(name: "read_file",        description: "Read contents of a file under the project root",            category: .filesystem),
+        .init(name: "write_file",       description: "Write contents to a file",                                  category: .filesystem),
+        .init(name: "edit_file",        description: "Edit a file with SEARCH/REPLACE blocks (primary edit)",     category: .filesystem),
+        .init(name: "apply_patch",      description: "Apply a unified diff to one or more files",                 category: .filesystem),
+        .init(name: "delete_file",      description: "Delete a file or directory",                                category: .filesystem),
+        .init(name: "move_file",        description: "Move or rename a file or directory",                        category: .filesystem),
+        .init(name: "create_directory", description: "Create a directory (mkdir -p)",                             category: .filesystem),
+        .init(name: "list_directory",   description: "List files in a directory",                                 category: .filesystem),
+        .init(name: "glob_files",       description: "Find files by glob pattern",                                category: .filesystem),
+        .init(name: "grep_code",        description: "Search files for a regex pattern",                          category: .search),
+        .init(name: "find_symbol",      description: "Find a symbol by name in the project",                      category: .search),
+        .init(name: "run_shell",        description: "Run a shell command (safe-mode aware)",                     category: .shell),
+        .init(name: "xcode_build",      description: "Build/test an Xcode project on demand",                     category: .build),
+        .init(name: "xcode_project_editor", description: "Add a file to a .xcodeproj so it compiles",             category: .build),
+        .init(name: "git_status",       description: "Show working tree status",                                  category: .git),
+        .init(name: "git_diff",         description: "Show uncommitted changes",                                  category: .git),
+        .init(name: "git_commit",       description: "Create a git commit (stages by default, does not push)",    category: .git),
+        .init(name: "create_pull_request", description: "Open a GitHub pull request via gh",                     category: .git),
+        .init(name: "web_search",       description: "Search the web (DuckDuckGo)",                               category: .web),
+        .init(name: "fetch_url",        description: "Fetch a URL's contents",                                    category: .web),
+        .init(name: "fetch_rss",        description: "Read an RSS feed",                                          category: .web),
+        .init(name: "browser_navigate", description: "Open a URL in the isolated this-Mac browser",               category: .web),
+        .init(name: "browser_snapshot", description: "Read visible text in the isolated this-Mac browser",        category: .web),
+        .init(name: "browser_click",    description: "Click a CSS selector in the isolated this-Mac browser",     category: .web),
+        .init(name: "browser_type",     description: "Type into a CSS selector in the isolated this-Mac browser", category: .web),
+        .init(name: "screenshot",       description: "Screenshot this Mac (opt-in computer use, vision image)",   category: .computer),
+        .init(name: "click",            description: "Click this Mac (opt-in computer use, needs Accessibility)", category: .computer),
+        .init(name: "type",             description: "Type on this Mac (opt-in computer use, needs Accessibility)", category: .computer),
+        .init(name: "scroll",           description: "Scroll this Mac (opt-in computer use, needs Accessibility)", category: .computer),
+        .init(name: "apple_docs",       description: "Search developer.apple.com",                                category: .docs),
         // Offline PDF (App-hosted PDFKit / Vision / local MD→PDF)
-        .init(name: "extract_pdf_text", description: "Extract text from a local PDF (offline)",                   category: .pdf,        defaultEnabled: true),
-        .init(name: "ocr_image",        description: "On-device Vision OCR for images / scanned pages",            category: .pdf,        defaultEnabled: true),
-        .init(name: "create_pdf",       description: "Create a PDF from markdown offline (local render)",         category: .pdf,        defaultEnabled: true),
-        .init(name: "manipulate_pdf",   description: "Merge, split, extract pages, rotate, watermark (deferred)", category: .pdf,        defaultEnabled: true),
-        .init(name: "fill_pdf_form",    description: "List or fill AcroForm fields offline (deferred)",           category: .pdf,        defaultEnabled: true),
-        .init(name: "sign_pdf",         description: "Stamp a local signature image onto a PDF (deferred)",       category: .pdf,        defaultEnabled: true),
-        .init(name: "create_plan",      description: "Create a multi-step plan with todos",                       category: .planning,   defaultEnabled: true),
-        .init(name: "update_todo",      description: "Update a plan step status",                                 category: .planning,   defaultEnabled: true),
-        .init(name: "revise_plan",      description: "Amend the current plan without resetting done steps",       category: .planning,   defaultEnabled: true),
-        .init(name: "enter_plan_mode",  description: "Switch into read-only plan mode before implementation",     category: .planning,   defaultEnabled: true),
-        .init(name: "exit_plan_mode",   description: "Present the plan for approval and leave plan mode",         category: .planning,   defaultEnabled: true),
-        .init(name: "cron_create",      description: "Create a scheduled automation (runs while the app is open)", category: .planning,  defaultEnabled: true),
-        .init(name: "cron_list",        description: "List scheduled automations",                                category: .planning,   defaultEnabled: true),
-        .init(name: "cron_update",      description: "Update a scheduled automation",                             category: .planning,   defaultEnabled: true),
-        .init(name: "cron_delete",      description: "Delete a scheduled automation",                             category: .planning,   defaultEnabled: true),
-        .init(name: "memory",           description: "Remember decisions / handoffs for this project",            category: .memory,     defaultEnabled: true),
-        .init(name: "memory_search",    description: "Search project memory",                                     category: .memory,     defaultEnabled: true),
-        .init(name: "memory_get",       description: "Get a memory entry by id",                                  category: .memory,     defaultEnabled: true),
-        .init(name: "read_session_context", description: "Read context from another persisted conversation",      category: .memory,     defaultEnabled: true),
-        .init(name: "task",             description: "Spawn a subagent (explore / plan / general-purpose)",       category: .agent,      defaultEnabled: true),
-        .init(name: "get_task_output",  description: "Read output from a background task/subagent",               category: .agent,      defaultEnabled: true),
-        .init(name: "wait_tasks",       description: "Wait for background tasks to finish",                       category: .agent,      defaultEnabled: true),
-        .init(name: "kill_task",        description: "Cancel a background task or subagent",                      category: .agent,      defaultEnabled: true),
-        .init(name: "list_background_jobs", description: "List in-app background shell and subagent jobs",        category: .agent,      defaultEnabled: true),
-        .init(name: "monitor_jobs",     description: "Alias of list_background_jobs",                             category: .agent,      defaultEnabled: true),
-        .init(name: "send_message",     description: "Send a message to another agent",                           category: .agent,      defaultEnabled: true),
-        .init(name: "ask_user",         description: "Ask the user a multiple-choice question",                   category: .agent,      defaultEnabled: true),
-        .init(name: "tool_search",      description: "Search for additional tools to unlock",                     category: .agent,      defaultEnabled: true),
-        .init(name: "load_skill",       description: "Load a SKILL.md skill into context",                        category: .agent,      defaultEnabled: true),
-        .init(name: "restore_checkpoint", description: "Restore files from the last turn filesystem checkpoint",  category: .agent,      defaultEnabled: true),
+        .init(name: "extract_pdf_text", description: "Extract text from a local PDF (offline)",                   category: .pdf),
+        .init(name: "ocr_image",        description: "On-device Vision OCR for images / scanned pages",            category: .pdf),
+        .init(name: "create_pdf",       description: "Create a PDF from markdown offline (local render)",         category: .pdf),
+        .init(name: "manipulate_pdf",   description: "Merge, split, extract pages, rotate, watermark (deferred)", category: .pdf),
+        .init(name: "fill_pdf_form",    description: "List or fill AcroForm fields offline (deferred)",           category: .pdf),
+        .init(name: "sign_pdf",         description: "Stamp a local signature image onto a PDF (deferred)",       category: .pdf),
+        .init(name: "create_plan",      description: "Create a multi-step plan with todos",                       category: .planning),
+        .init(name: "update_todo",      description: "Update a plan step status",                                 category: .planning),
+        .init(name: "revise_plan",      description: "Amend the current plan without resetting done steps",       category: .planning),
+        .init(name: "enter_plan_mode",  description: "Switch into read-only plan mode before implementation",     category: .planning),
+        .init(name: "exit_plan_mode",   description: "Present the plan for approval and leave plan mode",         category: .planning),
+        .init(name: "cron_create",      description: "Create a scheduled automation (runs while the app is open)", category: .planning),
+        .init(name: "cron_list",        description: "List scheduled automations",                                category: .planning),
+        .init(name: "cron_update",      description: "Update a scheduled automation",                             category: .planning),
+        .init(name: "cron_delete",      description: "Delete a scheduled automation",                             category: .planning),
+        .init(name: "memory",           description: "Remember decisions / handoffs for this project",            category: .memory),
+        .init(name: "memory_search",    description: "Search project memory",                                     category: .memory),
+        .init(name: "memory_get",       description: "Get a memory entry by id",                                  category: .memory),
+        .init(name: "read_session_context", description: "Read context from another persisted conversation",      category: .memory),
+        .init(name: "task",             description: "Spawn a subagent (explore / plan / general-purpose)",       category: .agent),
+        .init(name: "get_task_output",  description: "Read output from a background task/subagent",               category: .agent),
+        .init(name: "wait_tasks",       description: "Wait for background tasks to finish",                       category: .agent),
+        .init(name: "kill_task",        description: "Cancel a background task or subagent",                      category: .agent),
+        .init(name: "list_background_jobs", description: "List in-app background shell and subagent jobs",        category: .agent),
+        .init(name: "monitor_jobs",     description: "Alias of list_background_jobs",                             category: .agent),
+        .init(name: "send_message",     description: "Send a message to another agent",                           category: .agent),
+        .init(name: "ask_user",         description: "Ask the user a multiple-choice question",                   category: .agent),
+        .init(name: "tool_search",      description: "Search for additional tools to unlock",                     category: .agent),
+        .init(name: "load_skill",       description: "Load a SKILL.md skill into context",                        category: .agent),
+        .init(name: "restore_checkpoint", description: "Restore files from the last turn filesystem checkpoint",  category: .agent),
     ]
 
     /// Names exposed in Settings toggles.
@@ -242,8 +225,8 @@ private let builtinTools: [BuiltinToolInfo] = BuiltinToolCatalog.all
 // MARK: - Root view
 
 struct ToolsSettingsView: View {
-    /// Backing store: AppSettings.toolEnabled (missing key = enabled).
-    /// AgentLoop reads the inverse via settings.disabledToolNames.
+    /// Backing store: AppSettings.toolEnabled (missing key = Recommended).
+    /// AgentLoop reads the resolved set via AgentCapabilityGates.
     @Binding var settings: AppSettings
     @EnvironmentObject private var app: AppViewModel
 
@@ -255,7 +238,21 @@ struct ToolsSettingsView: View {
     // MARK: Derived data
 
     private func isEnabled(_ tool: BuiltinToolInfo) -> Bool {
-        settings.toolEnabled[tool.name] ?? tool.defaultEnabled
+        ToolOffer.isEnabled(name: tool.name, explicit: settings.toolEnabled)
+    }
+
+    private var templateTag: String {
+        ToolOffer.matchingTemplate(
+            explicit: settings.toolEnabled,
+            catalogNames: BuiltinToolCatalog.settingsNames
+        )?.rawValue ?? "custom"
+    }
+
+    private var templateDetail: String {
+        if let template = ToolOffer.Template(rawValue: templateTag) {
+            return template.detail
+        }
+        return "A mix of toggles — pick Recommended or All tools to reset the set."
     }
 
     private var filteredTools: [BuiltinToolInfo] {
@@ -289,13 +286,12 @@ struct ToolsSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            agentSessionSection
-            // Phase C PC1 — Always/Never grant list + permission rule file paths.
-            GrantManagerSettingsView()
-            fullDiskAccessSection
-            budgetHeader
+            catalogHeader
             searchBar
             toolList
+            agentSessionSection
+            GrantManagerSettingsView()
+            fullDiskAccessSection
         }
         .onAppear { fullDiskAccessStatus = probeFullDiskAccess() }
     }
@@ -576,12 +572,42 @@ struct ToolsSettingsView: View {
         }
     }
 
-    // MARK: Budget header
+    // MARK: Catalog header (template + budget)
 
-    private var budgetHeader: some View {
+    private var catalogHeader: some View {
         settingsCard {
+            HStack(spacing: 6) {
+                Image(systemName: "square.stack.3d.up")
+                    .foregroundColor(Theme.Palette.accent)
+                Text("Tool template")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+
+            Picker("Tool template", selection: Binding(
+                get: { templateTag },
+                set: { raw in
+                    guard let template = ToolOffer.Template(rawValue: raw) else { return }
+                    applyTemplate(template)
+                }
+            )) {
+                Text(ToolOffer.Template.recommended.title)
+                    .tag(ToolOffer.Template.recommended.rawValue)
+                Text(ToolOffer.Template.all.title)
+                    .tag(ToolOffer.Template.all.rawValue)
+                if templateTag == "custom" {
+                    Text("Custom").tag("custom")
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .accessibilityIdentifier("tool-template-picker")
+
+            Text(templateDetail)
+                .font(.system(size: 11))
+                .foregroundColor(Theme.Palette.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
             HStack(spacing: Theme.Spacing.m) {
-                // Enabled pill
                 HStack(spacing: Theme.Spacing.xs) {
                     Circle()
                         .fill(Theme.Palette.success)
@@ -594,7 +620,6 @@ struct ToolsSettingsView: View {
                 Text("·")
                     .foregroundColor(Theme.Palette.tertiary)
 
-                // Token estimate
                 HStack(spacing: Theme.Spacing.xs) {
                     Image(systemName: "bolt")
                         .font(.system(size: 10))
@@ -606,7 +631,6 @@ struct ToolsSettingsView: View {
 
                 Spacer()
 
-                // Reset button
                 Button("Reset to defaults") { resetToDefaults() }
                     .buttonStyle(.plain)
                     .font(.system(size: 11))
@@ -723,7 +747,7 @@ struct ToolsSettingsView: View {
                         ToolToggleRowV2(
                             tool: tool,
                             isOn: Binding(
-                                get: { settings.toolEnabled[tool.name] ?? tool.defaultEnabled },
+                                get: { ToolOffer.isEnabled(name: tool.name, explicit: settings.toolEnabled) },
                                 // Write whole dictionary so `@Binding var settings`
                                 // persists via AppSettings.didSet (subscript-only
                                 // mutation can fail to write-back structs).
@@ -742,10 +766,16 @@ struct ToolsSettingsView: View {
 
     // MARK: Helpers
 
-    private func resetToDefaults() {
+    private func applyTemplate(_ template: ToolOffer.Template) {
         withAnimation(Theme.Motion.standard) {
-            settings.toolEnabled = [:]   // missing key = default (enabled)
+            settings.toolEnabled = ToolOffer.enabledMap(
+                template: template,
+                catalogNames: BuiltinToolCatalog.settingsNames)
         }
+    }
+
+    private func resetToDefaults() {
+        applyTemplate(.recommended)
     }
 }
 

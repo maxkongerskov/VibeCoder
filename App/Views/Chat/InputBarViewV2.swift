@@ -163,12 +163,11 @@ struct InputBarViewV2: View {
     }
 
     /// The web-search chip drives the REAL `web_search` tool — synced with
-    /// Settings → Tools (missing key = enabled by default, matching
-    /// ToolsSettingsView). Previously this was a dead `@State` the agent
-    /// loop never read, so toggling it did nothing.
+    /// Settings → Tools (missing key = ToolOffer Recommended, currently
+    /// off). Previously this was a dead `@State` the agent loop never read.
     private var webSearchBinding: Binding<Bool> {
         Binding(
-            get: { app.settings.toolEnabled["web_search"] ?? true },
+            get: { ToolOffer.isEnabled(name: "web_search", explicit: app.settings.toolEnabled) },
             set: { newValue in app.persistSettings { $0.toolEnabled["web_search"] = newValue } }
         )
     }

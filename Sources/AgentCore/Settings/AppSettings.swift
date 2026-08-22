@@ -196,13 +196,15 @@ public struct AppSettings: Codable, Sendable, Equatable {
 
     // MARK: - Tools
 
-    /// Per-tool enable switches (Settings → Tools). Keyed by `Tool.name`;
-    /// a missing key means ENABLED, so newly shipped tools default on.
-    /// The agent loop consumes this via `disabledToolNames`.
+    /// Per-tool enable switches (Settings → Tools). Keyed by `Tool.name`.
+    /// A missing key follows `ToolOffer` Recommended (coding core on;
+    /// catalog extras off). The agent loop consumes this via
+    /// `AgentCapabilityGates.disabledToolNames` (not this property alone).
     public var toolEnabled: [String: Bool]
 
-    /// Names the user explicitly switched off — the shape AgentLoop's
-    /// Configuration wants.
+    /// Names explicitly switched off in `toolEnabled`. Does **not** include
+    /// Recommended default-off extras — use `AgentCapabilityGates` for the
+    /// schema/dispatch set.
     public var disabledToolNames: Set<String> {
         Set(toolEnabled.filter { !$0.value }.keys)
     }

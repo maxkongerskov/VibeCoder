@@ -266,4 +266,35 @@ final class AgentRunBootstrapTests: XCTestCase {
         XCTAssertTrue(ComputerUseToolNames.all.isDisjoint(with: on.disabledToolNames))
         XCTAssertTrue(BrowserUseToolNames.all.isDisjoint(with: on.disabledToolNames))
     }
+
+    func testRecommendedOfferIsTheLoopDefault() {
+        let appSettings = AppSettings()
+        let loopConfig = AgentRunBootstrap.buildLoopConfiguration(
+            modelSettings: ModelSettings(
+                modelId: "test",
+                loadSettings: .init(
+                    contextLength: ModelSettings.defaultContextLength,
+                    gpuOffloadLayers: ModelSettings.defaultGPUOffloadLayers,
+                    flashAttention: ModelSettings.defaultFlashAttention,
+                    kvCacheType: ModelSettings.defaultKVCacheType),
+                inferenceSettings: .init(
+                    temperature: 0.7, topP: 0.9, topK: 40, repeatPenalty: 1.0),
+                savedAt: Date()),
+            workerModel: ModelDescriptor(id: "test", displayName: "Test", backend: .lmStudio),
+            settings: appSettings,
+            xcodeMCPLive: false,
+            headless: false,
+            safeMode: nil,
+            patchReviewer: nil,
+            orchestratorBrief: nil).config
+        XCTAssertFalse(loopConfig.disabledToolNames.contains("read_file"))
+        XCTAssertFalse(loopConfig.disabledToolNames.contains("git_commit"))
+        XCTAssertFalse(loopConfig.disabledToolNames.contains("create_plan"))
+        XCTAssertFalse(loopConfig.disabledToolNames.contains("edit_file"))
+        XCTAssertFalse(loopConfig.disabledToolNames.contains("apply_patch"))
+        XCTAssertFalse(loopConfig.disabledToolNames.contains("tool_search"))
+        XCTAssertTrue(loopConfig.disabledToolNames.contains("extract_pdf_text"))
+        XCTAssertTrue(loopConfig.disabledToolNames.contains("web_search"))
+        XCTAssertTrue(loopConfig.disabledToolNames.contains("task"))
+    }
 }
