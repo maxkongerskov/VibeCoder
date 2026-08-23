@@ -5,7 +5,8 @@
 **Audience:** public OSS (clone, BYO HTTP, GitHub).  
 **Job:** the agent **ships real code**, **runs fast**, and **works on every shipped provider**.
 
-This file is the operating plan. Status lives at the bottom. If this file and any other doc disagree, **this file wins for the next 30 days**. Product claims stay in `ARCHITECTURE.md` §1 / §17.
+This file is the operating plan. Status lives at the bottom. If this file and any other doc disagree, **this file wins for the next 30 days**. Product claims stay in `ARCHITECTURE.md` §1 / §17.  
+**Sequential execution list (D00–D30, first `- [ ]` is next):** [`LEAD_RUN.md`](./LEAD_RUN.md).
 
 ---
 

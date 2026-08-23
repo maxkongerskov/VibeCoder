@@ -3,6 +3,7 @@
 OSS (MIT). Native macOS SwiftUI + AgentCore. Apple Silicon only.
 
 **30-day Now (2026-08-23 → 2026-09-22):** [`docs/LEAD_PLAN.md`](./docs/LEAD_PLAN.md).  
+Sequential D00–D30 run list (super-agent): [`docs/LEAD_RUN.md`](./docs/LEAD_RUN.md).  
 Evidence: [`docs/CODING_BAR.md`](./docs/CODING_BAR.md).
 
 Job: **ship real code**, **run fast**, **work on every shipped BYO HTTP provider**. Public GitHub. No Flutter. No empty-repo rewrite.
