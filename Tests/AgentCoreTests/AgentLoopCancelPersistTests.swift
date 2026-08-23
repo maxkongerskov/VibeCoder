@@ -121,8 +121,10 @@ final class AgentLoopCancelPersistTests: XCTestCase {
             await hang.waitStarted()
             started.fulfill()
         }
+        // Snapshot vars: Swift 5.10 on GHA rejects capturing `var` in Task.
+        let conversation = seed
         let run = Task {
-            try await loop.run(userMessage: "hang then list", conversation: seed) { _ in }
+            try await loop.run(userMessage: "hang then list", conversation: conversation) { _ in }
         }
         await fulfillment(of: [started], timeout: 2.0)
         run.cancel()

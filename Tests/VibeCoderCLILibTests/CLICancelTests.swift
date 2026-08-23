@@ -184,10 +184,13 @@ final class CLICancelTests: XCTestCase {
             started.fulfill()
         }
         let handle = TurnCancelHandle()
+        // Snapshot vars: Swift 5.10 on GHA rejects capturing `var` in Task.
+        let turnRunner = runner
+        let conversation = seed
         let run = Task {
-            try await runner.runTurn(
+            try await turnRunner.runTurn(
                 userMessage: "hang then list",
-                conversation: seed,
+                conversation: conversation,
                 cancel: handle
             )
         }

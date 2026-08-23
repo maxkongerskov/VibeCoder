@@ -197,9 +197,11 @@ final class AgentLoopStopHookPC5Tests: XCTestCase {
         )
         var convo = Conversation(projectRoot: root)
         convo.messages.append(ChatMessage(role: .user, content: "prior"))
+        // Snapshot vars: Swift 5.10 on GHA rejects capturing `var` in Task.
+        let conversation = convo
 
         let task = Task {
-            try await loop.run(userMessage: "hang", conversation: convo) { _ in }
+            try await loop.run(userMessage: "hang", conversation: conversation) { _ in }
         }
         // Let the stream start, then cancel.
         try await Task.sleep(nanoseconds: 80_000_000)
@@ -218,7 +220,7 @@ final class AgentLoopStopHookPC5Tests: XCTestCase {
             // Document flaky cancel race honestly — cap + natural tests are hard guarantees.
             // Retry once with longer park.
             let task2 = Task {
-                try await loop.run(userMessage: "hang2", conversation: convo) { _ in }
+                try await loop.run(userMessage: "hang2", conversation: conversation) { _ in }
             }
             try await Task.sleep(nanoseconds: 150_000_000)
             task2.cancel()
