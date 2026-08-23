@@ -33,7 +33,7 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 6. Repeat.
 ```
 
-**Resume pointer:** remaining `- [ ]` is **D29 origin push** (Max lock; C2 never sent in-app). D11 hung and was recorded blocked. Track Keep.
+**Resume pointer:** remaining `- [ ]` is **D29 origin push** (attempted; GitHub `repository not found` / no auth). Track Keep. C2 blocked. D11 hung.
 
 ---
 
@@ -255,6 +255,7 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 ## D29 — Origin push  **(Max: only when this list is otherwise done)**
 
 - [ ] **D29.1 / 2.4 / OSS** Push `feat/computer-and-browser-use` (or the lead branch) to GitHub. Product line, not a docs-only dump. **Last code-bearing remote step besides D30 Release.**
+  - **2026-08-23 attempt:** `git push -u origin feat/computer-and-browser-use` → exit 128, `remote: Repository not found.` Unverifiable. Local commits are not a push. Leave box open.
 
 ---
 

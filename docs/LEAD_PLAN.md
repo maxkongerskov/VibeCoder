@@ -211,6 +211,14 @@ Update in place. Newest first. Format:
 - Not doing: one sentence if temptation appeared
 ```
 
+### 2026-08-23 (D29)
+
+- Milestone: D29 **unverifiable** — `git push -u origin feat/computer-and-browser-use` → `fatal: repository 'https://github.com/maxkongerskov/VibeCoder.git/' not found` (exit 128). Local `daf0db0` is **not** a push.  
+- Track: **Keep**  
+- Numbers: —  
+- Next action: Max push when GitHub auth/repo exists; do not treat local commits as origin  
+- Not doing: fake D29, merge worktrees, loop rewrite  
+
 ### 2026-08-23 (D11)
 
 - Milestone: D11 **blocked** — `ci-pr.sh` hung ~37m in `BugHuntMCPTests.tearDown` (`NSConcreteTask.waitUntilExit`). Killed. Not a green PR bar.  
