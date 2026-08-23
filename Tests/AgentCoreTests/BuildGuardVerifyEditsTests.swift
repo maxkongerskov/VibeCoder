@@ -8,6 +8,38 @@ import XCTest
 
 final class BuildGuardVerifyEditsTests: XCTestCase {
 
+    /// D04: shipped `BuildGuard.verify` on a Swift package that does not
+    /// compile must return `.failed` with compiler text (injected to the model).
+    func testVerifyBrokenSwiftPackageReturnsFailedLog() async throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bg-broken-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let package = """
+        // swift-tools-version: 5.9
+        import PackageDescription
+        let package = Package(
+            name: "BrokenPkg",
+            targets: [.target(name: "BrokenPkg")]
+        )
+        """
+        try package.write(to: dir.appendingPathComponent("Package.swift"), atomically: true, encoding: .utf8)
+        let src = dir.appendingPathComponent("Sources/BrokenPkg", isDirectory: true)
+        try FileManager.default.createDirectory(at: src, withIntermediateDirectories: true)
+        try "let x: Int = \"nope\"\n".write(
+            to: src.appendingPathComponent("Broken.swift"), atomically: true, encoding: .utf8)
+
+        let outcome = await BuildGuard.verify(at: dir)
+        guard case .failed(let log) = outcome else {
+            return XCTFail("expected failed compile, got \(outcome)")
+        }
+        let lower = log.lowercased()
+        XCTAssertTrue(
+            lower.contains("error") || lower.contains("cannot convert"),
+            "failed log must contain compiler text, got: \(log.prefix(500))")
+    }
+
     func testVerifyNoBuildSystemInEmptyDir() async {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("bg-empty-\(UUID().uuidString)", isDirectory: true)
