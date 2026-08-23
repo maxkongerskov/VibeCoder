@@ -327,6 +327,14 @@ struct EvalRunnerMain {
             fputs("\n[eval-runner] iteration cap \(cap)\n", stderr)
         case .info(let msg):
             fputs("[eval-runner] info: \(msg)\n", stderr)
+        case .buildFailed(let log):
+            fputs("[eval-runner] BuildGuard: build failed\n", stderr)
+            fputs(String(log.prefix(800)), stderr)
+            fputs("\n", stderr)
+        case .buildPassed:
+            fputs("[eval-runner] BuildGuard: build succeeded\n", stderr)
+        case .buildSkipped(let reason):
+            fputs("[eval-runner] BuildGuard skipped: \(reason)\n", stderr)
         default:
             break
         }
