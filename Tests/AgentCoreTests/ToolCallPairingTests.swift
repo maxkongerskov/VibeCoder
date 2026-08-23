@@ -174,8 +174,8 @@ final class AgentLoopStallFinishedTests: XCTestCase {
         ]
         let backend = ScriptedBackend(turns: [sameCall, sameCall, sameCall])
         let model = ModelDescriptor(id: "t", displayName: "t", backend: .lmStudio)
-        var finishedReasons: [String] = []
-        var sawStalled = false
+        let finishedReasons = TestList<String>()
+        let sawStalled = TestFlag()
         let loop = AgentLoop(
             backend: backend,
             model: model,
@@ -183,14 +183,14 @@ final class AgentLoopStallFinishedTests: XCTestCase {
         let convo = try await loop.run(
             userMessage: "loop",
             conversation: Conversation()) { event in
-            if case .stalled = event { sawStalled = true }
+            if case .stalled = event { sawStalled.value = true }
             if case .finished(let r) = event { finishedReasons.append(r) }
         }
-        XCTAssertTrue(sawStalled, "stall event required")
-        XCTAssertFalse(finishedReasons.isEmpty, "stall must emit .finished (not silent break)")
+        XCTAssertTrue(sawStalled.value, "stall event required")
+        XCTAssertFalse(finishedReasons.value.isEmpty, "stall must emit .finished (not silent break)")
         XCTAssertTrue(
-            finishedReasons.contains { $0.hasPrefix("stalled") || $0.contains("stall") },
-            "finished reason should mention stall: \(finishedReasons)")
+            finishedReasons.value.contains { $0.hasPrefix("stalled") || $0.contains("stall") },
+            "finished reason should mention stall: \(finishedReasons.value)")
         XCTAssertTrue(ChatLoop.toolCallPairingIsValid(in: convo.messages),
                       "stall closeToolCalls must pair: unclosed=\(ChatLoop.unclosedToolCallIDs(in: convo.messages))")
     }
@@ -204,7 +204,7 @@ final class AgentLoopStallFinishedTests: XCTestCase {
         ]
         let backend = ScriptedBackend(turns: [forever, forever, forever, forever])
         let model = ModelDescriptor(id: "t", displayName: "t", backend: .lmStudio)
-        var finishedReasons: [String] = []
+        let finishedReasons = TestList<String>()
         let loop = AgentLoop(
             backend: backend,
             model: model,
@@ -213,9 +213,9 @@ final class AgentLoopStallFinishedTests: XCTestCase {
             if case .finished(let r) = event { finishedReasons.append(r) }
         }
         XCTAssertTrue(
-            finishedReasons.contains {
+            finishedReasons.value.contains {
                 $0.contains("iteration cap") || $0.contains("iteration limit")
             },
-            "cap must emit finished: \(finishedReasons)")
+            "cap must emit finished: \(finishedReasons.value)")
     }
 }

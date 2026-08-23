@@ -87,9 +87,9 @@ final class LocalAPIAgentLoopTests: XCTestCase {
         let model = ModelDescriptor(
             id: "scripted", displayName: "scripted", backend: .custom, supportsTools: true)
 
-        var toolStarts = 0
-        var toolCompletes = 0
-        var sawContent = false
+        let toolStarts = TestCounter()
+        let toolCompletes = TestCounter()
+        let sawContent = TestFlag()
 
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("d1-localapi-\(UUID().uuidString)", isDirectory: true)
@@ -105,18 +105,18 @@ final class LocalAPIAgentLoopTests: XCTestCase {
             projectRoot: root
         ) { event in
             switch event {
-            case .toolStarted: toolStarts += 1
-            case .toolCompleted: toolCompletes += 1
-            case .contentDelta(let s) where !s.isEmpty: sawContent = true
+            case .toolStarted: toolStarts.increment()
+            case .toolCompleted: toolCompletes.increment()
+            case .contentDelta(let s) where !s.isEmpty: sawContent.value = true
             default: break
             }
         }
 
         XCTAssertGreaterThanOrEqual(backend.requestCount, 2,
                                     "Agent loop must re-prompt after tool result")
-        XCTAssertGreaterThanOrEqual(toolStarts, 1, "expected ≥1 tool start")
-        XCTAssertGreaterThanOrEqual(toolCompletes, 1, "expected ≥1 tool completion")
-        XCTAssertTrue(sawContent || result.messages.contains(where: {
+        XCTAssertGreaterThanOrEqual(toolStarts.value, 1, "expected ≥1 tool start")
+        XCTAssertGreaterThanOrEqual(toolCompletes.value, 1, "expected ≥1 tool completion")
+        XCTAssertTrue(sawContent.value || result.messages.contains(where: {
             $0.role == .assistant && $0.content.contains("Listed")
         }))
         // Second model call should have received tools (agent loop path).

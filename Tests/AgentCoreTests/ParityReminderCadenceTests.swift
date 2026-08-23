@@ -508,9 +508,10 @@ final class ParityReminderCadenceTests: XCTestCase {
 
         var convo = Conversation(projectRoot: root)
         convo.sessionReadPaths = [file.path]
-        await SessionReadTracker.shared.clear(conversationID: convo.id)
+        let conversationID = convo.id
+        await SessionReadTracker.shared.clear(conversationID: conversationID)
         defer {
-            Task { await SessionReadTracker.shared.clear(conversationID: convo.id) }
+            Task { await SessionReadTracker.shared.clear(conversationID: conversationID) }
         }
 
         let edits = """

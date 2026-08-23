@@ -107,17 +107,17 @@ final class MonitorJobsAndWakeInjectTests: XCTestCase {
             message: "[Background job completed] kind=subagent task_id=TEST-ID\noutput: hello-wake")
         var convo = Conversation(id: convoID, title: "t")
         var nudges: [String] = []
-        var sawUser = false
+        let sawUser = TestFlag()
         let n = await AgentLoop.applyWakeInjects(
             conversationId: convoID,
             convo: &convo,
             pendingNudges: &nudges,
             events: { event in
-                if case .userMessage = event { sawUser = true }
+                if case .userMessage = event { sawUser.value = true }
             }
         )
         XCTAssertEqual(n, 1)
-        XCTAssertTrue(sawUser)
+        XCTAssertTrue(sawUser.value)
         XCTAssertEqual(convo.messages.filter { $0.role == .user }.count, 1)
         let wake = try XCTUnwrap(convo.messages.first { $0.role == .user })
         XCTAssertTrue(wake.content.contains("hello-wake"))

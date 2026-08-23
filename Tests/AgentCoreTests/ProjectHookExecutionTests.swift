@@ -236,9 +236,9 @@ final class ProjectHookExecutionTests: XCTestCase {
             ]
         ], to: projectHooks)
 
-        var reviewerCalled = false
+        let reviewerCalled = TestFlag()
         let reviewer = ShellApprovalReviewer { _ in
-            reviewerCalled = true
+            reviewerCalled.value = true
             return .once
         }
         try await ShellApproval.resolveAsk(
@@ -251,7 +251,7 @@ final class ProjectHookExecutionTests: XCTestCase {
                 conversationID: UUID(),
                 executionMode: .yolo
             ))
-        XCTAssertTrue(reviewerCalled, "project PermissionRequest must not block the sheet")
+        XCTAssertTrue(reviewerCalled.value, "project PermissionRequest must not block the sheet")
         XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
     }
 

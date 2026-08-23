@@ -76,9 +76,9 @@ final class ParityHookLifecycleGapTests: XCTestCase {
             ]
         ])
 
-        var reviewerCalled = false
+        let reviewerCalled = TestFlag()
         let reviewer = ShellApprovalReviewer { _ in
-            reviewerCalled = true
+            reviewerCalled.value = true
             return .once
         }
         do {
@@ -95,7 +95,7 @@ final class ParityHookLifecycleGapTests: XCTestCase {
                 XCTFail("wrong ToolError \(error)")
             }
         }
-        XCTAssertFalse(reviewerCalled)
+        XCTAssertFalse(reviewerCalled.value)
         XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
     }
 
@@ -114,9 +114,9 @@ final class ParityHookLifecycleGapTests: XCTestCase {
             ]
         ])
 
-        var reviewerCalled = false
+        let reviewerCalled = TestFlag()
         let reviewer = ShellApprovalReviewer { _ in
-            reviewerCalled = true
+            reviewerCalled.value = true
             return .once
         }
         try await ShellApproval.resolveAsk(
@@ -124,7 +124,7 @@ final class ParityHookLifecycleGapTests: XCTestCase {
             arguments: ToolArguments(dictionary: ["command": "git status"]),
             reason: "approval required",
             context: context(reviewer: reviewer))
-        XCTAssertTrue(reviewerCalled)
+        XCTAssertTrue(reviewerCalled.value)
     }
 
     func testSessionGrantStyleOnceStillRunsPermissionRequest() async throws {
