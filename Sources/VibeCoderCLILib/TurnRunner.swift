@@ -170,7 +170,9 @@ public struct TurnRunner: Sendable {
             prepared.config.maxIterations = maxIterations
         }
         await ToolRegistry.shared.registerBuiltins()
-        let loop = AgentLoop(backend: backend, model: model, config: prepared.config)
+        let loopConfig = prepared.config
+        let sampling = prepared.sampling
+        let loop = AgentLoop(backend: backend, model: model, config: loopConfig)
         let printer = EventPrinter()
 
         let handle = cancel ?? TurnCancelHandle()
@@ -181,7 +183,7 @@ public struct TurnRunner: Sendable {
             try await loop.run(
                 userMessage: userMessage,
                 conversation: conversation,
-                sampling: prepared.sampling
+                sampling: sampling
             ) { event in
                 printer.handle(event)
             }
