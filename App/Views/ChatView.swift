@@ -348,10 +348,11 @@ struct ChatView: View {
             }
 
             // Honest send/error status (e.g. no model selected). Hidden while
-            // running — Working header covers that. Transient "Starting…" is
-            // not shown.
-            if !viewModel.isRunning,
-               !ChatViewModel.isTransientStatus(viewModel.statusLine) {
+            // running. Idle success ("Done.") is never painted here.
+            if ChatViewModel.showsHeaderStatusBanner(
+                viewModel.statusLine,
+                isRunning: viewModel.isRunning
+            ) {
                 HStack(alignment: .top, spacing: 8) {
                     Image(systemName: "exclamationmark.circle")
                         .foregroundStyle(Theme.Palette.secondary)

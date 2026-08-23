@@ -1298,7 +1298,7 @@ final class ChatViewModel: ObservableObject {
                     // Wave C2: attempt seed is updated from goal-progress info
                     // events during the run; do not blindly +1 here (that
                     // double-counted with evaluateTurnEnd).
-                    self.finishRun(status: Task.isCancelled ? "Cancelled." : "Done.")
+                    self.finishRun(status: Task.isCancelled ? "Cancelled." : "")
                     return self.persistSuppressed ? nil : merged
                 }
                 if let persisted {
@@ -1417,6 +1417,9 @@ final class ChatViewModel: ObservableObject {
         if wasCancelled {
             statusLine = ComposerQueueStore.cancelledStatusLine(
                 queuePaused: queuePaused && !composerQueue.isEmpty)
+        } else if Self.isIdleCompletionStatus(status) {
+            // Reply + Worked-for is enough. Do not toast "Done." in the header.
+            statusLine = ""
         } else {
             statusLine = status
         }
@@ -1560,10 +1563,28 @@ final class ChatViewModel: ObservableObject {
         return s
     }
 
+    /// Successful turn end — not an error. Header banner stays hidden.
+    static func isIdleCompletionStatus(_ line: String) -> Bool {
+        let lower = line.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if lower.isEmpty { return true }
+        if lower == "done" || lower.hasPrefix("done.") { return true }
+        if lower == "finished" || lower.hasPrefix("finished.") { return true }
+        return false
+    }
+
+    /// Title-strip banner: errors and blocks only. Idle "Done." never shows.
+    static func showsHeaderStatusBanner(_ line: String, isRunning: Bool = false) -> Bool {
+        if isRunning { return false }
+        if isTransientStatus(line) { return false }
+        if isIdleCompletionStatus(humanStatus(line)) { return false }
+        return true
+    }
+
     /// True when status is ephemeral loop chrome (safe to replace with Working…).
     static func isTransientStatus(_ line: String) -> Bool {
         let s = line.trimmingCharacters(in: .whitespacesAndNewlines)
         if s.isEmpty { return true }
+        if isIdleCompletionStatus(s) { return true }
         if s.hasPrefix("Iteration") || s.hasPrefix("iter ") { return true }
         return s == "Starting…" || s == "Working…" || s == "Thinking…"
             || s == "Orchestrator planning…" || s == "Executing plan…"
@@ -1724,7 +1745,7 @@ final class ChatViewModel: ObservableObject {
             setStatus("Hit iteration cap (\(cap))")
             notifyTerminal(.budgetExceeded(iterations: cap))
         case .finished(let reason):
-            setStatus("Finished")
+            // Idle success is not header chrome. finishRun clears "Done.".
             // The loop emits .finished(reason: "cancelled") on user cancel —
             // no "task complete" ping in that case (the user is right here).
             if reason != "cancelled" {
@@ -2029,7 +2050,6 @@ final class ChatViewModel: ObservableObject {
             }
 
         case .finished(let reason):
-            setStatus("Finished")
             if reason != "cancelled" {
                 notifyTerminal(.completed(taskSummary: ChatLoop.summariseCompletion(messages: conversation.messages)))
             }

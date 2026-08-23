@@ -53,8 +53,39 @@ final class ChatStatusSurfacesTests: XCTestCase {
         XCTAssertTrue(ChatViewModel.isTransientStatus("Starting…"))
         XCTAssertTrue(ChatViewModel.isTransientStatus("Working…"))
         XCTAssertTrue(ChatViewModel.isTransientStatus("Iteration 2"))
+        XCTAssertTrue(ChatViewModel.isTransientStatus("Done."))
+        XCTAssertTrue(ChatViewModel.isTransientStatus("Finished"))
+        XCTAssertTrue(ChatViewModel.isIdleCompletionStatus("Done."))
+        XCTAssertFalse(ChatViewModel.isIdleCompletionStatus("Error: backend down"))
         XCTAssertFalse(ChatViewModel.isTransientStatus("Prompt blocked: x"))
         XCTAssertFalse(ChatViewModel.isTransientStatus("Subagent completed: explore"))
+    }
+
+    func testHeaderBannerHidesIdleDone() {
+        XCTAssertFalse(ChatViewModel.showsHeaderStatusBanner("Done."))
+        XCTAssertFalse(ChatViewModel.showsHeaderStatusBanner("Done"))
+        XCTAssertFalse(ChatViewModel.showsHeaderStatusBanner("Finished"))
+        XCTAssertFalse(ChatViewModel.showsHeaderStatusBanner("Working…"))
+        XCTAssertFalse(ChatViewModel.showsHeaderStatusBanner("Done.", isRunning: true))
+        XCTAssertTrue(ChatViewModel.showsHeaderStatusBanner("Error: backend down"))
+        XCTAssertTrue(ChatViewModel.showsHeaderStatusBanner("Prompt blocked: x"))
+        XCTAssertTrue(ChatViewModel.showsHeaderStatusBanner("Select a model in the picker"))
+    }
+
+    func testChatViewBindsHeaderBannerToShowsHeaderStatusBanner() throws {
+        let src = try String(
+            contentsOf: URL(fileURLWithPath: #filePath)
+                .deletingLastPathComponent()
+                .deletingLastPathComponent()
+                .appendingPathComponent("Views/ChatView.swift"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(
+            src.contains("showsHeaderStatusBanner("),
+            "ChatView must gate the title-strip banner; idle Done. must not paint")
+        XCTAssertFalse(
+            src.contains("Text(\"Done.\")"),
+            "ChatView must not hardcode a Done. title-strip")
     }
 
     func testDrainBackgroundJobCompletionsSetsStatusLine() async throws {
