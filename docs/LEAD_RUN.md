@@ -33,7 +33,7 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 6. Repeat.
 ```
 
-**Resume pointer:** first open box after D02 is **D03 (C2 in-app)**.
+**Resume pointer:** remaining `- [ ]` are **D11 ci-pr.sh** (if still running) and **D29 origin push** (Max lock). C2 is recorded blocked. Track Keep.
 
 ---
 
