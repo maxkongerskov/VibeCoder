@@ -213,11 +213,11 @@ Update in place. Newest first. Format:
 
 ### 2026-08-23 (D29)
 
-- Milestone: D29 **unverifiable** — `git push -u origin feat/computer-and-browser-use` → `fatal: repository 'https://github.com/maxkongerskov/VibeCoder.git/' not found` (exit 128). Local `daf0db0` is **not** a push.  
+- Milestone: D29 **done** — created public https://github.com/maxkongerskov/VibeCoder ; pushed `origin/main` + `feat/computer-and-browser-use`. Prior 128 was empty remote. `.grok/` gitignored.  
 - Track: **Keep**  
 - Numbers: —  
-- Next action: Max push when GitHub auth/repo exists; do not treat local commits as origin  
-- Not doing: fake D29, merge worktrees, loop rewrite  
+- Next action: D30 honest clone path already in README (`open App/VibeCoder.xcodeproj`)  
+- Not doing: merge worktrees, notarized DMG as blocker, loop rewrite  
 
 ### 2026-08-23 (D11)
 
