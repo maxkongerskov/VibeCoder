@@ -73,6 +73,7 @@ __pycache__/
 
 # ── VibeCoder session state (local only) ─────────────────────────
 .vibecoder/
+.grok/
 
 # ── Internal orchestration logs (not for public release) ─────────
 HANDOFF/
