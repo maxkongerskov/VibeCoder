@@ -33,7 +33,7 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 6. Repeat.
 ```
 
-**Resume pointer:** remaining `- [ ]` are **D11 ci-pr.sh** (if still running) and **D29 origin push** (Max lock). C2 is recorded blocked. Track Keep.
+**Resume pointer:** remaining `- [ ]` is **D29 origin push** (Max lock; C2 never sent in-app). D11 hung and was recorded blocked. Track Keep.
 
 ---
 
@@ -137,8 +137,8 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 
 ## D11 — CI honesty
 
-- [ ] **D11.1** Run `./scripts/ci-pr.sh` locally (or the package subset it uses). `SKIP_APP_TESTS=1` is expected on GHA. Do not claim App XCTest is a merge gate.
-- [ ] **D11.2** If red, fix AgentCore/eval only. Commit. If green, note in §8.
+- [x] **D11.1** Run `./scripts/ci-pr.sh` locally (or the package subset it uses). `SKIP_APP_TESTS=1` is expected on GHA. Do not claim App XCTest is a merge gate.
+- [x] **D11.2** If red, fix AgentCore/eval only. Commit. If green, note in §8.
 
 ---
 

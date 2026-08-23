@@ -211,6 +211,14 @@ Update in place. Newest first. Format:
 - Not doing: one sentence if temptation appeared
 ```
 
+### 2026-08-23 (D11)
+
+- Milestone: D11 **blocked** — `ci-pr.sh` hung ~37m in `BugHuntMCPTests.tearDown` (`NSConcreteTask.waitUntilExit`). Killed. Not a green PR bar.  
+- Track: **Keep**  
+- Numbers: subset still green (BuildGuard broken-package, cancel persist, wire-assembly). Full suite did not finish.  
+- Next action: D29 origin push only when Max wants the window closed (C2 still not an in-app send).  
+- Not doing: GitHub push, merge worktrees, loop rewrite  
+
 ### 2026-08-23 (walk D03–D28)
 
 - Milestone: Week 2/3/4 **work done or blocked**; **Track Keep**  

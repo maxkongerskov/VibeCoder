@@ -1,0 +1,7 @@
+D11 local ./scripts/ci-pr.sh
+status: BLOCKED hung
+sample: BugHuntMCPTests.tearDown -> Foundation NSConcreteTask.waitUntilExit
+elapsed: ~37 minutes then SIGTERM
+SKIP_APP_TESTS=1 is GHA default; this local run did not finish units so App tests never started
+not claiming App XCTest is the merge gate
+subset already proven green: testVerifyBrokenSwiftPackageReturnsFailedLog, AgentLoopCancelPersistTests, ChatCompletionsWireAssemblyTests
