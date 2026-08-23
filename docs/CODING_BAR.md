@@ -31,10 +31,10 @@ Use this row as the baseline. Day-30 compares **the same model** if possible. Ot
 
 | # | Bar | Evidence |
 |---|---|---|
-| C1 | Git project bound → worktree → patch (`apply_patch` or `edit_file`) → project test/build runs → main tree clean until merge | **Pass (headless, 2026-08-23).** Sibling worktree `VibeCoder-agentcore-c1` (`agentcore/c1-lead`). Unsloth Nemotron `write_file` added `C1WorktreeSmokeTests.swift`; `swift test --filter C1WorktreeSmokeTests` **1/1**. Main checkout has **no** that file (`feat/computer-and-browser-use` porcelain only `?? .grok/`). Merge not done. Log: `Evals/results/2026-08-23-unsloth-c1-worktree/`. |
-| C2 | Same class of task **in-app** (VibeCoder.app), not only headless | Not yet |
-| C3 | Failure injects compiler/test output; loop does not hang | **013 loop no longer 400s (2026-08-23 re-run).** After blocked identical `read_file`, turn `finished: stop`, eval-runner exit 0. Compiler/test inject still not this cell. |
-| C4 | Cancel (⌘. / SIGINT) leaves a paired transcript | plumbing may already pass; re-verify if the loop changes |
+| C1 | Git project bound → worktree → patch (`apply_patch` or `edit_file`) → project test/build runs → main tree clean until merge | **Pass headless.** (1) `write_file` smoke: `VibeCoder-agentcore-c1`. (2) **patch-first:** `VibeCoder-agentcore-d07` `apply_patch` on `ChatCompletionsWireAssembly.swift` (`// D07 patch-first`); `swift test --filter ChatCompletionsWireAssemblyTests` **4/4**; main checkout **no** that comment. Merge not done. |
+| C2 | Same class of task **in-app** (VibeCoder.app), not only headless | **Blocked (2026-08-23).** App launched (`tools.vibecoder.VibeCoder`). Composer showed Nemotron Lightning; `set-value` filled the prompt; send stayed disabled; Return did not start a turn. Notes: `Evals/results/2026-08-23-c2-in-app/`. Not eval-runner. |
+| C3 | Failure injects compiler/test output; loop does not hang | **Shipped + live (2026-08-23).** `BuildGuard.verify` on a broken Swift package returns `.failed` with compiler text (`testVerifyBrokenSwiftPackageReturnsFailedLog`). Live Unsloth `apply_patch` left `Mini.swift` uncompilable (`cannot convert value of type 'String' to specified type 'Int'`); loop `finished: stop` (no hang). `Evals/results/2026-08-23-unsloth-d04-buildguard/`. |
+| C4 | Cancel (⌘. / SIGINT) leaves a paired transcript | **Unit pass:** `AgentLoopCancelPersistTests` + `CLICancelTests` `testCancelMidToolPersistsPairedTranscript` (2026-08-23). **Live SIGINT:** eval-runner ignored INT before cap (`run_shell` backgrounded); conversation saved 14 msgs. `Evals/results/2026-08-23-unsloth-d05-cancel/`. |
 
 C1 project: this repo **or** another real Swift package. Toy `Evals/tasks/001-hello-world` is not C1.
 
@@ -48,8 +48,8 @@ Catalog contract: `LEAD_PLAN.md` §4.
 |---|---|---|---|
 | S1 | Default tools-on-wire = coding core (no PDF, computer-use, browser-use, cron) | **17** coding-core; no PDF/web/computer/browser/cron | |
 | S2 | Schema token estimate / turn | **2943** | |
-| S3 | Time to first tool (same model) | subsumed in 36s wall (first tool was `read_file`) | |
-| S4 | Iterations to green on the C1 prompt (same model) | 013: 3 successful tools then 400. C1 on this repo not run | |
+| S3 | Time to first tool (same model) | C1 wall **59s** / 5 tools (first `list_directory`); 013 wall **29s** (first `read_file`). No per-token probe. | **same** |
+| S4 | Iterations to green on the C1 prompt (same model) | C1: **5** tool calls then stop (write_file path). D07: **4** tool calls, third `apply_patch` succeeded. | **≤ day-0** |
 
 `ToolOffer` “All tools” is opt-in. Master switches stay off.
 

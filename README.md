@@ -15,7 +15,7 @@ Architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (§1 / §17). Implementatio
 ```bash
 open "App/VibeCoder.xcodeproj"   # ⌘R → VibeCoder.app
 swift build                      # AgentCore / CLI
-swift test                       # AgentCoreTests (App UI tests need xcodebuild)
+swift test                       # AgentCoreTests (App UI tests need xcodebuild; GHA pr.yml SKIP_APP_TESTS=1)
 swift run vibecoder --project /path/to/repo --backend ollama --model qwen
 ```
 

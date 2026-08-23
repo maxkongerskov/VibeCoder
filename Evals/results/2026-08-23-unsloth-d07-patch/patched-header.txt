@@ -1,0 +1,15 @@
+//
+//  ChatCompletionsWireAssembly.swift
+//
+//  Shared OpenAI-compat message list for HTTP backends (Unsloth / llama.cpp
+//  included). llama-server 400s when the last two roles are both `assistant`
+//  ("Cannot have 2 or more assistant messages at the end of the list").
+//
+// D07 patch-first
+
+import Foundation
+
+extension ChatCompletionRequestBody {
+
+    /// Shipped chat-completions `messages` array: `WireMessage.from` plus
+    /// tool `name` and a llama.cpp-safe tail (at most one trailing assistant).

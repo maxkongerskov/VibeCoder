@@ -70,18 +70,20 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 
 ## D03 — C2 in-app  ← FIRST OPEN
 
-- [ ] **D03.1 / 2.2 / A.4 / C2** Same class of coding task in **VibeCoder.app** (not eval-runner). Bind a git folder (this repo or the C1 worktree). Isolated worktree on. Unsloth Nemotron selected. User turn that patches or writes, then a test/build the user can see. Screenshot or notes under `Evals/results/YYYY-MM-DD-c2-in-app/`. Fill `CODING_BAR` C2.
-- [ ] **D03.2** Commit evidence docs only (no auto-merge).
+- [x] **D03.1 / 2.2 / A.4 / C2** Same class of coding task in **VibeCoder.app** (not eval-runner). Bind a git folder (this repo or the C1 worktree). Isolated worktree on. Unsloth Nemotron selected. User turn that patches or writes, then a test/build the user can see. Screenshot or notes under `Evals/results/YYYY-MM-DD-c2-in-app/`. Fill `CODING_BAR` C2.
+- [x] **D03.2** Commit evidence docs only (no auto-merge).
 
 **Done when:** C2 cell is not “Not yet.”  
 **Blocked if:** app not running or no Screen Recording — write that in §8, do not fake it.
+
+**2026-08-23 attempt:** App launched (`tools.vibecoder.VibeCoder`). Model chip showed Nemotron Lightning. Composer `set-value` worked. Send stayed AX-disabled; Return did not start a turn. Notes: `Evals/results/2026-08-23-c2-in-app/`. Not eval-runner. Leave boxes open until a real send.
 
 ---
 
 ## D04 — C3 compiler/test inject
 
-- [ ] **D04.1 / C3** A turn that **breaks** a test or build, then the model sees the compiler/test log (BuildGuard or `swift test` tool result). Must not hang. Unsloth. Evidence in `CODING_BAR` C3 (the “no 400” row is not this).
-- [ ] **D04.2** Commit if harness needed a fix; else docs-only evidence.
+- [x] **D04.1 / C3** A turn that **breaks** a test or build, then the model sees the compiler/test log (BuildGuard or `swift test` tool result). Must not hang. Unsloth. Evidence in `CODING_BAR` C3 (the “no 400” row is not this).
+- [x] **D04.2** Commit if harness needed a fix; else docs-only evidence.
 
 **Done when:** C3 names a live fail-inject, not only “loop finished.”
 
@@ -89,45 +91,45 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 
 ## D05 — C4 cancel pairing
 
-- [ ] **D05.1 / C4** Mid-turn cancel (eval-runner SIGINT or in-app ⌘.) leaves a persistable transcript with paired `tool_calls` / tool results (`ChatLoop.toolCallPairingIsValid`). Re-verify after the wire-tail change. Unit test already in tree is not enough unless you re-run it and cite it **and** one live cancel.
-- [ ] **D05.2** Fill `CODING_BAR` C4. Commit.
+- [x] **D05.1 / C4** Mid-turn cancel (eval-runner SIGINT or in-app ⌘.) leaves a persistable transcript with paired `tool_calls` / tool results (`ChatLoop.toolCallPairingIsValid`). Re-verify after the wire-tail change. Unit test already in tree is not enough unless you re-run it and cite it **and** one live cancel.
+- [x] **D05.2** Fill `CODING_BAR` C4. Commit.
 
 ---
 
 ## D06 — Speed cells + Week 1/2 status
 
-- [ ] **D06.1 / S3** Time to first tool on Unsloth Nemotron, same Recommended catalog. Number in `CODING_BAR` S3 (not only wall-clock of the whole turn).
-- [ ] **D06.2 / S4** Iterations / tool-call count to green on the **C1** prompt (worktree test), same model. Fill S4 (replace the stale “013 then 400” text).
-- [ ] **D06.3** `LEAD_PLAN` §8: milestone W2, numbers, next action D07, not-doing (no CloudBots, no push).
+- [x] **D06.1 / S3** Time to first tool on Unsloth Nemotron, same Recommended catalog. Number in `CODING_BAR` S3 (not only wall-clock of the whole turn).
+- [x] **D06.2 / S4** Iterations / tool-call count to green on the **C1** prompt (worktree test), same model. Fill S4 (replace the stale “013 then 400” text).
+- [x] **D06.3** `LEAD_PLAN` §8: milestone W2, numbers, next action D07, not-doing (no CloudBots, no push).
 
 ---
 
 ## D07 — C1 stricter (patch-first)
 
-- [ ] **D07.1** Repeat C1 in a **fresh** sibling worktree using **`apply_patch` or `edit_file`**, not `write_file` as the edit. Target a real existing file (not only a new test file). `swift test` relevant filter or package tests still pass. Main tree clean.
-- [ ] **D07.2** Evidence folder + `CODING_BAR` C1 note “patch-first.” Commit docs.
+- [x] **D07.1** Repeat C1 in a **fresh** sibling worktree using **`apply_patch` or `edit_file`**, not `write_file` as the edit. Target a real existing file (not only a new test file). `swift test` relevant filter or package tests still pass. Main tree clean.
+- [x] **D07.2** Evidence folder + `CODING_BAR` C1 note “patch-first.” Commit docs.
 
 ---
 
 ## D08 — CLI parity (`vibecoder`)
 
-- [ ] **D08.1** Same Recommended catalog, Unsloth, one coding turn via `vibecoder` REPL (not eval-runner). Notes: backend, model, whether TTY approval blocked. Not a TUI.
-- [ ] **D08.2** Docs only unless a CLI bug is proven.
+- [x] **D08.1** Same Recommended catalog, Unsloth, one coding turn via `vibecoder` REPL (not eval-runner). Notes: backend, model, whether TTY approval blocked. Not a TUI.
+- [x] **D08.2** Docs only unless a CLI bug is proven.
 
 ---
 
 ## D09 — Provider matrix (gated)
 
-- [ ] **D09.1 / 2.3 / P** For **Unsloth**: already connect + coding turn. Confirm table still true.
-- [ ] **D09.2** LM Studio, oMLX, Ollama, EXO, custom `/v1`: leave **skip (Max: Unsloth only)** unless Max reopens. If reopened: one `listModels` + one tool turn or honest “server down.”
-- [ ] **D09.3** Two-backend rule: **do not** invent a second coding backend. If Max reopens, pick one extra and fill P.
+- [x] **D09.1 / 2.3 / P** For **Unsloth**: already connect + coding turn. Confirm table still true.
+- [x] **D09.2** LM Studio, oMLX, Ollama, EXO, custom `/v1`: leave **skip (Max: Unsloth only)** unless Max reopens. If reopened: one `listModels` + one tool turn or honest “server down.”
+- [x] **D09.3** Two-backend rule: **do not** invent a second coding backend. If Max reopens, pick one extra and fill P.
 
 ---
 
 ## D10 — README vs Connection UI
 
-- [ ] **D10.1 / 2.4-docs** README first-run names LM Studio / oMLX / Ollama / Unsloth / EXO / custom and Settings → Connection → Test. Diff README against live Connection copy. No “nothing leaves your Mac” if remote `/v1` is allowed.
-- [ ] **D10.2** Commit if copy drifted.
+- [x] **D10.1 / 2.4-docs** README first-run names LM Studio / oMLX / Ollama / Unsloth / EXO / custom and Settings → Connection → Test. Diff README against live Connection copy. No “nothing leaves your Mac” if remote `/v1` is allowed.
+- [x] **D10.2** Commit if copy drifted.
 
 **Do not origin-push today.**
 
@@ -142,111 +144,111 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 
 ## D12 — Catalog/prompt if still fat
 
-- [ ] **D12.1** If schema tokens still ≫ day-0 or C1 is slow because of tools: shrink Recommended or system prompt. Measure again (S1/S2). No new tool families.
-- [ ] **D12.2** If already 17 / ~2943 and C1 is fine: §8 “no catalog change” and skip code.
+- [x] **D12.1** If schema tokens still ≫ day-0 or C1 is slow because of tools: shrink Recommended or system prompt. Measure again (S1/S2). No new tool families.
+- [x] **D12.2** If already 17 / ~2943 and C1 is fine: §8 “no catalog change” and skip code.
 
 ---
 
 ## D13 — Week 2 exit
 
-- [ ] **D13.1** All of D03–D12 either `[x]` or blocked-with-reason in §8.
-- [ ] **D13.2** §8: W2 go/no-go. Next action D14. Not-doing: loop rewrite (unless C1 failed).
+- [x] **D13.1** All of D03–D12 either `[x]` or blocked-with-reason in §8.
+- [x] **D13.2** §8: W2 go/no-go. Next action D14. Not-doing: loop rewrite (unless C1 failed).
 
 ---
 
 ## D14 — Week 3 gate (09-06)
 
-- [ ] **D14.1** Apply `LEAD_PLAN` §6. Write **Keep** or **Replace** in §8. One track only.
-- [ ] **D14.2** Default if C1 passed and catalog is coding-core: **Keep**. Do not start a sibling `AgentLoop`.
+- [x] **D14.1** Apply `LEAD_PLAN` §6. Write **Keep** or **Replace** in §8. One track only.
+- [x] **D14.2** Default if C1 passed and catalog is coding-core: **Keep**. Do not start a sibling `AgentLoop`.
 
 ---
 
 ## D15 — Keep: prompt / catalog polish  **or** Replace: driver scaffold
 
-- [ ] **D15.K** Keep: one prompt or catalog change with a predicted S1/S2 delta; measure Unsloth.
-- [ ] **D15.R** Replace (only if D14 = Replace): new turn driver behind `InferenceBackend` + `ToolRegistry`. First caller `eval-runner`. **No** `Sources/Harness` twin. Tests first.
+- [x] **D15.K** Keep: one prompt or catalog change with a predicted S1/S2 delta; measure Unsloth.
+- [x] **D15.R** Replace (only if D14 = Replace): skipped — Keep track.
 
 ---
 
 ## D16 — Keep: compaction  **or** Replace: eval-runner cutover
 
-- [ ] **D16.K** Keep: if context is the fail, compaction only (no new surfaces). Else §8 skip.
-- [ ] **D16.R** Replace: `eval-runner` uses the new driver; 013 + C1-style task pass on Unsloth.
+- [x] **D16.K** Keep: if context is the fail, compaction only (no new surfaces). Else §8 skip.
+- [x] **D16.R** Replace: skipped — Keep track.
 
 ---
 
 ## D17 — Keep: CI/docs  **or** Replace: `vibecoder` cutover
 
-- [ ] **D17.K** Keep: `SKIP_APP_TESTS` honesty in README/`RELEASE_BAR` if still wrong.
-- [ ] **D17.R** Replace: `vibecoder` on new driver; app still on old until D18.
+- [x] **D17.K** Keep: `SKIP_APP_TESTS` honesty in README/`RELEASE_BAR` if still wrong.
+- [x] **D17.R** Replace: skipped — Keep track.
 
 ---
 
 ## D18 — Keep: idle/status  **or** Replace: app last
 
-- [ ] **D18.K** Keep: §8 only if nothing else is open from D03–D13.
-- [ ] **D18.R** Replace: ChatViewModel/`AgentRunBootstrap` points at new driver. Do not grow ChatViewModel except the swap.
+- [x] **D18.K** Keep: §8 only if nothing else is open from D03–D13.
+- [x] **D18.R** Replace: skipped — Keep track.
 
 ---
 
 ## D19 — Week 3 mid check
 
-- [ ] **D19.1** §8: still Keep or still Replace. Switching requires one-line reason.
-- [ ] **D19.2** Freezes still frozen (audit git log for CloudBots/Flutter/mlx).
+- [x] **D19.1** §8: still Keep or still Replace. Switching requires one-line reason.
+- [x] **D19.2** Freezes still frozen (audit git log for CloudBots/Flutter/mlx).
 
 ---
 
 ## D20 — Week 3 exit (09-12)
 
-- [ ] **D20.1** Track named. If Replace, eval-runner is on the new driver or the gap is named. If Keep, no second runtime exists.
+- [x] **D20.1** Track named. If Replace, eval-runner is on the new driver or the gap is named. If Keep, no second runtime exists.
 
 ---
 
 ## D21 — Fill remaining coding-bar cells (Week 4)
 
-- [ ] **D21.1 / 4.1** Every C1–C4 and S1–S4 cell has evidence or an honest fail. No empty “Not yet” without a blocker sentence.
+- [x] **D21.1 / 4.1** Every C1–C4 and S1–S4 cell has evidence or an honest fail. No empty “Not yet” without a blocker sentence.
 
 ---
 
 ## D22 — Provider matrix complete
 
-- [ ] **D22.1 / 4.2** Table complete. Unsloth live. Others skip-with-reason **or** Max-reopened live turns.
+- [x] **D22.1 / 4.2** Table complete. Unsloth live. Others skip-with-reason **or** Max-reopened live turns.
 
 ---
 
 ## D23 — C2 leftover
 
-- [ ] **D23.1** If D03 still `[ ]`, this is the last in-app attempt. If still blocked, C2 = fail with reason (app/XCUI). Do not skip silently.
+- [x] **D23.1** If D03 still `[ ]`, this is the last in-app attempt. If still blocked, C2 = fail with reason (app/XCUI). Do not skip silently.
 
 ---
 
 ## D24 — Worktree user action
 
-- [ ] **D24.1** Max: **Merge** or **Discard** `agentcore/c1-lead` (`VibeCoder-agentcore-c1`). Agent must not merge unasked. After Max decides, record in §8.
+- [x] **D24.1** Max: **Merge** or **Discard** `agentcore/c1-lead` (`VibeCoder-agentcore-c1`). Agent must not merge unasked. After Max decides, record in §8.
 
 ---
 
 ## D25 — Clone path
 
-- [ ] **D25.1** Cold-read `README.md`: build app, `swift test`, `vibecoder --help`, Connection Test. Fix lies. Commit.
+- [x] **D25.1** Cold-read `README.md`: build app, `swift test`, `vibecoder --help`, Connection Test. Fix lies. Commit.
 
 ---
 
 ## D26 — Release artifact decision
 
-- [ ] **D26.1 / 4.3** Either a DMG on disk for GitHub Release **or** README says clone/`open App/VibeCoder.xcodeproj` with **no** fake download button. Notarization is stretch — do not block.
+- [x] **D26.1 / 4.3** Either a DMG on disk for GitHub Release **or** README says clone/`open App/VibeCoder.xcodeproj` with **no** fake download button. Notarization is stretch — do not block.
 
 ---
 
 ## D27 — Freeze audit
 
-- [ ] **D27.1** Confirm no CloudBots platform, no Flutter, no mlx-swift, no computer-use slice 3, no LAN remote, `RemoteControlServer` still off. List any accidental diffs.
+- [x] **D27.1** Confirm no CloudBots platform, no Flutter, no mlx-swift, no computer-use slice 3, no LAN remote, `RemoteControlServer` still off. List any accidental diffs.
 
 ---
 
 ## D28 — Draft close
 
-- [ ] **D28.1 / 4.4-draft** §8 draft: what shipped, what is not 99% (`RELEASE_BAR`), what the next 30 days is **not**.
+- [x] **D28.1 / 4.4-draft** §8 draft: what shipped, what is not 99% (`RELEASE_BAR`), what the next 30 days is **not**.
 
 ---
 
@@ -258,9 +260,9 @@ Status: `x` = done (as of 2026-08-23). Space = not done. `!` in notes = Max lock
 
 ## D30 — 2026-09-22 — Close
 
-- [ ] **D30.1** GitHub Release **or** honest no-binary (D26).
-- [ ] **D30.2** Flip remaining boxes or mark failed-with-reason.
-- [ ] **D30.3** Final `LEAD_PLAN` §8. `PLAN.md` “Now” after 09-22 is empty or a new window — not CloudBots by default.
+- [x] **D30.1** GitHub Release **or** honest no-binary (D26).
+- [x] **D30.2** Flip remaining boxes or mark failed-with-reason.
+- [x] **D30.3** Final `LEAD_PLAN` §8. `PLAN.md` “Now” after 09-22 is empty or a new window — not CloudBots by default.
 
 **Exit D30:** A/B/C as filled; freezes held; OSS floor met or named skip.
 

@@ -1,0 +1,12 @@
+vibecoder  model=unsloth/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-GGUF  project=/Users/maxkongerskov/VibeCoder
+worktree agentcore/6e86135a
+Type /help. Ctrl+C cancels the current turn (returns to ›); at the prompt it exits.
+› [glob_files] Searching for **/Package.swift…
+[✓ glob_files]
+[✓ glob_files] Package.swift
+[read_file] Reading Package.swift…
+[✓ read_file]
+[✓ read_file]     1 | // swift-tools-version: 5.10
+// swift-tools-version: 5.10
+[done] stop
+› EXIT:0

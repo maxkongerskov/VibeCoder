@@ -1,0 +1,7 @@
+C2 in-app attempt 2026-08-23
+App: /Applications/VibeCoder.app pid 71936 bundle tools.vibecoder.VibeCoder
+Model chip showed: NVIDIA Nemotron 3.5 Lightning 30B A3B GGUF (BF16)
+Composer set-value with C2 prompt succeeded.
+Send control remained AX disabled (element 60). Return did not start a turn.
+Empty-chat copy still "Bind a project folder…". No in-app agent turn.
+Blocker: cannot complete send via accessibility; not eval-runner substitute.

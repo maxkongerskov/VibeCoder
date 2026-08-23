@@ -1,0 +1,1 @@
+worktree=VibeCoder-agentcore-d07 apply_patch=yes main_clean=yes

@@ -211,6 +211,23 @@ Update in place. Newest first. Format:
 - Not doing: one sentence if temptation appeared
 ```
 
+### 2026-08-23 (walk D03–D28)
+
+- Milestone: Week 2/3/4 **work done or blocked**; **Track Keep**  
+- Track: **Keep** (C1 passed; catalog 17 / ~2943; §6 replace conditions 2–4 false)  
+- Numbers: Unsloth C1 59s/5 tools; D07 apply_patch 107s; D08 vibecoder read Package.swift; C2 send AX-disabled  
+- Next action: Max merge/discard worktrees; C2 real send if UI allows; **no push until D29**  
+- Not doing: AgentLoop rewrite, extra providers, Flutter, CloudBots, origin push  
+- D24: worktrees still present (`c1-lead`, `d07-patch`, `6e86135a`); agent did not merge  
+
+### 2026-08-23 (D03–D04)
+
+- Milestone: W2 C2 **blocked** (in-app send AX-disabled); C3 shipped `BuildGuard.verify` fail-log test + live apply_patch compile-break  
+- Track: Keep (default; C1 already passed)  
+- Numbers: D04 live 513s, apply_patch, Mini.swift uncompilable; `testVerifyBrokenSwiftPackageReturnsFailedLog` pass  
+- Next action: D05 live cancel pairing, then D06–D08  
+- Not doing: fake C2 via eval-runner, merge worktree, GitHub push, extra providers  
+
 ### 2026-08-23 (C1 worktree)
 
 - Milestone: W2.1 C1 **pass** (headless); C2 in-app still open  

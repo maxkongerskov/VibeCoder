@@ -1012,7 +1012,7 @@ private struct MLXPanel: View {
                 .background(Theme.Palette.warning.opacity(0.10))
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
 
-                Text("In-process MLX inference is paused for v1. Use Ollama, LM Studio, oMLX, or EXO instead. Persisted `.mlx` selections migrate to Ollama.")
+                Text("In-process MLX inference is paused for v1. Use Ollama, LM Studio, oMLX, Unsloth Studio, or EXO instead. Persisted `.mlx` selections migrate to Ollama.")
                     .font(.system(size: 11))
                     .foregroundColor(Theme.Palette.tertiary)
                     .fixedSize(horizontal: false, vertical: true)

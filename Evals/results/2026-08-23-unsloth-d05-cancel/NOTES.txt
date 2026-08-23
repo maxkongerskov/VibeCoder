@@ -1,0 +1,2 @@
+unit: AgentLoopCancelPersistTests.testCancelMidToolPersistsPairedTranscript PASS
+live: SIGINT did not land before iteration cap (run_shell backgrounded). convo saved 14 msgs.
