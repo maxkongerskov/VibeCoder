@@ -4,8 +4,6 @@ MIT-licensed native macOS coding agent. Bring your own OpenAI-compatible HTTP se
 
 The agent loop is plan → tools → verify → repeat. Edits use SEARCH/REPLACE and unified diffs. Binding a **git** project isolates work in a sibling worktree (`<project>-agentcore-<id>` / `agentcore/<id>`) by default; merge/discard are user-driven. Escape hatch: edit the main tree.
 
-Not shipped: in-process Swift MLX (`mlx-swift` unwired; stub throws), bundled llama.cpp/GGUF, Sparkle, Sentry, license keys. `RemoteControlServer` is off.
-
 **CloudBots** are early/v1, **cloud**, and labeled as cloud — not a local-inference path.
 
 Architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md) (§1 / §17). Implementation order: [`PLAN.md`](./PLAN.md) → 30-day lead plan [`docs/LEAD_PLAN.md`](./docs/LEAD_PLAN.md).
@@ -45,7 +43,7 @@ CLI `vibecoder` is C1–C3: same AgentCore, TTY y/n/always. Not `agentos`. Not `
 ## Layout
 
 ```
-Package.swift          SPM (no mlx-swift)
+Package.swift          SPM
 ARCHITECTURE.md        rail (§1 / §17)
 DESIGN.md              critique + honesty box
 Sources/AgentCore/     loop, tools, backends, worktrees
