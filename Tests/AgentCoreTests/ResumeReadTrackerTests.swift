@@ -233,9 +233,11 @@ final class ResumeReadTrackerTests: XCTestCase {
             sessionReadPaths: [])
         XCTAssertTrue(restored, "load must seed SessionReadTracker")
 
-        let edited = try await editReplace("resume.swift", search: "old", replace: "new")
+        // Different replace text than the unrestored probe: ToolRegistry
+        // records the denied edit_file signature and would bounce an identical retry.
+        let edited = try await editReplace("resume.swift", search: "old", replace: "restored")
         XCTAssertFalse(edited.isError, edited.content)
-        XCTAssertEqual(try String(contentsOf: editFile, encoding: .utf8), "new\n")
+        XCTAssertEqual(try String(contentsOf: editFile, encoding: .utf8), "restored\n")
 
         let written = try await overwrite("resume.txt", content: "changed\n")
         XCTAssertFalse(written.isError, written.content)

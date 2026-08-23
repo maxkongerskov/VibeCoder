@@ -215,10 +215,42 @@ public actor ConversationStore: ConversationStoring {
     }
 }
 
+/// macOS 14's `.iso8601` JSON strategy rejects fractional seconds
+/// (`2024-06-01T12:00:00.250Z`). Accept both whole and fractional forms.
+private enum ISO8601JSONDates {
+    private static let lock = NSLock()
+    private static let fractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let whole: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    static func date(from string: String) -> Date? {
+        lock.lock()
+        defer { lock.unlock() }
+        return fractional.date(from: string) ?? whole.date(from: string)
+    }
+}
+
 extension JSONDecoder {
     static var iso8601: JSONDecoder {
         let d = JSONDecoder()
-        d.dateDecodingStrategy = .iso8601
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            if let date = ISO8601JSONDates.date(from: raw) {
+                return date
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Expected date string to be ISO8601-formatted."
+            )
+        }
         return d
     }
 }
