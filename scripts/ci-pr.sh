@@ -41,10 +41,8 @@ PY
 MOCK_PORT="${MOCK_PORT:-$(pick_port)}"
 MOCK_MODEL="${MOCK_MODEL:-mock-worker}"
 BASELINE="${BASELINE:-$ROOT/Evals/baseline.json}"
-# GitHub Actions and clean CI must rebuild; local may reuse binary unless forced.
-if [[ "${CI:-}" == "true" || "${GITHUB_ACTIONS:-}" == "true" ]]; then
-  FORCE_REBUILD_EVAL="${FORCE_REBUILD_EVAL:-1}"
-fi
+# Do not default a release rebuild on GHA. `swift test` already linked
+# debug eval-runner; `-c release` on macos-14 adds ~15–20 minutes.
 FORCE_REBUILD_EVAL="${FORCE_REBUILD_EVAL:-0}"
 MOCK_PID=""
 
@@ -122,14 +120,14 @@ if [[ "${SKIP_EVAL:-0}" == "1" ]]; then
   exit 0
 fi
 
-EVAL_BIN="${EVAL_RUNNER_BIN:-$ROOT/.build/release/eval-runner}"
+EVAL_BIN="${EVAL_RUNNER_BIN:-$ROOT/.build/debug/eval-runner}"
 if [[ -x "$EVAL_BIN" && "$FORCE_REBUILD_EVAL" != "1" ]]; then
   echo "==> [ci-pr] using existing eval-runner: $EVAL_BIN"
   export EVAL_RUNNER_BIN="$EVAL_BIN"
 else
-  echo "==> [ci-pr] build eval-runner (FORCE_REBUILD_EVAL=$FORCE_REBUILD_EVAL)"
-  swift build -c release --product eval-runner
-  export EVAL_RUNNER_BIN="$ROOT/.build/release/eval-runner"
+  echo "==> [ci-pr] build eval-runner (debug, FORCE_REBUILD_EVAL=$FORCE_REBUILD_EVAL)"
+  swift build --product eval-runner
+  export EVAL_RUNNER_BIN="$ROOT/.build/debug/eval-runner"
 fi
 
 if [[ ! -x "${EVAL_RUNNER_BIN}" ]]; then

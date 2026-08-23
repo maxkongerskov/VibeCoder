@@ -18,6 +18,10 @@ on:
   push:
     branches: [main]
 
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   ci-pr:
     name: package + mock T0 + 012 + 013

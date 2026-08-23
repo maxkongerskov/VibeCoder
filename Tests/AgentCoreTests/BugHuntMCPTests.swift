@@ -18,8 +18,7 @@ final class BugHuntMCPTests: XCTestCase {
 
     override func tearDown() {
         for proc in childProcesses where proc.isRunning {
-            proc.terminate()
-            proc.waitUntilExit()
+            proc.terminateAndWait()
         }
         childProcesses.removeAll()
         if let scratch {

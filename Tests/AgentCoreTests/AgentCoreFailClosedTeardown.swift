@@ -104,6 +104,23 @@ extension XCTestCase {
     }
 }
 
+extension Process {
+    /// `terminate()` + unbounded `waitUntilExit()` hung GHA for ~37m when a
+    /// python mock ignored SIGTERM. SIGKILL after a short wait.
+    func terminateAndWait(timeout: TimeInterval = 2) {
+        guard isRunning else { return }
+        terminate()
+        let deadline = Date().addingTimeInterval(timeout)
+        while isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        if isRunning {
+            kill(processIdentifier, SIGKILL)
+            waitUntilExit()
+        }
+    }
+}
+
 /// Runs after every test regardless of whether the case called `super.tearDown()`.
 final class AgentCoreFailClosedObserver: NSObject, XCTestObservation {
     static let shared = AgentCoreFailClosedObserver()
