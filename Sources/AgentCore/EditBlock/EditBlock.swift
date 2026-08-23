@@ -336,7 +336,7 @@ public enum EditBlockApplier {
         if upper < 0 { return nil }
         for i in 0...upper {
             if Array(whole[i..<i + part.count]) == part {
-                return (whole[..<i] + replace + whole[(i + part.count)...]).joined()
+                return (Array(whole[..<i]) + replace + Array(whole[(i + part.count)...])).joined()
             }
         }
         return nil
@@ -471,7 +471,7 @@ public enum EditBlockApplier {
                     ? line
                     : addLead + line
             }
-            return (whole[..<i] + reindented + whole[(i + partAdj.count)...]).joined()
+            return (Array(whole[..<i]) + reindented + Array(whole[(i + partAdj.count)...])).joined()
         }
         return nil
     }

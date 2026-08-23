@@ -516,8 +516,8 @@ public actor BackgroundJobManager {
         let listenerID = UUID()
         return AsyncStream { continuation in
             completionListeners[listenerID] = continuation
-            continuation.onTermination = { [weak self] _ in
-                Task { await self?.removeCompletionListener(listenerID) }
+            continuation.onTermination = { _ in
+                Task { await BackgroundJobManager.shared.removeCompletionListener(listenerID) }
             }
         }
     }

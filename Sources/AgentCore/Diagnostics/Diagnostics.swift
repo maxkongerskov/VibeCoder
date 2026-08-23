@@ -63,8 +63,8 @@ public actor DiagnosticsHub {
         AsyncStream { continuation in
             let id = UUID()
             continuations[id] = continuation
-            continuation.onTermination = { [weak self] _ in
-                Task { await self?.detach(id: id) }
+            continuation.onTermination = { _ in
+                Task { await DiagnosticsHub.shared.detach(id: id) }
             }
         }
     }
