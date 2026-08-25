@@ -190,14 +190,21 @@ enum Theme {
         /// Lift of the composer from the window bottom.
         static let inputBottomLift: CGFloat = 18
         /// Resting outer height of the card (padding + one-line field + toolbar).
-        /// BuildCode: inputCardMinHeight (56) + 20 chrome = 76.
+        /// BuildCode: inputCardMinHeight (56) + 20 chrome = 76. Floor only —
+        /// actual idle content is `idleCardContentMinHeight` (~106).
         static let inputCardMinHeight: CGFloat = 76
-        /// Single-line text field floor inside the card.
+        /// Single-line text field floor (15pt body + chrome, not a 6-line panel).
         static let inputEditorMinHeight: CGFloat = 36
+        /// Extra-line step when the draft grows. Capped by `inputEditorMaxHeight`.
+        static let inputEditorLineHeight: CGFloat = 18
         /// Cap multi-line growth so the card stays BuildCode-thick, not a panel.
         static let inputEditorMaxHeight: CGFloat = 100
         /// Soft max lines before the field stops growing (≈ editor max height).
         static let inputEditorMaxLines: Int = 6
+        /// VStack gap between editor and toolbar (queue/slash collapse to 0).
+        static let inputStackSpacing: CGFloat = 10
+        /// Idle toolbar row — send button is the tallest control (32).
+        static let inputToolbarRowHeight: CGFloat = 32
 
         /// Vertical gap between consecutive transcript blocks (Chat + Code).
         /// Shared so both modes feel the same rhythm.
@@ -254,6 +261,86 @@ enum Theme {
             let available = pane - 2 * gutter
             // Prefer filling available width up to the soft max; never wider than pane.
             return min(maxContentWidth, max(0, available))
+        }
+
+        /// Newline-based line count. Empty draft is one line; a trailing newline counts.
+        static func draftLineCount(_ text: String) -> Int {
+            let parts = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            return max(1, parts.count)
+        }
+
+        /// Soft-wrapped line count at `width` (long tokens break; newlines still count).
+        /// Empty draft or unusable width falls back to newline count.
+        static func wrappedLineCount(
+            _ text: String,
+            width: CGFloat,
+            fontSize: CGFloat = bodyFontSize
+        ) -> Int {
+            let newlines = draftLineCount(text)
+            guard width > 8, !text.isEmpty else { return newlines }
+            let font = NSFont.systemFont(ofSize: fontSize)
+            let style = NSMutableParagraphStyle()
+            style.lineBreakMode = .byCharWrapping
+            let attrs: [NSAttributedString.Key: Any] = [
+                .font: font,
+                .paragraphStyle: style,
+            ]
+            let metrics = font.ascender - font.descender + font.leading
+            let lineHeight = metrics > 1 ? metrics : max(1, font.pointSize * 1.2)
+            let paragraphs = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            var total = 0
+            for para in paragraphs {
+                if para.isEmpty {
+                    total += 1
+                    continue
+                }
+                let bounds = (String(para) as NSString).boundingRect(
+                    with: NSSize(width: width, height: .greatestFiniteMagnitude),
+                    options: [.usesLineFragmentOrigin, .usesFontLeading],
+                    attributes: attrs
+                )
+                total += max(1, Int(ceil(bounds.height / lineHeight - 0.05)))
+            }
+            return max(newlines, total)
+        }
+
+        /// Line count clamped to `1...inputEditorMaxLines` (newlines only).
+        static func clampedEditorLineCount(_ text: String) -> Int {
+            min(inputEditorMaxLines, draftLineCount(text))
+        }
+
+        /// Visible editor lines: wrap at `width`, then clamp to the 6-line cap.
+        static func editorLineCount(
+            _ text: String,
+            wrappingInWidth width: CGFloat,
+            fontSize: CGFloat = bodyFontSize
+        ) -> Int {
+            min(inputEditorMaxLines, wrappedLineCount(text, width: width, fontSize: fontSize))
+        }
+
+        /// `lineLimit` range that grows with the draft instead of reserving max lines.
+        static func inputEditorLineLimit(forLineCount lines: Int) -> ClosedRange<Int> {
+            let n = min(max(1, lines), inputEditorMaxLines)
+            return 1 ... n
+        }
+
+        /// Editor frame height for a clamped line count. Idle is one body line;
+        /// `inputEditorMaxLines` always equals `inputEditorMaxHeight`.
+        static func inputEditorHeight(forLineCount lines: Int) -> CGFloat {
+            let n = min(max(1, lines), inputEditorMaxLines)
+            if n >= inputEditorMaxLines {
+                return inputEditorMaxHeight
+            }
+            let raw = inputEditorMinHeight + CGFloat(n - 1) * inputEditorLineHeight
+            return min(inputEditorMaxHeight, max(inputEditorMinHeight, raw))
+        }
+
+        /// Resting inner height: vertical pad + 1-line editor + stack gap + toolbar.
+        static var idleCardContentMinHeight: CGFloat {
+            (inputVerticalPad * 2)
+                + inputEditorHeight(forLineCount: 1)
+                + inputStackSpacing
+                + inputToolbarRowHeight
         }
     }
 

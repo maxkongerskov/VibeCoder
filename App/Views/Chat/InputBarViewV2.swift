@@ -6,8 +6,7 @@
 //  on top, [+] attach + web toggle on bottom-left, model picker stub +
 //  send button on bottom-right.
 //
-//  Adapted: uses SwiftUI TextEditor instead of DEV PLAN's NativeTextEditor
-//  (NSViewRepresentable). Same visual, slightly less polished focus ring.
+//  TextEditor sized to wrap-count so idle is one line and long drafts grow.
 //
 
 import SwiftUI
@@ -91,6 +90,8 @@ struct InputBarViewV2: View {
     @State private var contextCardHovered = false
     @State private var showContextHoverCard = false
     @State private var contextHoverDismissTask: Task<Void, Never>? = nil
+    /// Live editor width so wrap-count (not just Return) drives card height.
+    @State private var editorWidth: CGFloat = 0
     @EnvironmentObject private var app: AppViewModel
     @FocusState private var focused: Bool
 
@@ -371,6 +372,31 @@ struct InputBarViewV2: View {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Grows with wrapped glyphs and newlines. Idle is 1 so the card
+    /// does not reserve 6 lines; a long token still expands.
+    private var editorLineCount: Int {
+        Theme.ChatLayout.editorLineCount(
+            text,
+            wrappingInWidth: wrappingWidth,
+            fontSize: fontSize
+        )
+    }
+
+    private var wrappingWidth: CGFloat {
+        let raw = editorWidth > 8 ? editorWidth : max(8, maxCardWidth - horizontalInset * 2)
+        // NSTextView insets are narrower than the view; underestimate so wrap count
+        // is not short of what the field actually paints.
+        return max(8, raw - 16)
+    }
+
+    private var editorLineLimit: ClosedRange<Int> {
+        Theme.ChatLayout.inputEditorLineLimit(forLineCount: editorLineCount)
+    }
+
+    private var editorHeight: CGFloat {
+        Theme.ChatLayout.inputEditorHeight(forLineCount: editorLineCount)
+    }
+
     private var canSend: Bool {
         ComposerSendGate.sendEnabled(
             hasDraft: hasDraft,
@@ -427,13 +453,15 @@ struct InputBarViewV2: View {
     var body: some View {
         // BuildCode outer dimensions; VibeCoder toolbar stays fully featured:
         // + · mode · web · bare/no-harness · context | thinking · model · send/cancel
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: Theme.ChatLayout.inputStackSpacing) {
             ComposerQueueBar()
 
             if showSlashMenu {
                 slashCommandMenu
             }
 
+            // Exact height from wrap-count: idle is one line, long drafts grow.
+            // TextField(axis:) with lineLimit(1...1) will not wrap a long token.
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
                     Text(EmptyChatCopy.composerPlaceholder(
@@ -446,10 +474,20 @@ struct InputBarViewV2: View {
                     .font(Theme.Typography.body(size: fontSize))
                     .foregroundStyle(Theme.Palette.primary)
                     .scrollContentBackground(.hidden)
-                    .frame(minHeight: Theme.ChatLayout.inputEditorMinHeight, alignment: .topLeading)
-                    .frame(maxHeight: Theme.ChatLayout.inputEditorMaxHeight, alignment: .topLeading)
+                    .scrollDisabled(editorLineCount < Theme.ChatLayout.inputEditorMaxLines)
+                    .lineLimit(editorLineLimit)
+                    .frame(height: editorHeight, alignment: .topLeading)
                     .focused($focused)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(
+                                key: ComposerEditorWidthKey.self,
+                                value: geo.size.width
+                            )
+                        }
+                    )
             }
+            .onPreferenceChange(ComposerEditorWidthKey.self) { editorWidth = $0 }
             .onKeyPress(.return) {
                 if NSEvent.modifierFlags.contains(.shift) {
                     text += "\n"
@@ -899,6 +937,13 @@ private struct SendStopButton: View {
                     : (disabledReason.map { "Send disabled. \($0)" } ?? EmptyChatCopy.sendLabel)
             )
         }
+    }
+}
+
+private struct ComposerEditorWidthKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 
